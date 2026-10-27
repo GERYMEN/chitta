@@ -1,0 +1,131 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full (decisions
+log = absolute device-safety rules — note the NEW foreground check), then
+12-sms-source-view.md (previous phase). Project:
+/Users/mohammedsiraj/Downloads/projects/experiment/Tracker (React Native,
+Android, com.tracker). Reuse existing patterns: app_settings via
+src/data/repositories/settings.repository.ts (getValue/setValue), store
+hydration in src/features/transactions/state/transactionsStore.ts
+(hasOnboarded/completeOnboarding pattern from Phase 6), shared UI in
+src/shared/ui (Button, Card, Chip, BottomSheet, Dialog/showDialog), theme
+tokens in src/theme. No new npm dependencies (reanimated/gesture-handler
+were deliberately removed — see STATE.md).
+
+USER REQUEST (product owner, decisions already confirmed via questions):
+"After the tour, ask the user's name, and add a slider to choose
+auto-approve based on confidence, or manual approve without checking
+confidence." Answers:
+- Control = MODE SLIDER + THRESHOLD: a two-position slider Manual ⇄ Auto;
+  when Auto, a second slider sets minimum confidence 70–100% (step 1,
+  default 90). SMS transactions at/above it are approved automatically;
+  lower ones stay in Pending.
+- Editable later = SETTINGS SHEET FROM HOME: tap the greeting on Home →
+  BottomSheet to edit name, mode, threshold.
+This deliberately relaxes the app's "every SMS transaction is manually
+approved" principle — but only when the user opts in. Default = Manual.
+
+Exact current state (verified):
+- Onboarding flow: OnboardingScreen (tour, uses
+  src/features/onboarding/components/OnboardingShell.tsx) → PermissionsScreen
+  → Tabs. PermissionsScreen.tsx lines 64/77 call completeOnboarding() then
+  navigation.reset to Tabs. Find exactly where the tour navigates to
+  'Permissions'.
+- Home greeting is hard-coded: src/features/home/screens/HomeScreen.tsx:103
+  `<Text style={styles.greeting}>Good morning, Siraj</Text>`.
+- Confidence scale is 0–100 (fixed in Phase 12); domain rules in
+  src/domain/transactions/transaction.rules.ts: CONFIDENCE_HIGH=90,
+  CONFIDENCE_NEEDS_REVIEW=70, confidenceTier, canTransition.
+- syncSms (src/features/sms-sync/syncSms.ts) creates SMS transactions as
+  'pending' via store.addTransaction; result type
+  { scanned, created, skipped, suggestions }. HomeScreen shows a toast
+  "Synced: scanned N, found M new".
+- store.approve(id) exists (uses canTransition).
+
+TASKS:
+T1. Slider component: src/shared/ui/Slider/ (export from index.ts),
+    hand-rolled with PanResponder + Animated (no new deps). Props: value,
+    min, max, step, onChange, accessibilityLabel. Track/thumb from theme
+    tokens; thumb ≥48dp touch target; accessibilityRole="adjustable" with
+    increment/decrement accessibilityActions. Also a two-position variant
+    (or reuse with min 0 max 1 step 1) for Manual ⇄ Auto with both labels
+    visible. Unit-test the pure value math (position→value clamping,
+    step rounding).
+T2. Persisted settings in app_settings: `user_name` (string),
+    `approval_mode` ('manual' | 'auto', default 'manual'),
+    `auto_approve_threshold` (integer 70–100, default 90). Add to store:
+    userName, approvalMode, autoApproveThreshold, hydrated in hydrate(),
+    and `updateProfile(patch)` that persists + updates state. Clamp
+    threshold to [70,100] on read and write (never allow below
+    CONFIDENCE_NEEDS_REVIEW).
+T3. New onboarding step screen `ProfileSetup` (new route in routes.ts +
+    RootNavigator) inserted AFTER the tour, BEFORE Permissions. Fields:
+    name TextInput (required, trimmed, 1–30 chars, zod schema like the
+    other forms), Manual/Auto slider, threshold slider shown only when
+    Auto with explanatory copy ("SMS transactions with confidence ≥ 90%
+    are approved automatically. Lower ones wait in Pending."). Continue
+    saves via updateProfile then navigates to Permissions. Match the
+    onboarding visual style (OnboardingShell / step label if it fits).
+    Respect SafeArea (Phase 11 standard).
+T4. Home: greeting becomes time-of-day aware ("Good morning/afternoon/
+    evening, {userName}", fallback "Welcome" if empty). Tapping the
+    greeting (add an edit/avatar affordance so it's discoverable) opens a
+    Settings BottomSheet (reuse src/shared/ui/BottomSheet) with the same
+    three controls + Save. Existing installs that never saw ProfileSetup
+    have empty user_name → greeting "Welcome" and the sheet lets them set it.
+T5. Auto-approve in syncSms: after creating each NEW SMS transaction this
+    sync, if approvalMode === 'auto' AND confidenceScore !== null AND
+    confidenceScore >= autoApproveThreshold → approve it through the SAME
+    path as a manual approve (store.approve / canTransition — do not
+    insert as 'approved' directly). Extend SmsSyncResult with
+    `autoApproved: number`. Toast becomes "Synced: scanned N, found M new,
+    A auto-approved" (omit the last part when A=0). If an audit
+    repository/AuditEvent writer exists, record actor 'system'/auto with
+    the threshold used; if none exists, don't build one — note it.
+    Scope: only transactions created in this sync; existing pending items
+    are NOT retroactively approved when the mode changes (document this).
+    Manual entries are never auto-approved.
+    Unit-test the decision as a pure helper (shouldAutoApprove(mode,
+    threshold, score)): manual → false; auto & score ≥ threshold → true;
+    below → false; null score → false; threshold clamped.
+
+GATES:
+- npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+  0 errors; npx jest all pass; cd android && ./gradlew assembleDebug OK.
+  (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home;
+   export PATH=$JAVA_HOME/bin:$PATH;
+   export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools)
+- On device (adb install -r — UNINSTALL IS NOT APPROVED, so the
+  ProfileSetup onboarding step cannot be reached on this already-onboarded
+  install; verify it by code review + unit tests and SAY SO clearly):
+  1. Home greeting shows "Welcome" (or time-of-day + name once set).
+  2. Tap greeting → settings sheet opens; set name "QA User", Manual → Auto,
+     drag threshold to 95 → Save. Relaunch (force-stop) → greeting shows
+     "Good <time>, QA User"; reopen sheet → Auto + 95 persisted.
+     Verify slider drag works with real `adb shell input swipe` on the
+     thumb, not just taps.
+  3. Tap Sync SMS with Auto/95 → toast mentions auto-approved count
+     (report counts only). Pending badge decreases by exactly that count
+     vs before (counts only).
+  4. Switch back to Manual, Save. Sync again → autoApproved 0.
+  5. Leave the device in MANUAL mode at the end (safe default for the
+     owner) and set name back to empty? NO — leave name "QA User" but
+     tell the orchestrator so the owner can rename it.
+  6. logcat: 0 FATAL EXCEPTION from com.tracker, 0 "Maximum update depth".
+
+DEVICE SAFETY (absolute — owner's personal phone, real SMS inbox):
+- Foreground check before EVERY tap/dump:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — BOTH
+  lines must contain com.tracker. Otherwise press HOME, relaunch Tracker,
+  never inspect the other app.
+- uiautomator dumps grep-filtered to the ONE element needed; never print
+  a full dump; `adb shell rm /sdcard/u.xml` after; /sdcard paths only
+  inside `adb shell`.
+- Never print/write real SMS bodies, senders, merchant names or amounts.
+  Counts and bank/type/last-4 labels only. Synthetic data only.
+- Never touch tracker.db / sqlite3 / run-as. No uninstall, no clear-data,
+  no screenshots. End: force-stop com.tracker.
+
+OUTPUT: ongoing/realtime-persistence/13-profile-approval-mode.md (files,
+settings keys, slider design, auto-approve rules, gate + device results).
+Leak-scan your report before finishing. Do not commit to git.
+REPLY ONLY: gates yes/no; files changed count; one line per device check;
+what could not be verified and why.

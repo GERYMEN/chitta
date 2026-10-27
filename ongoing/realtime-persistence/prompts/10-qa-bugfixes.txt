@@ -1,0 +1,217 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full first
+(especially the permanent device-isolation, no-raw-db-access, and
+/sdcard-path rules in its decisions log — apply all of them), then
+ongoing/realtime-persistence/09-qa-test-report.md in full — that report's
+"Bugs" and "Recommendations" sections are this phase's exact spec. This
+phase fixes 7 findings from that independent QA pass. Do not re-run the
+full QA suite — just fix these specific, already-diagnosed issues and
+verify each one's specific repro no longer reproduces, plus a light
+regression pass on the core money path (B1-B3-B9 from the QA report).
+
+ALSO read ongoing/sms-sync-v2/01-normalize-account-key.md — one of these
+fixes (K2) wires in a function built in that separate task.
+
+TASKS — fix all 7, each is independently scoped and verified:
+
+T1 (BUG-1, S1 crash — fix this one FIRST and verify it most carefully, it's
+the only real crash found): `android/app/src/main/AndroidManifest.xml`
+line 18 currently has
+`android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"`
+on the `MainActivity` entry — missing `fontScale`, `density`, `locale`.
+Add them: `android:configChanges="keyboard|keyboardHidden|orientation|
+screenLayout|screenSize|smallestScreenSize|uiMode|fontScale|density|
+locale"`. This tells Android the app handles these config changes itself
+(React Native already does, via its own JS-side responsive re-render) so
+Android does NOT recreate the Activity and does NOT hit the
+`react-native-screens` fragment-restoration crash
+(`IllegalStateException: Screen fragments should never be restored`) that
+QA reproduced twice. Verify: `adb shell settings put system font_scale 1.3`
+with the app open → app must NOT crash (confirm via `adb logcat -d` zero
+`FATAL EXCEPTION`); check it still renders sensibly (text may be larger,
+that's fine, just no crash); then `adb shell settings put system
+font_scale 1.0` to restore the device to normal before finishing (leave no
+side effect on the user's phone).
+
+T2 (BUG-2, S2): wire real delete. `src/data/repositories/
+transaction.repository.ts` already exports `delete` (aliased as `remove`
+internally, exported as `delete:`). Add `deleteTransaction: (id: string) =>
+Promise<void>` to `transactionsStore.ts`'s `TransactionsState` interface
+and implementation (call `transactionRepository.delete(id)` then
+`refresh()`, same pattern as `approve`/`reject`). Wire it into BOTH:
+- `TransactionDetailScreen.tsx` line 52: replace `onDelete={() =>
+  navigation.goBack()}` with a real handler that calls
+  `useTransactionsStore.getState().deleteTransaction(t.id)` then
+  `navigation.goBack()`.
+- `PendingScreen.tsx` line 118: replace `onDelete={() => {}}` the same way.
+Add a confirmation step before deleting (the QA report's recommendation) —
+check how `TransactionDetailContent` currently invokes `onDelete` (does it
+already show its own confirm UI, e.g. inside a bottom sheet?) and either
+reuse that or add a simple `Alert.alert('Delete transaction?', '...', [
+{text:'Cancel',style:'cancel'}, {text:'Delete',style:'destructive',
+onPress:...}])` — your call on exactly where, but a delete must not fire
+on a single accidental tap with zero confirmation.
+
+T3 (BUG-3, S3): `src/native/android/permissions/smsPermission.ts`'s
+`requestSmsPermission` currently collapses the result to a plain boolean,
+losing whether the denial was permanent
+(`PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN`). Change its return type to
+carry that distinction (e.g. `Promise<'granted' | 'denied' |
+'never_ask_again'>`), and thread it through `syncSms.ts`'s
+`SmsSyncError` — add a new `SmsSyncErrorCode` value (e.g.
+`'permission-permanently-denied'`) thrown when the request result is
+`NEVER_ASK_AGAIN`, distinct from the existing `'permission-denied'`. In
+`HomeScreen.tsx`'s catch block, handle the new code with an `Alert` that
+tells the truth (the system will not re-prompt) and offers a real action
+to open Settings: import `Linking` from `react-native` and call
+`Linking.openSettings()` from an Alert button labeled "Open Settings".
+Keep the existing `'permission-denied'` (regular, re-promptable denial)
+message as-is. Verify on-device: deny once (regular denial) → confirm the
+original message still shows; then deny with "don't ask again" → confirm
+the NEW message shows and tapping "Open Settings" actually opens the
+device's app-info/permissions screen for Tracker (confirm via
+`topResumedActivity` showing a settings package, don't dump its content,
+just confirm it opened, then navigate back to Tracker).
+
+T4 (BUG-4, S4): `TransactionDetailContent`'s `Edit`/`Delete` action row
+renders undersized (~21-39px tall, under the 48dp minimum) and sits in the
+bottom gesture-nav exclusion zone (documented back in Phase 2 as a known
+issue, never actually fixed). Fix properly this time: give the action row
+a minimum touch-target height of 48dp (use `spacing`/theme tokens
+consistent with the rest of the app, not a hardcoded magic number if an
+existing token fits), AND add enough bottom padding/margin (or wrap in the
+screen's `SafeAreaView` bottom inset if it isn't already contributing
+enough) so the row's bottom edge sits clearly above the last ~100-150px of
+the screen where gesture navigation intercepts taps. Verify: fresh
+`uiautomator dump` (filtered to the Edit/Delete elements only) confirms
+their `bounds` height is ≥48px-equivalent and their bottom edge no longer
+falls in the last ~150px of a 2800px-tall screen; tap each directly
+(without needing to scroll first) and confirm they respond on the first
+tap.
+
+T5 (BUG-5, S4): `src/shared/utils/currency.ts`'s `formatRupeesFromMinor`
+uses `Math.floor(absoluteMinor / 100)` for the rupees part when
+`showPaise` is false, which truncates (250.75 displays as "250" instead of
+rounding to "251"). Change to proper rounding to the nearest rupee: when
+`showPaise` is false, round `absoluteMinor` to the nearest 100 first
+(`Math.round(absoluteMinor / 100)`), not floor. Verify with a unit test:
+250.75 → "₹251" (not "₹250") when `showPaise` is false; confirm
+`showPaise: true` output is unaffected (still exact, "₹250.75"); confirm
+an exact value like 250.00 still shows "₹250" (no off-by-one from the
+rounding change). Check `src/shared/utils/__tests__/currency.test.ts` for
+existing assertions that hard-coded the OLD floor behavior — fix those
+expectations to the new correct rounding, don't leave a contradicting test
+passing by accident.
+
+T6 (K1, S3, fix direction from the QA report): add a duplicate-account
+guard at the Add Account submit boundary. In
+`src/features/accounts/components/accountForm.schema.ts` or
+`AddAccountScreen.tsx` (your call which is cleaner), before calling
+`addAccount`, compare the normalized candidate (`type`, trimmed+lowercased
+`name`, `lastFour`) against `store.accounts` (only active ones). If an
+exact match exists, do NOT silently insert — show a clear message ("An
+account named '<name>' already exists") and block submission (or ask the
+user to confirm they really want a duplicate — your call, but silently
+inserting with zero feedback, today's behavior, is what's being fixed).
+Do NOT add this check on the SMS-suggestion matching path
+(`resolveAccountIdForSms` in `smsSyncLogic.ts`) — that's unrelated exact
+type+lastFour matching logic for incoming transactions, not account
+creation, and must not change. This fix is scoped to the Add Account
+FORM's submit guard only.
+
+T7 (K2, S3, fix direction from the QA report AND from
+ongoing/sms-sync-v2/01-normalize-account-key.md): wire the already-built,
+already-tested `normalizeAccountKey` (`src/features/sms-sync/
+normalizeAccountKey.ts`) into `smsParser.ts`, replacing its own
+`extractBankName`/`extractAccountKind`/`extractLastFour` functions and
+their underlying regexes. `parseSmsMessage`'s `bankName` field should
+become the normalizer's `bankCanonical` (e.g. `'sbi'`, `'hdfc'`) — but
+check how `bankName` is currently DISPLAYED to the user (e.g. in
+`AddAccountScreen`'s pre-fill, in `SmsSuggestionsScreen`'s suggestion
+rows) — a raw canonical id like `'sbi'` lowercase might read oddly as a
+display string where `'HDFC'`/`'Federal'` (capitalized) read naturally
+today. Decide and implement ONE of: (a) uppercase/capitalize
+`bankCanonical` for display (`'sbi'` → `'SBI'`), or (b) keep a small
+canonical→display-name map in `normalizeAccountKey.ts` or at the call
+site. Pick whichever is simpler given what's already there; document your
+choice in the output report. `accountKind`/`lastFour` map directly from
+the normalizer's `AccountKey.accountKind`/`AccountKey.lastFour` (note:
+`normalizeAccountKey` returns `lastFour: ''` as its sentinel for
+unidentified, but `ParsedSmsTransaction.lastFour` is typed `string | null`
+— convert `''` to `null` at this boundary so nothing downstream
+(`resolveAccountIdForSms`, `groupUnmatchedIntoSuggestions`) needs to
+change its own null-vs-empty-string handling). After wiring, the existing
+`smsParser.test.ts` bank-name tests should still pass AND the previously
+broken cases must now resolve correctly: "SBI Card ending ####" → `'SBI'`
+(or your chosen display form), "State Bank of India" → `'SBI'` (not
+truncated to "State" anymore). Add/update tests proving both. Remove the
+now-dead `extractBankName`/`BANK_NAME_WORD_PATTERN`/
+`BANK_NAME_SIGNATURE_PATTERN`/`extractAccountKind`/`CREDIT_CARD_PATTERN`/
+`BANK_ACCOUNT_PATTERN`/`extractLastFour`/`LAST_FOUR_PATTERN` from
+`smsParser.ts` if `normalizeAccountKey` now fully supersedes them — don't
+leave unreferenced dead code behind.
+
+GATES (all 7 fixes must pass together):
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all tests pass, including every updated/new test described
+  above.
+- `cd android && ./gradlew assembleDebug` — BUILD SUCCESSFUL (T1 touches
+  the manifest, so this must be a real, not skipped, build).
+- On-device, per STATE.md's permanent rules (isolation, no raw DB,
+  filtered dumps, count-only for real SMS data): force-stop/install/launch
+  fresh, then:
+  1. T1's font-scale crash repro — confirm it no longer crashes (the most
+     important single check this phase).
+  2. T2: create a test transaction via Add Record, approve it, delete it
+     via Transaction Detail → confirm it's gone from Transactions and the
+     balance recalculates correctly. Also verify the confirmation step
+     actually prevents an accidental single-tap delete.
+  3. T3: trigger both a regular SMS-permission denial and a "don't ask
+     again" denial (you may need to `adb shell pm reset-permissions
+     com.tracker` or similar between attempts if the device remembers the
+     NEVER_ASK_AGAIN state from a prior run — figure out the right reset
+     mechanism, document it) and confirm the right message/action shows
+     for each.
+  4. T4: confirm Edit/Delete respond on first tap without needing to
+     scroll, and measure their bounds via a filtered dump.
+  5. T5: confirm a transaction with a non-zero paise amount (e.g. ₹250.75)
+     now displays rounded ("₹251") in list views.
+  6. T6: attempt to create two accounts with identical name/type/lastFour
+     via the Add Account form, confirm the second is blocked/warned, not
+     silently created.
+  7. T7: tap Sync SMS on the real inbox (count-only reporting per the
+     permanent rule) and confirm via the Suggestions screen that a group
+     whose underlying messages are SBI-sourced now shows a proper "SBI"
+     label instead of "Unknown Bank" (report ONLY the bank-name label
+     change, per the established safe category — never message content).
+  8. Light regression: B1 (Add Account) → B3 (Add Record → Pending →
+     Approve → balance) → B9 (force-stop/relaunch persistence) still all
+     work, to confirm none of these 7 fixes broke the core money path.
+  9. `adb logcat -d` — zero `FATAL EXCEPTION` / `Maximum update depth
+     exceeded` across the whole verification session.
+  Return the device to a clean state (`adb shell am force-stop
+  com.tracker`, and restore `font_scale` to `1.0` if you haven't already)
+  when done.
+
+SCOPE GUARDS:
+- Do not fix BUG-3's root AndroidManifest/activity-recreation behavior any
+  differently than specified (T1) — don't also try to patch
+  react-native-screens itself or eject from it.
+- Do not touch `sms-sync-v2`'s migrations/schema (T7 only consumes
+  `normalizeAccountKey`, a pure function — it does not need any DB table
+  from that other task).
+- Do not implement D1-D11 from the sms-sync-v2 skill in this phase — this
+  phase is QA bugfixes only, not new feature work.
+- Do not add a new npm dependency for any of these 7 fixes — everything
+  needed (`Linking`, `Alert`, existing repositories/functions) is already
+  available.
+
+OUTPUT: write a chronological log (every file changed per fix, the exact
+display-name decision for T7, every gate's result, and the full on-device
+verification results per fix) to:
+  ongoing/realtime-persistence/10-qa-bugfixes.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified
+count>, <one line per fix (T1-T7): confirmed fixed / still broken + why>.
+Do not paste file contents, logcat, uiautomator XML, or any real SMS
+content — bank-name labels are the one safe exception, as established.

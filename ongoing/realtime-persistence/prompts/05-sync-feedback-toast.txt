@@ -1,0 +1,80 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full first, then
+04-sms-sync.md (the phase this builds on). Do not re-derive or contradict
+either. Also re-apply the permanent device-isolation rule from STATE.md's
+decisions log for ANY on-device verification this phase does (interact only
+with `com.tracker`, count-only checks for anything SMS-derived).
+
+CONTEXT: the user tried Sync SMS and said the feedback was unclear ("user
+didn't understand what happened"). Currently
+`src/features/home/screens/HomeScreen.tsx`'s `handleSyncSms` (added in
+Phase 4) shows an `Alert.alert('Synced', ...)` on success and separate
+`Alert.alert(...)` calls for the permission-denied / no-accounts / generic
+error cases. The user wants a toast added for success/fail feedback. This
+is a small, surgical change — do not touch the SMS sync logic itself
+(`syncSms.ts`, `smsParser.ts`, `smsSyncLogic.ts`), only the UI feedback
+layer in `HomeScreen.tsx`.
+
+TASK:
+
+T1. Use React Native's built-in `ToastAndroid` (Android-only API, no new
+    dependency — this is an Android-first app, consistent with the rest of
+    the codebase) in `handleSyncSms`:
+    - On success (sync completes, regardless of whether `created` was 0 or
+      more): show a short `ToastAndroid.show(message, ToastAndroid.LONG)`
+      with the same scanned/created counts currently in the success Alert,
+      e.g. `` `Synced: scanned ${result.scanned}, found ${result.created}
+      new` ``. Your call whether to keep the existing success `Alert.alert`
+      alongside it or replace it with just the toast — replacing it is
+      probably cleaner (avoids two popups for one event, and a toast is the
+      right weight for a plain informational result with no action needed)
+      but don't fight this if you think both add value; just don't produce
+      a jarring double-popup for the plain success case.
+    - On failure, for the generic/unexpected error case (the current
+      `else` branch Alert for an error that isn't `SmsSyncError`, or an
+      `SmsSyncError` with no more specific handling): show
+      `ToastAndroid.show('Sync failed — please try again.',
+      ToastAndroid.LONG)` (or include `error.message` if it's safe,
+      user-facing text — never raw SMS content, which it never is in this
+      path anyway per Phase 4's design).
+    - Keep the `permission-denied` and `no-accounts` cases as
+      `Alert.alert` (not toast) — those need the user to read a fuller
+      explanation and, for `no-accounts`, make an actual choice (Cancel /
+      Go to Accounts via a button) — a toast can't carry a button and would
+      be worse UX for those two cases specifically. Only the plain success
+      path and the generic/unexpected failure path move to toast.
+    - `ToastAndroid` is Android-only — this app is Android-first per
+      STATE.md's whole architecture, no iOS guard needed (consistent with
+      how the rest of the codebase already doesn't branch per-platform).
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests still pass (no test changes expected,
+  this is a UI-feedback-only change with no new testable logic).
+- `cd android && ./gradlew assembleDebug` — BUILD SUCCESSFUL (pure JS/TSX
+  change, should be fast).
+- On-device: force-stop/install/launch fresh. Confirm `com.tracker` is
+  foreground (per the permanent isolation rule). Tap "Sync SMS" once,
+  confirm a toast appears with the scanned/created counts (describe it
+  structurally — "a toast appeared containing the word Synced and two
+  numbers" is fine, you don't need to transcribe exact pixel text, and
+  must not transcribe any real transaction content regardless). Confirm no
+  crash via `adb logcat -d` (zero `FATAL EXCEPTION` / `Maximum update
+  depth exceeded`). Return device to clean state
+  (`adb shell am force-stop com.tracker`) when done.
+
+SCOPE GUARDS:
+- Do not modify `syncSms.ts`, `smsParser.ts`, or `smsSyncLogic.ts` — this
+  is purely about how `HomeScreen.tsx` presents the result, not how it's
+  computed.
+- Do not touch the Permissions screen, Accounts screens, or any other
+  feature.
+- No new npm dependencies — `ToastAndroid` is built into `react-native`.
+
+OUTPUT: write a short chronological log (what changed in `HomeScreen.tsx`,
+each gate's result, on-device confirmation) to:
+  ongoing/realtime-persistence/05-sync-feedback-toast.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files modified count>,
+<one-line confirmation the toast appears on Sync SMS success/fail>. Do not
+paste file contents, logcat, uiautomator XML, or any app content.

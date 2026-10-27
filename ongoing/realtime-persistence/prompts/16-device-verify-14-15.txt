@@ -1,0 +1,79 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md (decisions log =
+absolute device-safety rules), then 14-soft-delete-account.md and
+15-approval-toggle.md. Both phases are code-complete with gates green but
+were NEVER verified on the phone (it disconnected). This phase is
+device verification only. Do not change code unless you find a real bug —
+if you do, fix minimally, re-run gates, and report it clearly.
+
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+Phone is connected over USB (serial 00015365L001524).
+Setup:
+  export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+  export PATH=$JAVA_HOME/bin:$PATH
+  export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+  cd android && ./gradlew assembleDebug && cd ..
+  adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+  Metro: if curl -s localhost:8081/status != "packager-status:running",
+  start `npx react-native start` in background; ALWAYS run
+  `adb reverse tcp:8081 tcp:8081` before launching.
+If the phone disconnects mid-run, wait up to 2 minutes for `adb devices`
+to show it again; if not, stop and report exactly which checks ran.
+
+PHASE 14 CHECKS (remove account, skill D10) — SYNTHETIC ACCOUNT ONLY:
+ 1. Note Home total + Accounts total (you may report these; they include
+    real balances — report only the DELTA caused by your steps, not the
+    absolute totals).
+ 2. Add account "QA Delete Bank 9999" (Bank, last 4 = 9999, opening 1000).
+    Add Record: expense "QA-Merchant-06", 100.00, on that account →
+    approve it. Account balance should be 900.00.
+ 3. Remove it (Remove account → confirm dialog). Totals drop by exactly
+    900.00. It is gone from main list; "Deleted accounts (N)" shows it.
+ 4. QA-Merchant-06 still in Transactions; its detail account label reads
+    "Deleted account ••9999 (QA Delete Bank 9999)"; Transactions Spent
+    total still includes the 100.00 (delta check).
+ 5. Open Add Record → account picker does NOT list QA Delete Bank 9999.
+ 6. Open Edit on QA-Merchant-06 → form shows the deleted account with a
+    note, does not crash, Cancel/back without saving.
+ 7. Tap Sync SMS → no crash (counts only; real data never printed).
+ 8. Restore it from Deleted accounts → back in main list, totals back up
+    by 900.00, picker lists it again.
+ 9. Cleanup: remove "QA Delete Bank 9999" again at the end? NO — leave it
+    RESTORED, and delete the QA-Merchant-06 transaction (Delete with
+    confirm). Then report leftover synthetic data (the account remains;
+    say so).
+
+PHASE 15 CHECKS (approval toggle) — DO NOT CHANGE THE OWNER'S SETTINGS:
+10. Tap Home greeting → settings sheet. Read (filtered dump) the current
+    Auto-approve switch state and threshold value; record them.
+11. Measure sheet height / position of the Save button with the switch in
+    its current state, then flip the switch, measure again → Save button
+    y must be unchanged (no layout jump). When OFF: threshold slider is
+    dimmed and a swipe on its thumb does NOT change the value; text
+    "Turn on Auto-approve to use the threshold" present. When ON: swipe
+    changes the value.
+12. RESTORE the original switch state and threshold value exactly as
+    recorded in step 10 BEFORE leaving the sheet, and close it WITHOUT
+    saving if possible (or save the original values). Re-open the sheet
+    and confirm values equal the originals. Never leave the owner's
+    settings changed.
+13. Force-stop + relaunch → everything persists. logcat: 0 FATAL
+    EXCEPTION from com.tracker, 0 "Maximum update depth", 0 ReactNativeJS
+    errors.
+
+DEVICE SAFETY (absolute — owner's personal phone, real SMS inbox):
+- Before EVERY tap/dump: `adb shell dumpsys window | grep -E
+  'mCurrentFocus|mFocusedApp'` — BOTH lines must contain com.tracker.
+  Otherwise press HOME, relaunch Tracker, never inspect the other app.
+- Every uiautomator dump grep-filtered to the ONE element needed; never
+  print a full dump; `adb shell rm /sdcard/u.xml` after; /sdcard paths
+  only inside `adb shell`.
+- Never print/write real SMS bodies, senders, real merchant names or real
+  amounts. Synthetic QA data and deltas only.
+- Never remove/edit/restore the owner's real accounts. Never touch
+  tracker.db / sqlite3 / run-as. No uninstall, no clear-data, no
+  screenshots. End: force-stop com.tracker.
+
+OUTPUT: ongoing/realtime-persistence/16-device-verify-14-15.md with a
+PASS/FAIL table for checks 1–13. Leak-scan before finishing. Do not commit.
+REPLY ONLY: compact PASS/FAIL per check; any bug found/fixed; leftover
+synthetic data; confirmation owner settings restored.

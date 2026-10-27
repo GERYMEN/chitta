@@ -1,0 +1,450 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary": "#ffffff", "on-tertiary-container": "#694000", "tertiary-fixed": "#ffddb9", "inverse-primary": "#2ae540", "on-surface-variant": "#3c4b38", "surface-tint": "#006e14", "on-primary-container": "#00560e", "surface-variant": "#dbe4ed", "primary": "#006e14", "on-tertiary": "#ffffff", "surface-container-high": "#e0e9f2", "error-container": "#ffdad6", "surface-dim": "#d2dbe4", "surface-container-highest": "#dbe4ed", "on-background": "#141d23", "tertiary-fixed-dim": "#ffb961", "tertiary-container": "#fea51f", "on-error-container": "#93000a", "secondary-container": "#e1e2e7", "outline-variant": "#bbcbb3", "background": "#f6faff", "on-surface": "#141d23", "inverse-surface": "#293138", "surface-container": "#e6eff8", "secondary-fixed-dim": "#c5c6cb", "on-secondary-fixed": "#191c1f", "primary-fixed": "#73ff6f", "surface": "#f6faff", "inverse-on-surface": "#e9f2fb", "on-primary-fixed-variant": "#00530d", "tertiary": "#865300", "on-tertiary-fixed-variant": "#663e00", "primary-container": "#00d632", "on-tertiary-fixed": "#2b1700", "outline": "#6c7b67", "on-secondary-container": "#626468", "error": "#ba1a1a", "on-primary-fixed": "#002202", "on-error": "#ffffff", "surface-container-low": "#ecf5fe", "primary-fixed-dim": "#2ae540", "surface-bright": "#f6faff", "surface-container-lowest": "#ffffff", "secondary": "#5c5f62", "on-primary": "#ffffff", "secondary-fixed": "#e1e2e7", "on-secondary-fixed-variant": "#44474b" }, "borderRadius": { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, "spacing": { "space-lg": "1.5rem", "gutter-mobile": "0.75rem", "space-sm": "0.5rem", "space-xl": "2rem", "margin": "1.5rem", "margin-mobile": "1rem", "space-xs": "0.25rem", "space-md": "1rem", "gutter": "1rem" }, "fontFamily": { "headline-md": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "display-hero-mobile": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "display-hero": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Plus Jakarta Sans"] }, "fontSize": { "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }], "display-hero-mobile": ["44px", { "lineHeight": "52px", "fontWeight": "800" }], "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "700" }], "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "display-hero": ["56px", { "lineHeight": "64px", "fontWeight": "800" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-lg": ["14px", { "lineHeight": "18px", "fontWeight": "700" }], "headline-lg-mobile": ["26px", { "lineHeight": "34px", "fontWeight": "700" }] } } } }</script><style>@layer base{html,body{width:100%;margin:0;padding:0;min-height:100vh;}body{overscroll-behavior-y:none;font-family:'Plus Jakarta Sans',sans-serif;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-16 px-margin-mobile flex items-center justify-between"><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none">Accounts</span><span class="font-label-sm text-label-sm text-on-surface-variant opacity-80 mt-0.5 tracking-wide">Your money sources</span></div><div class="flex items-center gap-space-xs"><button aria-label="Search" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[22px]">search</span></button><div class="relative flex items-center justify-center w-11 h-11"><img alt="Profile avatar" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1XEzFwH__WOOLSRbaE8uFseYDspzVOKZojptJ7qpY3cBLPDA3Hq_56-Oezw7OEbEcVABq4ElunwmR0PTejlGqPk6tAapST-DPynWIxcHsFIxtjhnQ8B2txiz0vrzcN7vTpYFy0zyWjB0Y11bXwwPxoZV4TUC-RWjn2qfeyN-EghBWy2KtLWE18Dk-KQcBHZ-MocKTY6QtnSa4Zkl0Hnmveo6M1dzG6olSEEPhol4dUr5MmuGWCYdKm0cPSC"></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-24 bg-surface"><div class="flex flex-col w-full px-margin-mobile pb-12 gap-space-lg">
+<!-- TOTAL TRACKED BALANCE CARD (Signature Obsidian Navy) -->
+<section class="w-full rounded-2xl bg-inverse-surface text-inverse-on-surface p-space-lg shadow-xl relative overflow-hidden">
+<!-- Ambient mint aura glow -->
+<div class="absolute -right-10 -bottom-10 w-44 h-44 rounded-full bg-primary-container/15 blur-3xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col gap-space-md">
+<!-- Card Top: Label & Reconciled Badge -->
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary-fixed-dim">Total Balance</span>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-tint/25 text-primary-fixed">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<span class="font-label-sm text-label-sm">Tracked &amp; Reconciled</span>
+</div>
+</div>
+<!-- Hero Figure -->
+<div class="flex flex-col">
+<div class="flex items-baseline gap-1">
+<span class="font-display-hero-mobile text-display-hero-mobile text-inverse-on-surface tracking-tight">₹82,450.00</span>
+</div>
+<p class="font-body-md text-body-md text-secondary-fixed-dim mt-0.5">Across 4 tracked money sources</p>
+</div>
+<!-- Action Toolbar -->
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="flex-1 h-11 px-space-md rounded-full bg-surface-container-lowest text-inverse-surface font-label-lg text-label-lg flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-sm" id="open-add-account-hero">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>Add Account</span>
+</button>
+<button aria-label="Reconcile All" class="h-11 w-11 rounded-full bg-surface-container-high/20 text-inverse-on-surface flex items-center justify-center active:scale-95 transition-transform" id="reconcile-trigger">
+<span class="material-symbols-outlined text-[20px]">sync</span>
+</button>
+</div>
+</div>
+</section>
+<!-- REASSURING MENTAL MODEL BANNER -->
+<section class="flex flex-col gap-space-xs">
+<!-- Mental Flow Pill -->
+<div class="flex items-center justify-center gap-2 py-2 px-3 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">
+<span class="font-bold">Source</span>
+<span class="material-symbols-outlined text-[14px] text-primary">arrow_forward</span>
+<span class="font-bold">Approved Entry</span>
+<span class="material-symbols-outlined text-[14px] text-primary">arrow_forward</span>
+<span class="font-bold text-on-surface">Calculated Balance</span>
+</div>
+<!-- On-Device Trust Micro-Card -->
+<div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm flex items-start gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">gshield</span>
+</div>
+<div class="flex-1 flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface">Zero Bank Login Required</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant">100% On-Device</span>
+</div>
+<p class="font-body-md text-body-md text-secondary leading-snug">
+          Balances adjust strictly through transactions you review and approve. We never ask for bank credentials, MPINs, or account control.
+        </p>
+</div>
+</div>
+</section>
+<!-- GROUPED ACCOUNT LISTS -->
+<div class="flex flex-col gap-space-lg">
+<!-- GROUP 1: BANK ACCOUNTS -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-label-md text-label-md uppercase tracking-wider text-secondary">Bank Accounts</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">2 sources</span>
+</div>
+<!-- Card 1: HDFC Bank (Interactive trigger) -->
+<div class="w-full text-left rounded-2xl bg-surface-container-lowest p-space-md shadow-sm flex flex-col gap-space-sm transition-all active:scale-[0.99] cursor-pointer hover:bg-surface-container-low" id="trigger-hdfc-card" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[24px]">account_balance</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface">HDFC Bank (Salary)</span>
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-label-sm text-label-sm text-secondary tracking-widest font-mono">•••• 4021</span>
+<span class="w-1 h-1 rounded-full bg-secondary-container"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">Primary UPI Source</span>
+</div>
+</div>
+</div>
+<button aria-label="Account Options" class="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-on-surface">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex items-end justify-between pt-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary">Approved Ledger Balance</span>
+<span class="font-headline-md text-headline-md text-on-surface">₹42,500.00</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant pb-1 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            Today, 7:32 PM
+          </span>
+</div>
+</div>
+<!-- Card 2: SBI Bank -->
+<div class="w-full rounded-2xl bg-surface-container-lowest p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[24px]">account_balance</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">State Bank of India</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-label-sm text-label-sm text-secondary tracking-widest font-mono">•••• 6789</span>
+<span class="w-1 h-1 rounded-full bg-secondary-container"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Savings Reserve</span>
+</div>
+</div>
+</div>
+<button aria-label="Account Options" class="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-on-surface">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex items-end justify-between pt-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary">Approved Ledger Balance</span>
+<span class="font-headline-md text-headline-md text-on-surface">₹18,250.00</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary pb-1">Updated Sep 30</span>
+</div>
+</div>
+</div>
+<!-- GROUP 2: PHYSICAL WALLETS & CASH -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-label-md text-label-md uppercase tracking-wider text-secondary">Cash</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">1 source</span>
+</div>
+<!-- Card 3: Cash in Hand -->
+<div class="w-full rounded-2xl bg-surface-container-lowest p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[24px]">payments</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">Cash in Hand</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Physical Leather Wallet</span>
+</div>
+</div>
+</div>
+<button aria-label="Account Options" class="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-on-surface">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex items-end justify-between pt-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary">Manual Tally Balance</span>
+<span class="font-headline-md text-headline-md text-on-surface">₹2,200.00</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary pb-1">Manual entry Oct 1</span>
+</div>
+</div>
+</div>
+<!-- GROUP 3: CREDIT CARDS & PAY LATER -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-label-md text-label-md uppercase tracking-wider text-secondary">Credit Cards &amp; Pay Later</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">1 card</span>
+</div>
+<!-- Card 4: Credit Card Liability -->
+<div class="w-full rounded-2xl bg-surface-container-lowest p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[24px]">credit_card</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">HDFC Millennia Credit Card</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-label-sm text-label-sm text-secondary tracking-widest font-mono">•••• 4321</span>
+<span class="w-1 h-1 rounded-full bg-secondary-container"></span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">Due Oct 15</span>
+</div>
+</div>
+</div>
+<button aria-label="Account Options" class="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-on-surface">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex items-end justify-between pt-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-error font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">info</span>
+              Current Outstanding Liability
+            </span>
+<span class="font-headline-md text-headline-md text-error">₹8,500.00</span>
+</div>
+<div class="flex flex-col items-end pb-1">
+<span class="font-label-sm text-label-sm text-secondary">Limit: ₹1,50,000</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">3 unbilled entries</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- PERSISTENT / FLOATING STYLE PRIMARY TRIGGER -->
+<div class="pt-2">
+<button class="w-full h-14 rounded-full bg-on-surface text-surface font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-transform" id="open-add-sheet-btn">
+<span class="material-symbols-outlined text-[22px]">add</span>
+<span>Add New Money Source</span>
+</button>
+</div>
+<!-- INTERACTIVE PREVIEW BOTTOM SHEET: ACCOUNT INSPECTION (HDFC) -->
+<div class="fixed inset-0 z-50 flex flex-col justify-end bg-inverse-surface/40 backdrop-blur-sm transition-opacity duration-300 opacity-0 pointer-events-none" id="account-inspector-sheet">
+<div class="w-full max-h-[751px] overflow-y-auto bg-surface-container-lowest rounded-t-3xl p-space-lg shadow-2xl flex flex-col gap-space-lg transform transition-transform duration-300 translate-y-full">
+<!-- Sheet Handle -->
+<div class="w-12 h-1.5 rounded-full bg-secondary-container mx-auto shrink-0 -mt-2"></div>
+<!-- Sheet Header -->
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[28px]">account_balance</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">HDFC Bank</h3>
+<span class="px-2 py-0.5 rounded-full bg-primary-container/20 text-on-primary-container font-label-sm text-label-sm font-bold">Salary</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-mono tracking-wider">•••• 4021 · IFSC: HDFC0000128</span>
+</div>
+</div>
+<button aria-label="Close Inspector" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" id="close-inspector-sheet">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Quick Metrics Grid -->
+<div class="grid grid-cols-3 gap-2 p-space-sm rounded-2xl bg-surface-container-low text-center">
+<div class="flex flex-col py-1">
+<span class="font-label-sm text-label-sm text-secondary">Ledger Balance</span>
+<span class="font-label-lg text-label-lg text-on-surface mt-0.5">₹42,500</span>
+</div>
+<div class="flex flex-col py-1 border-x-0">
+<span class="font-label-sm text-label-sm text-primary">Total Inflow</span>
+<span class="font-label-lg text-label-lg text-primary mt-0.5">+₹65,000</span>
+</div>
+<div class="flex flex-col py-1">
+<span class="font-label-sm text-label-sm text-secondary">Total Outflow</span>
+<span class="font-label-lg text-label-lg text-error mt-0.5">-₹22,500</span>
+</div>
+</div>
+<!-- Filtered Transactions for this source -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-md text-label-md text-on-surface">Linked Approved Entries</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">This Month</span>
+</div>
+<!-- Row 1: Swiggy -->
+<div class="flex items-center justify-between py-2.5 px-2 rounded-xl bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-surface-container flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[18px]">restaurant</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface leading-tight">Swiggy Delivery</span>
+<span class="font-label-sm text-label-sm text-secondary">Today, 7:32 PM · UPI Auto</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-lg text-label-lg text-on-surface">-₹450.00</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Approved
+            </span>
+</div>
+</div>
+<!-- Row 2: Salary Credit -->
+<div class="flex items-center justify-between py-2.5 px-2 rounded-xl bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface leading-tight">Tech Corp Payroll</span>
+<span class="font-label-sm text-label-sm text-secondary">Oct 1, 10:00 AM · NEFT</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-lg text-label-lg text-primary font-bold">+₹65,000.00</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Approved
+            </span>
+</div>
+</div>
+<!-- Row 3: Amazon -->
+<div class="flex items-center justify-between py-2.5 px-2 rounded-xl bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface leading-tight">Amazon India</span>
+<span class="font-label-sm text-label-sm text-secondary">Sep 28, 4:15 PM · Debit Card</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-lg text-label-lg text-on-surface">-₹1,299.00</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Approved
+            </span>
+</div>
+</div>
+</div>
+<!-- Action Buttons in Sheet -->
+<div class="flex items-center gap-space-sm pt-2">
+<button class="flex-1 h-12 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-surface-container-high transition-colors" id="edit-account-btn">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+<span>Edit Account</span>
+</button>
+<button class="flex-1 h-12 rounded-full bg-on-surface text-surface font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-inverse-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">list_alt</span>
+<span>All 48 Records</span>
+</button>
+</div>
+</div>
+</div>
+<!-- ADD ACCOUNT CONFIG SHEET (Modal Overlay) -->
+<div class="fixed inset-0 z-50 flex flex-col justify-end bg-inverse-surface/40 backdrop-blur-sm transition-opacity duration-300 opacity-0 pointer-events-none" id="add-account-modal">
+<div class="w-full max-h-[795px] overflow-y-auto bg-surface-container-lowest rounded-t-3xl p-space-lg shadow-2xl flex flex-col gap-space-md transform transition-transform duration-300 translate-y-full">
+<!-- Sheet Handle -->
+<div class="w-12 h-1.5 rounded-full bg-secondary-container mx-auto shrink-0 -mt-2"></div>
+<!-- Header -->
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Add Money Source</h3>
+<p class="font-label-sm text-label-sm text-secondary mt-0.5">Track balances locally via approved entries</p>
+</div>
+<button aria-label="Dismiss Sheet" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" id="close-add-modal">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Account Type Selector Chips -->
+<div class="flex flex-col gap-1.5">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Source Type</span>
+<div class="grid grid-cols-4 gap-2">
+<button class="flex flex-col items-center justify-center py-2.5 rounded-2xl bg-on-surface text-surface text-center transition-all">
+<span class="material-symbols-outlined text-[20px]">account_balance</span>
+<span class="font-label-sm text-label-sm mt-1">Bank</span>
+</button>
+<button class="flex flex-col items-center justify-center py-2.5 rounded-2xl bg-surface-container-low text-on-surface text-center hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+<span class="font-label-sm text-label-sm mt-1">Cash</span>
+</button>
+<button class="flex flex-col items-center justify-center py-2.5 rounded-2xl bg-surface-container-low text-on-surface text-center hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined text-[20px]">credit_card</span>
+<span class="font-label-sm text-label-sm mt-1">Credit</span>
+</button>
+<button class="flex flex-col items-center justify-center py-2.5 rounded-2xl bg-surface-container-low text-on-surface text-center hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined text-[20px]">qr_code_2</span>
+<span class="font-label-sm text-label-sm mt-1">UPI / Other</span>
+</button>
+</div>
+</div>
+<!-- Inputs Form -->
+<div class="flex flex-col gap-space-sm pt-1">
+<div class="flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-secondary">Account Name or Nickname</label>
+<input class="w-full h-12 px-4 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md placeholder:text-secondary focus:outline-none focus:bg-surface-container-high transition-colors" placeholder="e.g. Axis Salary, ICICI Savings" type="text">
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<div class="flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-secondary">Opening Balance (₹)</label>
+<input class="w-full h-12 px-4 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md placeholder:text-secondary focus:outline-none focus:bg-surface-container-high transition-colors" placeholder="₹0.00" type="number">
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-secondary">Last 4 Digits</label>
+<input class="w-full h-12 px-4 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md placeholder:text-secondary focus:outline-none focus:bg-surface-container-high transition-colors" maxlength="4" placeholder="e.g. 5678" type="text">
+</div>
+</div>
+<!-- Informational banner -->
+<div class="p-3 rounded-xl bg-surface-container flex items-center gap-2.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0">check_circle</span>
+<span class="font-label-sm text-label-sm">Balance will automatically adjust with every future transaction you accept.</span>
+</div>
+</div>
+<!-- Action Button -->
+<div class="pt-2">
+<button class="w-full h-13 py-3.5 rounded-full bg-primary-container text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-md active:scale-95 transition-transform" id="save-new-account">
+<span class="material-symbols-outlined text-[20px]">save</span>
+<span>Save &amp; Track Money Source</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Micro-Interaction Script for bottom sheet toggling -->
+<script>
+    (function() {
+      const inspector = document.getElementById('account-inspector-sheet');
+      const inspectorInner = inspector?.querySelector('div');
+      const openInspector = document.getElementById('trigger-hdfc-card');
+      const closeInspector = document.getElementById('close-inspector-sheet');
+
+      const addModal = document.getElementById('add-account-modal');
+      const addModalInner = addModal?.querySelector('div');
+      const openAddHero = document.getElementById('open-add-account-hero');
+      const openAddBtn = document.getElementById('open-add-sheet-btn');
+      const closeAdd = document.getElementById('close-add-modal');
+      const saveAdd = document.getElementById('save-new-account');
+
+      function toggleSheet(container, inner, show) {
+        if (!container || !inner) return;
+        if (show) {
+          container.classList.remove('pointer-events-none', 'opacity-0');
+          container.classList.add('opacity-100');
+          inner.classList.remove('translate-y-full');
+          inner.classList.add('translate-y-0');
+        } else {
+          container.classList.add('opacity-0');
+          inner.classList.remove('translate-y-0');
+          inner.classList.add('translate-y-full');
+          setTimeout(() => {
+            container.classList.add('pointer-events-none');
+          }, 300);
+        }
+      }
+
+      openInspector?.addEventListener('click', () => toggleSheet(inspector, inspectorInner, true));
+      closeInspector?.addEventListener('click', () => toggleSheet(inspector, inspectorInner, false));
+      inspector?.addEventListener('click', (e) => {
+        if (e.target === inspector) toggleSheet(inspector, inspectorInner, false);
+      });
+
+      openAddHero?.addEventListener('click', () => toggleSheet(addModal, addModalInner, true));
+      openAddBtn?.addEventListener('click', () => toggleSheet(addModal, addModalInner, true));
+      closeAdd?.addEventListener('click', () => toggleSheet(addModal, addModalInner, false));
+      saveAdd?.addEventListener('click', () => toggleSheet(addModal, addModalInner, false));
+      addModal?.addEventListener('click', (e) => {
+        if (e.target === addModal) toggleSheet(addModal, addModalInner, false);
+      });
+    })();
+  </script>
+</div></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="flex justify-around items-center h-16 px-gutter-mobile"><a class="flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="dashboard" href="#"><span class="material-symbols-outlined text-[24px]">home</span><span class="font-label-sm text-label-sm mt-1">Home</span></a><a class="flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="transactions" href="#"><span class="material-symbols-outlined text-[24px]">receipt_long</span><span class="font-label-sm text-label-sm mt-1">Transactions</span></a><a class="relative flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="pending" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[24px]">schedule</span><span class="absolute -top-1 -right-2 bg-tertiary-container text-on-tertiary-container font-label-sm text-[10px] h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center font-bold">5</span></div><span class="font-label-sm text-label-sm mt-1">Pending</span></a><a aria-current="page" class="flex flex-col items-center justify-center min-w-[64px] h-12 transition-colors text-primary font-bold" data-path="accounts" href="#"><span class="material-symbols-outlined text-[24px]">account_balance_wallet</span><span class="font-label-sm text-label-sm mt-1">Accounts</span></a></div></nav></body></html>

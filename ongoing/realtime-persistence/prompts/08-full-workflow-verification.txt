@@ -1,0 +1,104 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full first,
+then all of 01 through 07's report files in order. This phase does NOT
+change any code (unless you find a genuine bug while testing — see the end
+of this prompt for what to do if that happens). Its only job is a full,
+honest, end-to-end regression test of the whole app across every phase
+built this session, on the real connected device, from a clean slate.
+
+APPLY EVERY PERMANENT RULE IN STATE.md'S DECISIONS LOG, NO EXCEPTIONS,
+ESPECIALLY:
+- Interact with EXACTLY ONE app, `com.tracker` (plus the system permission
+  dialog when expected). Re-check `topResumedActivity` before every tap.
+- NEVER read/write/push/pull/manipulate `tracker.db` or anything under the
+  app's data directories via `adb`/`sqlite3`/`run-as`, for ANY reason —
+  this is now an absolute rule with zero exceptions, stated explicitly
+  after a prior phase violated it. If you need test accounts or
+  transactions to exist, create them through the app's own UI (Add
+  Account, Add Record screens) via real taps. No shortcuts.
+- Any `uiautomator dump` of a screen that can show real transaction/account
+  rows must be grepped down to the specific thing you're locating — never
+  print a full raw dump to stdout.
+- Report only: counts, bank name/account type/last-four (the one safe
+  category already established), and structural confirmations. NEVER
+  merchant names, amounts, sender identity, or raw message content.
+
+CONTEXT: all 7 prior phases are individually done and gated, but have
+never been exercised together in one continuous session from a genuinely
+fresh install. This phase is that end-to-end confidence check.
+
+TEST PLAN (perform exactly in this order, on the real device):
+
+1. `adb uninstall com.tracker` (clean slate — deliberate and expected this
+   one time, matching Phase 6's own precedent), then build+install the
+   current APK fresh, launch.
+2. **Onboarding (first launch)**: confirm the Tour/Onboarding flow shows.
+   Go through it to the Permissions screen. Tap "Enable & Continue to
+   Home" (the real permission-granting path this time, not the manual
+   skip) — confirm the real Android READ_SMS permission dialog appears,
+   tap "Allow". Confirm you land on Home with a genuinely empty state (₹0
+   balance, "No accounts yet" or equivalent).
+3. **Add Account (first real account, via UI only)**: from Home or
+   Accounts, add one real bank account (e.g. name "Primary Checking", type
+   Bank Account, any lastFour, opening balance e.g. "10000.00"). Confirm
+   it appears correctly and the balance reflects it.
+4. **Add Record (manual transaction)**: tap Add Record, fill a valid
+   expense (amount, merchant, category, the account you just created,
+   payment method, date), submit. Confirm it lands on Pending with status
+   pending and the correct amount/merchant (this is YOUR OWN fabricated
+   test data, safe to reference by name/amount in the report, unlike real
+   SMS-derived data).
+5. **Approve**: approve that pending transaction. Confirm it now shows
+   approved in Transactions/Home and the Accounts balance updated
+   correctly (opening balance minus the expense).
+6. **Edit**: edit that same transaction (change merchant or amount),
+   confirm the change persists after navigating away and back.
+7. **Add a second account** (e.g. type Cash, opening balance "0") via the
+   bottom "Add New Money Source" button specifically (the other entry
+   point) — confirm both entry points still work and both accounts show
+   correctly with a combined correct total balance.
+8. **Sync SMS**: tap Sync SMS. This will read the device's REAL inbox.
+   Confirm (via the toast and/or Suggestions screen) that it either (a)
+   creates matched transactions directly if any message happens to match
+   one of your 2 just-created accounts (unlikely, report counts only if it
+   does), or (b) navigates to the Suggestions screen showing real bank/
+   type/last-four/count groups (report these labels + counts only, the
+   established safe category).
+9. **Approve one real suggestion**: tap "Add Account" on one suggestion,
+   confirm the form is pre-filled correctly, save with a reasonable
+   opening balance (e.g. "0" — you don't know the real opening balance
+   from an SMS, that's expected and fine). Confirm you're back on Accounts
+   with it listed.
+10. **Re-sync**: tap Sync SMS again. Confirm (counts only) that the
+    newly-added account's messages are now matched and created as pending
+    transactions, and that re-running a second time immediately after
+    produces `created = 0` for those same messages (dedup still holds
+    after all this session's changes).
+11. **Persistence across restart**: `adb shell am force-stop com.tracker`,
+    relaunch (`am start`, NOT uninstall this time). Confirm: Onboarding
+    does NOT show again (Phase 6's fix holds), all accounts/transactions
+    from steps 3-10 are still present with correct balances, Home header
+    still clears the status bar correctly (Phase 6's other fix holds).
+12. **Crash check**: `adb logcat -d` across the whole session — grep
+    `FATAL EXCEPTION` / `Maximum update depth exceeded`, must be 0 matches
+    total from the very start of this test.
+13. Cleanup: `adb shell am force-stop com.tracker` when done.
+
+IF YOU FIND A GENUINE BUG during this test (something that contradicts a
+prior phase's report, or a real defect): do NOT fix it yourself in this
+phase. Stop, document it precisely (what you did, what you expected, what
+actually happened — structurally, no leaked content) in the output report,
+and note it clearly in your final reply so the orchestrator can decide how
+to address it. Do not attempt a workaround or a direct data edit to make a
+later step "work" — report the bug honestly instead.
+
+OUTPUT: write a clean, complete chronological log of all 13 steps with
+their actual results to:
+  ongoing/realtime-persistence/08-full-workflow-verification.md
+
+REPLY ONLY with: <any bugs found: yes/no, one line each if yes>, <all 13
+steps completed successfully: yes/no>, <one-line overall verdict on whether
+the full real-world workflow — onboard once, add accounts both ways,
+manual add/approve/edit, sync real SMS, approve a suggested account,
+re-sync with dedup, survive a restart — genuinely works end-to-end with
+zero crashes>. Do not paste file contents, logcat, uiautomator XML, or any
+app content beyond the established safe categories.

@@ -1,0 +1,257 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full FIRST. It has
+the exact op-sqlite API, the exact list of files to rewire, the privacy rules
+for the connected physical device, and scoping decisions already made. Do not
+re-derive or contradict anything in it. This prompt only adds the concrete
+task breakdown for Phase 1.
+
+READ FIRST:
+- ongoing/realtime-persistence/STATE.md (required, has critical context)
+- src/domain/transactions/transaction.types.ts
+- src/domain/accounts/account.types.ts
+- src/domain/categories/category.types.ts
+- src/domain/audit/audit.types.ts
+- src/domain/transactions/transaction.rules.ts
+- src/domain/accounts/account.rules.ts
+- src/features/transactions/state/transactionsStore.ts (current fixture-backed version, to be replaced)
+- The 5 consumer files listed in STATE.md's "must be rewired" section
+
+GOAL OF THIS PHASE: real on-device SQLite persistence exists, the app boots
+to a genuinely empty state (0 accounts, 0 transactions, categories seeded),
+and every screen reads/writes through it instead of fixtures. Add
+Record/Edit/Add Account buttons stay as no-ops for now (that's Phases 2-3) —
+this phase is the data-layer foundation only.
+
+TASKS:
+
+F1. Database connection — create `src/data/db/connection.ts`:
+    - Export a function `getDatabase(): DB` (from `@op-engineering/op-sqlite`
+      types) that lazily opens (singleton, open once) a database named
+      `tracker.db` via `open({ name: 'tracker.db' })`.
+    - Export an async `runMigrations(): Promise<void>` that creates the
+      tables (see F2) with `CREATE TABLE IF NOT EXISTS` — idempotent, safe to
+      call on every app start.
+
+F2. Schema — create `src/data/db/schema/` with the table definitions (as SQL
+    strings, one file per table is fine, or one `schema.ts` file — your
+    call, keep it readable). Exact columns:
+
+    ```sql
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      last_four TEXT,
+      opening_balance_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      parent_id TEXT,
+      type TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      is_system INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS transactions (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      merchant_name TEXT NOT NULL,
+      category_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      payment_method TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      detected_at TEXT NOT NULL,
+      approved_at TEXT,
+      note TEXT,
+      source_type TEXT NOT NULL,
+      source_reference_hash TEXT,
+      sanitized_preview TEXT,
+      confidence_score REAL,
+      parser_version TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (category_id) REFERENCES categories(id),
+      FOREIGN KEY (account_id) REFERENCES accounts(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT,
+      event_type TEXT NOT NULL,
+      event_at TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      metadata_json TEXT,
+      FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+    );
+    ```
+
+    Booleans (`is_active`, `is_system`) stored as INTEGER 0/1 — SQLite has no
+    native boolean, map to/from JS `boolean` in the mapper layer (F4), never
+    leak the 0/1 INTEGER into domain objects.
+
+F3. Category seeding — in `runMigrations()` (or a separate
+    `seedSystemCategories()` called right after), insert the 6 system
+    categories ONLY IF the categories table is empty (`SELECT COUNT(*) FROM
+    categories` first, skip insert if count > 0 — must be idempotent across
+    app restarts). Use the exact same ids/names/types/icons as
+    `src/test/fixtures/categories.fixture.ts` (`cat-food`, `cat-shopping`,
+    `cat-transport`, `cat-coffee`, `cat-salary`, `cat-freelance`) so existing
+    icon/visual lookup code (`src/shared/constants/categoryVisuals.ts`, which
+    keys off these exact ids) keeps working unchanged. Do NOT seed accounts
+    or transactions — those stay empty per STATE.md's scoping decision.
+
+F4. Mappers — create `src/data/mappers/` with pure functions converting a
+    SQLite row (`Record<string, Scalar>`) to/from the domain types
+    (`rowToTransaction`, `transactionToRow` or similar naming — your call).
+    Handle the INTEGER-boolean conversion here. Keep these pure and unit
+    test them lightly (a couple of round-trip tests is enough, don't go
+    overboard) in `src/data/mappers/__tests__/`.
+
+F5. Repositories — create `src/data/repositories/`:
+    - `transaction.repository.ts`: `listAll(): Promise<Transaction[]>`,
+      `getById(id): Promise<Transaction | null>`, `create(input): Promise<Transaction>`
+      (generate an id — see F6 — fill `createdAt`/`updatedAt` with
+      `new Date().toISOString()`), `update(id, patch): Promise<Transaction>`,
+      `delete(id): Promise<void>`. Use `db.transaction()` for any
+      multi-statement write. All amount handling stays integer (paise) —
+      never parse/format as float inside the repository.
+    - `account.repository.ts`: `listAll()`, `getById(id)`, `create(input)`,
+      `update(id, patch)`, mirroring the pattern above.
+    - `category.repository.ts`: `listAll(): Promise<Category[]>` (read-only
+      for this phase — no create/update needed yet).
+    - Repositories are the ONLY files that import `@op-engineering/op-sqlite`
+      or write raw SQL. No screen/component/store should ever import the
+      SQLite package directly — enforce this boundary (matches the project's
+      existing layering rule: UI → store/hooks → domain → repositories →
+      SQLite, never UI → SQLite directly).
+
+F6. Id generation — create a tiny helper (e.g.
+    `src/shared/utils/id.ts`) exporting `generateId(prefix: string): string`
+    — something like `` `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` ``
+    is sufficient (no uuid library needed, this is a local single-device
+    app, collision risk is a non-issue at this id space). Use it for every
+    new transaction/account id instead of literal strings like the fixtures
+    used.
+
+F7. Rewrite `src/features/transactions/state/transactionsStore.ts`:
+    - Remove the `transactionFixtures` import and seed.
+    - New shape: `{ transactions: Transaction[], accounts: Account[],
+      categories: Category[], isHydrated: boolean, hydrate: () => Promise<void>,
+      approve: (id) => Promise<void>, reject: (id) => Promise<void>,
+      refresh: () => Promise<void> }` (keep `selectPending`/`selectApproved`
+      selectors working exactly as before — other files depend on their
+      current signature and the `useShallow` wrapping already applied at
+      call sites; do not change the selector function signatures).
+    - `hydrate()`: calls `runMigrations()` then loads `transactions`,
+      `accounts`, `categories` from their repositories in parallel
+      (`Promise.all`) and sets them in state, then sets `isHydrated = true`.
+    - `approve(id)` / `reject(id)`: call `transactionRepository.update(id, {
+      status: 'approved' | 'rejected', approvedAt: ... })` (reuse
+      `canTransition` from `transaction.rules.ts` to guard, same as the
+      current in-memory version does) then update local state from the
+      repository's returned row (or just patch locally + trust it — your
+      call, but keep behavior consistent with before: UI updates
+      immediately on approve/reject tap, no visible lag).
+    - Also add a generic `addTransaction(input)` and `updateTransaction(id,
+      patch)` action that Phase 2's forms will call — wire them now even
+      though no UI calls them yet, so Phase 2 doesn't need to touch this
+      file again. Same for `addAccount(input)` on the account side.
+    - Where should `hydrate()` be called from? Wire it into
+      `src/app/App.tsx` (or a new small provider) — call `hydrate()` once on
+      mount, and render a minimal loading state (reuse existing theme
+      tokens, nothing fancy — a centered `ActivityIndicator` is fine) until
+      `isHydrated` is true, then render `RootNavigator`. Don't block on this
+      excessively — SQLite open + a few `SELECT *` on empty tables should be
+      near-instant.
+
+F8. Rewire the 5 consumer files (NOT TourIllustration.tsx — leave that one
+    alone per STATE.md):
+    - `HomeScreen.tsx`: read accounts from the store (`useTransactionsStore`
+      state.accounts) instead of `accountFixtures`. Balance calc logic
+      (`calculateBalance`) stays the same, just fed real account data. With
+      zero accounts, the balance card should show ₹0 (or an empty/zero
+      state) rather than crashing — check this renders sanely.
+    - `TransactionDetailContent.tsx`: replace `categoryById`/`accountById`
+      fixture lookups with lookups against the store's `categories`/
+      `accounts` arrays (pass them in as props from the parent screens, OR
+      read directly from `useTransactionsStore` inside this component —
+      whichever is less invasive given how it's currently used in both
+      `PendingScreen` and `TransactionDetailScreen`; your call, but keep the
+      component's existing prop contract (`transaction`, `onApprove`,
+      `onEdit`, etc.) otherwise unchanged since Phase 2 wires `onEdit` next).
+    - `AccountsScreen.tsx`: read the account list from the store instead of
+      `accountFixtures`. With zero accounts, show a sensible empty state
+      (e.g. "No accounts yet — add one to start tracking" where the account
+      list would be) rather than an empty blank area — reuse existing text
+      style tokens, keep it simple, don't over-design this empty state.
+    - `PendingTransactionCard.tsx`: replace `categoryById` fixture lookup
+      with a lookup against real categories (passed as a prop, or read from
+      the store — match whatever approach you took in
+      `TransactionDetailContent.tsx` for consistency).
+
+F9. Double-check nothing else broke: `MainTabs.tsx`'s pending-count badge
+    and `TransactionsScreen.tsx`'s approved list both already go through
+    `useTransactionsStore`'s selectors — they should keep working against
+    the now-empty-then-real data without any further code changes, but
+    verify this by actually reading them, don't just assume.
+
+GATES (must all pass before you report done):
+- `npx tsc --noEmit -p tsconfig.json` from the project root — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors (pre-existing warnings
+  like the `react/no-unstable-nested-components` ones are fine to leave).
+- `npx jest` — all existing tests still pass; add the light mapper
+  round-trip tests from F4.
+- `cd android && ./gradlew assembleDebug` (JAVA_HOME exported per STATE.md)
+  — BUILD SUCCESSFUL.
+- Install on the connected device (`adb install -r
+  android/app/build/outputs/apk/debug/app-debug.apk`), launch it
+  (`adb shell am start -n com.tracker/.MainActivity` — force-stop first with
+  `adb shell am force-stop com.tracker` for a truly clean state), and via
+  `adb logcat -d` confirm:
+  - No `FATAL EXCEPTION` / `AndroidRuntime` crash.
+  - No `Maximum update depth exceeded` (the infinite-loop class of bug fixed
+    earlier this session — if you see this again, you've reintroduced an
+    unstable Zustand selector somewhere, go find it).
+  - The app reaches Home with an empty/zero state (₹0 balance, "0 waiting",
+    no fixture merchant names like "Swiggy"/"Amazon" visible anywhere,
+    since nothing should be seeded) — verify this via `uiautomator dump` and
+    grepping its text nodes for known fixture merchant names (should find
+    NONE), rather than screenshotting (see STATE.md's privacy rule).
+  - Navigate to Accounts via the bottom tab (find its exact tap coordinates
+    via `adb shell uiautomator dump` + grep for a `content-desc` or `text`
+    containing "Accounts", same technique the orchestrator used earlier
+    this session — don't guess pixel coordinates) and confirm via the dump
+    that the empty-state copy from F8 is present and no fixture account
+    names ("HDFC Bank", "State Bank of India", etc.) appear.
+
+SCOPE GUARDS:
+- Do not touch `TourIllustration.tsx`.
+- Do not build Add Record / Edit / Add Account UI yet — those are Phases
+  2-3. The buttons stay `onPress={() => {}}` for now; wiring the store's new
+  `addTransaction`/`updateTransaction`/`addAccount` actions to real forms is
+  explicitly out of scope for this phase.
+- Do not touch anything under `src/features/onboarding/` except confirming
+  (read-only) that nothing there imports the 5 files you're changing in a
+  way that breaks.
+- Do not modify `android/app/src/main/AndroidManifest.xml` — no new
+  permissions needed for this phase (that's Phase 4, SMS).
+- Do not install any new npm packages this phase — everything needed
+  (`@op-engineering/op-sqlite`) is already installed.
+
+OUTPUT: write a detailed chronological log (every file created/changed, the
+reasoning for any judgment call flagged above as "your call", every gate's
+actual output) to:
+  ongoing/realtime-persistence/01-persistence-foundation.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created count>, <files
+modified count>, <one-line verdict on whether the app genuinely boots empty
+with no fixture data visible>. Do not paste file contents, logcat dumps, or
+uiautomator XML into your reply — all of that goes in the output file only.

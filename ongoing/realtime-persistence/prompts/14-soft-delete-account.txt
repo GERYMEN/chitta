@@ -1,0 +1,138 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full (decisions
+log = absolute device-safety rules, incl. the dumpsys-window foreground
+check), then 13-profile-approval-mode.md (previous phase — it changed
+transactionsStore, HomeScreen and syncSms; build on its state). Then read
+the governing spec for this feature: ongoing/sms-sync-v2/skill/SKILL.md
+section "D10. Soft-deleted accounts keep their transactions" and the
+"D10 Soft delete" block in ongoing/sms-sync-v2/skill/references/
+acceptance-criteria.md, plus skill/references/schema.md (deleted_at column,
+account_suggestion_decisions table). The user explicitly said to follow
+that skill for account deletion. Project:
+/Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+USER REQUEST: "Add option to remove account. Removed account = treated as
+deleted account. Don't delete its income and expense details."
+
+Already in place (sms-sync-v2 Phase 2, verified):
+- accounts.deleted_at INTEGER column (mapped to Account.deletedAt ISO|null).
+- accountRepository.listActiveAccounts() (deleted_at IS NULL) and
+  listAllAccounts(); NOT yet wired anywhere — store still calls listAll().
+- account_suggestion_decisions table (bank_canonical, account_kind,
+  last_four '' sentinel, decision CHECK added|linked|ignored|deleted,
+  account_id, normalizer_version, decided_at; PK the first three).
+- normalizeAccountKey + ACCOUNT_KEY_NORMALIZER_VERSION
+  (src/features/sms-sync/normalizeAccountKey.ts), bank display map in
+  smsParser.ts.
+- Shared Dialog (showDialog) for confirms; BottomSheet; Button variants
+  incl. 'destructive'.
+
+Current account-usage sites (verified; re-grep after Phase 13 changes):
+- Home total balance: HomeScreen.tsx (accounts → calculateBalance sum)
+- Accounts screen list/groups/total: AccountsScreen.tsx
+- Pickers: TransactionForm.tsx (Add Record + Edit), AddRecordScreen guard
+- Account label on a transaction: TransactionDetailContent.tsx
+  (`accounts.find(a => a.id === transaction.accountId)`), plus any row/card
+  that shows an account name (grep)
+- SMS matching: syncSms.ts / smsSyncLogic.ts resolveAccountIdForSms
+  (exact type + lastFour)
+- Duplicate guard: findDuplicateAccount (accountForm.schema.ts)
+
+TASKS (D10, exactly):
+T1. Repository: accountRepository.softDelete(id) and restore(id).
+    softDelete in ONE db.transaction: set deleted_at = now, and INSERT OR
+    REPLACE a decision row decision='deleted', account_id=id, key derived
+    from the account: account_kind = account.type, last_four =
+    account.lastFour ?? '', bank_canonical = the normalizer's bank alias
+    for account.name if it resolves, else 'unknown'
+    (export a small pure helper from normalizeAccountKey.ts if needed;
+    unit-test it). restore: clear deleted_at + DELETE that decision row,
+    same transaction. NEVER delete or modify any transaction row. NEVER
+    build the superseded hard-delete deleteAccountWithTransactions.
+    Parameterized SQL only.
+T2. Store: hydrate with listAllAccounts() so `accounts` holds ALL; add a
+    `selectActiveAccounts` selector (wrap call sites in useShallow — see
+    STATE.md infinite-loop note) and actions removeAccount(id) /
+    restoreAccount(id) that call the repository then refresh.
+T3. Wire filtering per D10:
+    - EXCLUDED from: Home total balance, Accounts total + main groups,
+      Add Record / Edit account pickers, AddRecordScreen "add an account
+      first" guard (counts active only), syncSms "no-accounts" guard,
+      duplicate guard (active only), SMS matching target list.
+    - KEPT: all its transactions everywhere (Transactions list, Pending,
+      detail, Transactions screen Inflow/Spent/Net totals), still editable.
+      Edit form for a transaction on a deleted account must not crash or
+      silently reassign — show the deleted account as the current
+      (read-only/disabled) selection or a clear note.
+    - Label: wherever a transaction's account is shown →
+      "Deleted account ••1859 (HDFC)" (lastFour + name) or
+      "Deleted account (<name>)" when no lastFour. Centralize in one pure
+      helper (unit-tested).
+T4. Sync: SMS candidates whose (accountKind, lastFour) exactly match a
+    SOFT-DELETED account (same exact rule as active matching), or whose
+    normalized key has a 'deleted' decision row, are DROPPED — not
+    imported, not suggested. Count them into skipped. This prevents the
+    deleted account's bank reappearing as a "New Accounts Found"
+    suggestion. (D5's "offer Restore instead of Add" only matters for keys
+    that somehow still reach suggestions; if trivial, show "Restore"
+    instead of "Add Account" on such a suggestion row, else document.)
+T5. UI:
+    - Accounts screen: each account card gets a "Remove account" action
+      (e.g. tap card → small account BottomSheet with "Remove account", or
+      a ⋯ menu — match existing design; ≥48dp; clear of gesture zone).
+      Confirm via showDialog, destructive variant, copy like:
+      "Remove <name> ••1859? Its N transactions stay in your history but
+      stop counting toward your balance. New SMS from this account won't
+      be imported. You can restore it later."
+    - A collapsible "Deleted accounts (N)" section at the bottom of
+      Accounts listing deleted ones with a "Restore" button each (restore
+      confirm optional). Hidden when N=0. On restore, tell the user to
+      Sync SMS to import messages that arrived while it was deleted
+      (idempotent by sourceReferenceHash — D10 "backfill the gap").
+T6. Tests: repository softDelete/restore (mock db pattern from
+    settings.repository.test.ts / account.repository.test.ts: assert
+    UPDATE deleted_at + decision INSERT in one transaction, NO DELETE/UPDATE
+    on transactions table), label helper, sync drop logic (pure), active
+    selector, calculateBalance totals exclude deleted.
+
+GATES:
+- npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+  0 errors; npx jest all pass; cd android && ./gradlew assembleDebug OK.
+  (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home;
+   export PATH=$JAVA_HOME/bin:$PATH;
+   export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools)
+- On device (adb install -r; no uninstall). USE ONLY A SYNTHETIC ACCOUNT —
+  NEVER remove the owner's real accounts (Federal, HDFC, SBI, etc.):
+  1. Add account "QA Delete Bank 9999" (bank, lastFour 9999, opening 1000).
+     Add + approve a synthetic expense "QA-Merchant-06" 100.00 on it.
+     Note Home total and Accounts total (synthetic numbers only).
+  2. Remove it (confirm dialog). Accounts total drops by its balance (900);
+     it's gone from main list; "Deleted accounts (1)" shows it.
+  3. QA-Merchant-06 still in Transactions; its detail shows
+     "Deleted account ••9999 (QA Delete Bank 9999)"; Transactions Spent
+     total still includes it.
+  4. Add Record picker does NOT list it.
+  5. Tap Sync SMS → no crash; suggestions/pending unaffected for real
+     accounts (counts only).
+  6. Restore → back in main list, total restored, picker lists it again.
+  7. Remove it again at the end and leave it deleted? NO — restore it,
+     then reject/clean nothing else; report leftover synthetic data.
+  8. Force-stop + relaunch → state persists. logcat 0 FATAL from
+     com.tracker, 0 "Maximum update depth".
+
+DEVICE SAFETY (absolute — owner's personal phone, real SMS inbox):
+- Before EVERY tap/dump: `adb shell dumpsys window | grep -E
+  'mCurrentFocus|mFocusedApp'` — both lines must contain com.tracker;
+  else press HOME, relaunch Tracker, never inspect the other app.
+- uiautomator dumps grep-filtered to the ONE element needed; never print a
+  full dump; `adb shell rm /sdcard/u.xml` after; /sdcard only inside
+  `adb shell`.
+- Never print/write real SMS bodies, senders, real merchant names or real
+  amounts. Counts and bank/type/last-4 labels only.
+- Never touch tracker.db / sqlite3 / run-as. No uninstall, no clear-data,
+  no screenshots. End: force-stop com.tracker.
+
+OUTPUT: ongoing/realtime-persistence/14-soft-delete-account.md (files,
+repository SQL, filtering map of every call site, sync drop rule, gate +
+device results). Leak-scan before finishing. Do not commit to git.
+REPLY ONLY: gates yes/no; files changed count; one line per device check;
+anything not verified and why.

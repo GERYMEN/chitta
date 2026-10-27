@@ -1,0 +1,140 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full first
+(decisions log = device-safety rules, all absolute), then
+ongoing/realtime-persistence/10-qa-bugfixes.md (previous phase). Project:
+/Users/mohammedsiraj/Downloads/projects/experiment/Tracker (React Native,
+Android, package com.tracker).
+
+The user found two UI problems on their phone (their own screenshots):
+
+PROBLEM 1 — screens render under the Android status bar.
+The Transactions tab title "Transactions" draws on top of the clock/status
+icons. Same bug Home had (fixed in Phase 6 by wrapping in SafeAreaView).
+Orchestrator audit of every `src/**/screens/*.tsx` (exact current state):
+  HAS SafeAreaView: HomeScreen (top), AddRecordScreen, TransactionDetailScreen,
+    EditTransactionScreen, AddAccountScreen, SmsSuggestionsScreen,
+    PermissionsScreen (all top+bottom)
+  MISSING any inset handling (no SafeAreaView, no useSafeAreaInsets):
+    src/features/transactions/screens/TransactionsScreen.tsx
+    src/features/accounts/screens/AccountsScreen.tsx
+    src/features/pending/screens/PendingScreen.tsx
+    src/features/onboarding/screens/OnboardingScreen.tsx
+User asked: "check every screen and fix". So:
+- Fix the 4 missing ones. Tab screens (Transactions, Accounts, Pending) use
+  `edges={['top']}` like HomeScreen (bottom tab bar handles bottom).
+  Onboarding is a full-screen stack screen → `edges={['top','bottom']}`
+  unless its design is intentionally full-bleed behind the status bar; even
+  then, no TEXT or tappable control may sit under the status bar or in the
+  bottom gesture zone.
+- Also re-verify the 7 that already have SafeAreaView actually render
+  correctly (header not clipped, bottom buttons clear of the gesture zone).
+  Any screen rendering content inside a Modal/BottomSheet counts too.
+- Follow HomeScreen.tsx's exact pattern (SafeAreaView from
+  react-native-safe-area-context wrapping the existing ScrollView/FlatList,
+  background color on the SafeAreaView so no white strip shows).
+
+PROBLEM 2 — native Android alert dialogs don't match the design system.
+`Alert.alert` renders the stock dark Android dialog ("Delete transaction?"
+with teal CANCEL/DELETE text buttons) — visually alien to the app.
+Replace EVERY `Alert.alert` call with a themed in-app dialog. Exact
+current call sites:
+  src/features/home/screens/HomeScreen.tsx:62, :67, :76
+     (SMS permission needed / SMS permission blocked + Open Settings /
+      Add an account first + Go to Accounts)
+  src/features/transactions/screens/TransactionDetailScreen.tsx:26
+     (Delete transaction? — destructive confirm)
+  src/features/accounts/screens/AddAccountScreen.tsx:41
+     (Account already exists)
+  src/features/pending/screens/PendingScreen.tsx:50
+     (Delete transaction? — destructive confirm)
+After this phase `grep -rn "Alert.alert" src` must return nothing outside
+tests.
+
+Design requirements for the dialog:
+- New shared component in `src/shared/ui/Dialog/` exported from
+  `src/shared/ui/index.ts`, alongside Button/Card/Chip/BottomSheet.
+- Built with RN `Modal` (transparent, fade) + scrim + a centered surface.
+  Do NOT add reanimated/gesture-handler/any new npm dependency (they were
+  deliberately removed this project — see STATE.md).
+- Use ONLY existing theme tokens from `src/theme`
+  (colors: surfaceContainerLowest/surface, onSurface, onSurfaceVariant,
+  error/errorContainer, primary, obsidian…; radii: lg/xl; spacing;
+  typography: headlineSm for title, bodyMd/bodyLg for message; shadows).
+  Match the look of existing Cards/BottomSheet — light surface, rounded,
+  same font family. No hard-coded hex colors.
+- Action buttons reuse the existing `Button` component and its variants
+  (`'primary' | 'brand' | 'ghost' | 'destructive'`): Cancel → ghost,
+  Delete → destructive, neutral confirm (OK / Open Settings / Go to
+  Accounts) → primary or brand. Buttons ≥48dp touch target.
+- Optional leading icon per dialog (e.g. trash for delete, alert/shield for
+  permission) via the existing `Icon` from `src/shared/icons`.
+- API: make migration easy — an imperative `showDialog({ title, message,
+  icon?, actions: [{ label, variant?, onPress? }] })` backed by a tiny
+  Zustand store + a single `<DialogHost />` mounted once at app root
+  (find where RootNavigator / providers are mounted, e.g. App.tsx or
+  src/app/*). Tapping any action closes the dialog then runs its onPress.
+  Android hardware back = dismiss (same as Cancel); tapping the scrim =
+  dismiss for non-destructive dialogs. If Zustand store selectors return
+  objects/arrays use `useShallow` (STATE.md explains the infinite-loop
+  crash this prevents).
+- Keep ToastAndroid toasts as they are (user asked for them in Phase 5);
+  this phase is about Alert dialogs only.
+
+TASKS:
+T1. Safe-area fixes for the 4 screens + re-check the other 7.
+T2. Dialog component + DialogHost + showDialog store.
+T3. Replace all 6 Alert.alert sites, preserving each one's exact behavior
+    (destructive delete still requires explicit confirm; Open Settings still
+    calls Linking.openSettings(); Go to Accounts still navigates).
+T4. Unit tests: dialog store (show → visible with actions; action press
+    closes + calls handler; dismiss closes without calling destructive
+    handler). Light, match existing test style.
+
+GATES:
+- npx tsc --noEmit -p tsconfig.json — clean
+- npx eslint src --ext .ts,.tsx — 0 errors
+- npx jest — all pass
+- cd android && ./gradlew assembleDebug — BUILD SUCCESSFUL
+  (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home;
+   export PATH=$JAVA_HOME/bin:$PATH;
+   export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools)
+- On device (install -r, NOT uninstall), every screen:
+  For each of Home, Transactions, Pending, Accounts, Transaction Detail,
+  Add Record, Edit Transaction, Add Account, Sms Suggestions (reach via
+  Sync SMS if suggestions exist; counts/labels only), Permissions and
+  Onboarding (these two only show for first launch — if not reachable
+  without uninstall, verify by code review and say so; do NOT uninstall):
+  filtered uiautomator dump of that screen's TOP-most text element →
+  its bounds top y must be below the status bar (get the status bar
+  height from `adb shell dumpsys window | grep -i -A2 statusbar` or
+  `dumpsys window windows | grep mInsets`; ~100–150px on this 1260×2800
+  device). Bottom-most tappable button's bottom y must be ≥150px above
+  2800. Record a table: screen | top y | bottom button y | PASS/FAIL.
+  Dialogs: trigger the Delete confirm (on a synthetic QA record you
+  create), the Account-already-exists dialog (add a duplicate synthetic
+  account), and if practical the SMS permission dialog. Confirm via
+  filtered dump the themed dialog's title text appears and that NO
+  `android:id/alertTitle` / `android:id/button1` (stock AlertDialog ids)
+  exist in the dump. Cancel keeps the record; Delete removes it.
+  logcat: 0 FATAL EXCEPTION, 0 "Maximum update depth".
+
+DEVICE SAFETY (absolute — the phone is the owner's personal phone):
+- Only com.tracker (+ expected system permission dialog). Check
+  topResumedActivity before every tap; if anything else is in front press
+  HOME and relaunch Tracker, never inspect the other app.
+- Every uiautomator dump grep-filtered to the one element needed; never
+  print a full dump. `adb shell rm /sdcard/u.xml` after. Never pass a
+  /sdcard path to a file-read tool — only inside `adb shell ...`.
+- Real SMS-derived data (merchant names, amounts, sender) NEVER printed or
+  written anywhere. Counts and bank/type/last-4 labels only. Use synthetic
+  data ("QA Test Bank 0003", "QA-Merchant-04").
+- Never touch tracker.db / sqlite3 / run-as. No uninstall, no clear-data,
+  no screenshots.
+- End: force-stop com.tracker.
+
+OUTPUT: ongoing/realtime-persistence/11-safearea-dialog.md — files changed,
+dialog design (tokens used), the per-screen PASS/FAIL table, gate results.
+Before finishing, grep your report for anything resembling real merchant
+names / phone numbers / SMS text; redact if found.
+
+Do not commit to git. REPLY ONLY: gates yes/no; files changed count; the
+per-screen table in compact form; any screen you could not verify and why.

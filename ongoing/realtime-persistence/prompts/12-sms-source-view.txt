@@ -1,0 +1,138 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full (decisions
+log = absolute device-safety rules), then 11-safearea-dialog.md (previous
+phase). Also read ongoing/sms-sync-v2/02-migrations.md (how numbered
+migrations work: src/data/db/migrations.ts, schema_migrations table,
+NUMBERED_MIGRATIONS list — versions 1 and 2 already exist).
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+USER REQUEST: in the Pending review sheet / Transaction Detail
+"Detection Transparency" card, add a SOURCE OF TRUTH: let the user see the
+ORIGINAL SMS that produced the transaction. User chose (via question):
+"Original SMS, read live" — tap "View original SMS" → app reads that exact
+message from the phone's SMS inbox by its SMS id and shows it. NOTHING is
+stored in the app database (the agreed rule "app never stores raw SMS
+bodies, only its own sanitizedPreview" must still hold). If the message is
+no longer in the inbox, show "Original message no longer in inbox".
+
+Exact current state (verified by orchestrator):
+- android/app/src/main/java/com/tracker/SmsReaderModule.kt has only
+  `readInbox(limit, promise)` querying content://sms/inbox
+  (_id, address, body, date), permission-checked.
+- src/native/android/sms/smsReader.ts wraps it; its doc comment says it is
+  the ONLY file allowed to touch raw address/body.
+- sourceReferenceHash format for SMS transactions = `sms-${smsId}-${dateMs}`
+  (e.g. "sms-13674-1792935297758"). Parse smsId + dateMs from it — no
+  schema change needed. Manual transactions have sourceReferenceHash null
+  and sourceType 'manual' → no "View original SMS" button for them.
+- src/features/transactions/components/TransactionDetailContent.tsx renders
+  Detection Transparency (lines ~170-195): "Detected From", "Confidence",
+  "Parser · Ref ID", the sanitizedPreview box.
+
+TASKS:
+
+T1. Native: add `@ReactMethod fun readById(id: String, promise: Promise)` to
+    SmsReaderModule.kt. Same READ_SMS permission check (reject
+    E_SMS_PERMISSION_DENIED). Query content://sms (all boxes, not only
+    inbox) with selection "_id = ?" and selectionArgs arrayOf(id),
+    projection _id, address, body, date. Resolve a map {id, address, body,
+    date} or resolve null if not found. Close cursor with `use {}`.
+    Parameterized selection only — never string-concatenate the id.
+
+T2. JS: add `readSmsById(id: string): Promise<SmsMessage | null>` in
+    smsReader.ts (keep it the only raw-SMS file). Add a small pure helper
+    `parseSmsReference(hash: string | null): { smsId: string; dateMs: number } | null`
+    (in src/features/sms-sync/, unit-tested: valid hash, null, manual/garbage,
+    non-numeric parts → null).
+    Optionally verify the fetched message's `date` equals dateMs; if it
+    doesn't match (SMS ids can be reused after deletion), treat as "no
+    longer in inbox" — do NOT show a different message.
+
+T3. UI in TransactionDetailContent's Detection Transparency card, only when
+    sourceType === 'sms' and parseSmsReference succeeds:
+    - A "View original SMS" text button (style like the existing "Show
+      Advanced Cryptographic & Audit Logs" green link).
+    - On tap: fetch via readSmsById, show a loading state, then render the
+      full body inside a box styled like the existing "SANITIZED SOURCE
+      MESSAGE" box (existing theme tokens only), labelled e.g.
+      "ORIGINAL SMS · read live from your inbox, not stored", plus sender
+      (address) and received date/time formatted with existing date utils.
+      Toggle to "Hide original SMS".
+    - Keep the fetched text ONLY in component state (useState). Never
+      write it to the store, DB, logs, or console. Clear it on unmount /
+      hide.
+    - States: permission denied → "Allow SMS access to view the original
+      message" (reuse permission helpers; do not auto-request in a loop);
+      not found / date mismatch → "Original message no longer in inbox";
+      native error → "Couldn't read the message".
+    Works in both the Pending review BottomSheet and the full Transaction
+    Detail screen (same component).
+
+T4. CONFIDENCE BUG (also visible in the user's screenshot: "0.9% Uncertain").
+    Root cause, verified: src/domain/transactions/transaction.rules.ts uses
+    a 0–100 scale (CONFIDENCE_HIGH = 90, CONFIDENCE_NEEDS_REVIEW = 70;
+    fixtures use 98/96/92), but src/features/sms-sync/smsParser.ts emits
+    0–1 scores (0.9 / 0.6 / 0.4). So every SMS transaction is tier
+    "uncertain", canFastApprove is never true, and the UI prints "0.9%".
+    Fix:
+    a) smsParser.ts emits 0–100 integers (90 / 60 / 40); update its tests.
+    b) New numbered migration (version 3) in src/data/db/migrations.ts:
+       `UPDATE transactions SET confidence_score = confidence_score * 100
+        WHERE source_type = 'sms' AND confidence_score IS NOT NULL
+        AND confidence_score <= 1`
+       (idempotent by the WHERE + schema_migrations guard). Extend the
+       migrations test: runs once, second runMigrations doesn't reissue it.
+    c) TransactionDetailContent: display `${Math.round(score)}%` and the
+       tier label ("High Match" / "Needs Review" / "Uncertain"). Check the
+       other confidence display sites (line ~120 chip "% match", Pending
+       cards, Home fast-approve list) render correctly with 0–100.
+
+GATES:
+- npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+  0 errors; npx jest all pass; cd android && ./gradlew assembleDebug
+  BUILD SUCCESSFUL (Kotlin changed — real build).
+  (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home;
+   export PATH=$JAVA_HOME/bin:$PATH;
+   export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools)
+- On device (adb install -r, NOT uninstall; Metro on 8081 + adb reverse):
+  1. Open Pending, open one SMS-sourced pending item's review sheet.
+     Confirm via filtered dump: Confidence now shows a 0–100 percent with
+     a tier label (report ONLY the number + tier, e.g. "90% High Match").
+  2. Tap "View original SMS". Confirm via filtered dump that the
+     "ORIGINAL SMS" label element appears and a body text node exists
+     below it — report ONLY that it exists and its character COUNT. NEVER
+     print, grep-out, or write the body/sender text itself.
+  3. Tap Hide → box disappears.
+  4. Open a manual (non-SMS) transaction's detail (create synthetic
+     "QA-Merchant-05" via Add Record if needed) → confirm NO "View original
+     SMS" button.
+  5. Force-stop + relaunch → migration 3 doesn't crash; confidence still
+     0–100 (not 9000).
+  6. logcat: 0 FATAL EXCEPTION, 0 "Maximum update depth". Also confirm
+     logcat contains no SMS body text — grep logcat for the "ORIGINAL SMS"
+     flow's component name / ReactNativeJS console lines and confirm
+     nothing message-like is logged (report count of ReactNativeJS log
+     lines only).
+
+DEVICE SAFETY (absolute — owner's personal phone, real SMS inbox):
+- Only com.tracker (+ expected system dialog). Check topResumedActivity
+  before every tap; if anything else is in front, press HOME and relaunch
+  Tracker, never inspect the other app.
+- Every uiautomator dump grep-filtered to the ONE element needed
+  (e.g. `grep -o 'text="View original SMS"[^>]*bounds="[^"]*"'`); never
+  print a full dump; `adb shell rm /sdcard/u.xml` after. This phase
+  DISPLAYS real SMS text on screen by design — be extra careful: to prove
+  the body rendered, use a grep that outputs only bounds or a length
+  (e.g. pipe through `awk '{print length}'`), never the text.
+- Never pass a /sdcard path to a file-read tool; only via `adb shell`.
+- Never touch tracker.db / sqlite3 / run-as. No uninstall, no clear-data,
+  no screenshots.
+- End: force-stop com.tracker.
+
+OUTPUT: ongoing/realtime-persistence/12-sms-source-view.md (files changed,
+native method, UI states, migration 3, gate results, device results —
+counts/labels only). Before finishing grep your report for anything
+resembling real merchant names, phone numbers, sender IDs, or SMS text;
+redact and say so.
+
+Do not commit to git. REPLY ONLY: gates yes/no; files changed count; one
+line per device check 1–6.

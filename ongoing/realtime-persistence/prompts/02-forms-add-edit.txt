@@ -1,0 +1,222 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full FIRST, then
+read ongoing/realtime-persistence/01-persistence-foundation.md (Phase 1's
+report — it created the real persistence layer this phase builds on). Do not
+re-derive or contradict either file.
+
+ADDITIONAL GROUND FACTS specific to this phase (verified by the orchestrator
+after Phase 1 landed — exact current file contents, not guesses):
+
+- `src/features/transactions/state/transactionsStore.ts` now exposes (exact
+  shape, already implemented, do not redesign):
+  ```ts
+  interface TransactionsState {
+    transactions: Transaction[];
+    accounts: Account[];
+    categories: Category[];
+    isHydrated: boolean;
+    hydrate: () => Promise<void>;
+    approve: (id: string) => Promise<void>;
+    reject: (id: string) => Promise<void>;
+    refresh: () => Promise<void>;
+    addTransaction: (input: CreateTransactionInput) => Promise<void>;
+    updateTransaction: (id: string, patch: TransactionPatch) => Promise<void>;
+    addAccount: (input: CreateAccountInput) => Promise<void>;
+  }
+  ```
+  `CreateTransactionInput` = `Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>`
+  (so you must supply every other `Transaction` field — see
+  `src/domain/transactions/transaction.types.ts`). `TransactionPatch` =
+  `Partial<Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>>`. Both types
+  are exported from `src/data/repositories/transaction.repository.ts`.
+  `CreateAccountInput` is exported from
+  `src/data/repositories/account.repository.ts` (not needed this phase —
+  that's Phase 3).
+- `selectPending`/`selectApproved` and the `useShallow` wrapping at call sites
+  in `HomeScreen.tsx`, `PendingScreen.tsx`, `TransactionsScreen.tsx`,
+  `MainTabs.tsx` are load-bearing — removing `useShallow` from any of them
+  caused a real infinite-render-loop crash earlier this session (confirmed:
+  "Maximum update depth exceeded"). If you add any NEW `useTransactionsStore`
+  selector anywhere in this phase that returns a derived array/object (via
+  `.filter()`, `.map()`, `.find()` returning a new object each time — `.find()`
+  returning an existing array element is fine, `.filter()`/`.map()` are NOT),
+  wrap it in `useShallow` too. When in doubt, wrap it — there is no downside
+  to wrapping a selector that returns a primitive or a stable reference.
+- The exact dead-button wiring spots to fix in this phase:
+  - `src/features/home/screens/HomeScreen.tsx` lines ~56-57:
+    `onAddRecord={() => {}}` and `onSyncSms={() => {}}` passed to
+    `<BalanceCard>`. This phase fixes `onAddRecord` only — leave `onSyncSms`
+    as a no-op, that's Phase 4.
+  - `src/features/pending/screens/PendingScreen.tsx` line ~104: `onEdit={() =>
+    {}}` passed to `<TransactionDetailContent>` inside the bottom-sheet
+    Review surface.
+  - `src/features/transactions/screens/TransactionDetailScreen.tsx` line ~49:
+    same `onEdit={() => {}}` pattern, for the full-screen Transaction Detail
+    view.
+- Navigation: `src/app/navigation/routes.ts` currently has `RootStackParamList`
+  with `Tabs`, `TransactionDetail: { transactionId: string }`, `Onboarding`,
+  `Permissions`. `RootNavigator.tsx` registers each as a `Stack.Screen`. You
+  will add two new routes here (see T3 below).
+- `react-hook-form` and `zod` are already installed. `@hookform/resolvers` (the
+  glue between them) is NOT installed — this phase needs it, install it
+  (`npm install @hookform/resolvers`) — it's pure JS, no native code, no
+  Android rebuild risk from installing it.
+- `@react-native-community/datetimepicker` is already installed and linked
+  (was in the project from the very first scaffold) — use it for the
+  occurred-at date/time field rather than building a custom picker.
+- Reuse existing shared UI primitives (`src/shared/ui/*`: `Button`, `Card`,
+  `Chip`) and theme tokens (`src/theme`) for the new form screens — do not
+  invent new ad-hoc styling patterns, match the existing screens' look.
+- `src/domain/transactions/transaction.rules.ts` already has
+  `confidenceTier`/`canFastApprove`/`affectsBalance`/`canTransition` — a
+  manually-entered transaction has `confidenceScore: null`, `sourceType:
+  'manual'`, `parserVersion: null`, `sourceReferenceHash: null`,
+  `sanitizedPreview: null`. Per `docs/PROJECT.md` §23 ("Manual Transaction
+  Strategy"), manual entry still goes through the same
+  Detect→Review→Approve→Record flow — it must be created with `status:
+  'pending'`, never `'approved'` directly. The user approves it afterward
+  through the existing Pending/Review UI (already built, don't duplicate
+  approval logic in the new form).
+- Categories are typed `'income' | 'expense' | 'both'`
+  (`src/domain/categories/category.types.ts`). When the form's transaction
+  type is "expense", the category picker should offer categories where
+  `type === 'expense' || type === 'both'`; for "income",
+  `type === 'income' || type === 'both'`.
+- If `store.accounts` is empty, a transaction cannot be created (every
+  transaction needs a valid `accountId`). Handle this honestly in the Add
+  Record form: if there are zero accounts, show a message explaining an
+  account is needed first with a way to get there (e.g. navigate to
+  Accounts tab) instead of presenting a broken/unusable form.
+
+TASKS:
+
+T1. Zod schema + shared form — create
+    `src/features/transactions/components/TransactionForm.tsx` (or a
+    `TransactionFormFields` + a schema file, your call on exact file split,
+    but keep it in `src/features/transactions/`) used by BOTH the Add Record
+    and Edit Transaction screens:
+    - Fields: `type` (income/expense toggle), `amount` (string input,
+      user types rupees e.g. "450.50", you convert to integer paise on
+      submit — NEVER store/compute with floats, convert via something like
+      `Math.round(parseFloat(value) * 100)` only at the form-submit boundary,
+      and validate the input is a valid positive number before that
+      conversion), `merchantName` (text), `categoryId` (picker, filtered by
+      type per the ground facts above), `accountId` (picker from
+      `store.accounts`), `paymentMethod` (picker: bank/upi/cash/card/other),
+      `occurredAt` (date/time, default now, via
+      `@react-native-community/datetimepicker`), `note` (optional text).
+    - Validate with `zod` + `react-hook-form` + `@hookform/resolvers/zod`.
+      Amount must be > 0. Merchant name required. Category and account
+      required (can't submit with a placeholder/empty selection).
+    - This component takes an `onSubmit(values)` callback and an optional
+      `initialValues` (for edit mode) — keep it a dumb/reusable form, let the
+      two screens (T2) own what happens on submit.
+
+T2. Two new screens:
+    - `src/features/transactions/screens/AddRecordScreen.tsx`: renders
+      `TransactionForm` with no initial values, type defaults to 'expense'.
+      On submit, build a full `CreateTransactionInput` (status: 'pending',
+      sourceType: 'manual', detectedAt: now, approvedAt: null,
+      confidenceScore: null, parserVersion: null, sourceReferenceHash: null,
+      sanitizedPreview: null, plus the form's values) and call
+      `useTransactionsStore.getState().addTransaction(input)` (or via the
+      hook, your call), then navigate to the Pending tab
+      (`navigation.navigate('Tabs', { screen: 'Pending' })` or equivalent —
+      check how nested tab navigation is addressed elsewhere in this
+      codebase, e.g. `HomeScreen.tsx`'s composite navigation typing, and
+      match that pattern) so the user sees their new entry awaiting approval,
+      consistent with §23's manual-entry-is-still-reviewed principle. If
+      `store.accounts.length === 0`, show the "add an account first" message
+      instead of the form (see ground facts).
+    - `src/features/transactions/screens/EditTransactionScreen.tsx`: reads
+      `transactionId` from route params (add this to `RootStackParamList`,
+      see T3), looks up the transaction from the store, renders
+      `TransactionForm` pre-filled with its current values. On submit, calls
+      `updateTransaction(id, patch)` with only the changed fields (or the
+      full patch, your call — simplicity over micro-optimization here), then
+      `navigation.goBack()`.
+
+T3. Navigation wiring:
+    - Add to `RootStackParamList` in `routes.ts`: `AddRecord: undefined` and
+      `EditTransaction: { transactionId: string }`.
+    - Register both as `Stack.Screen` in `RootNavigator.tsx`.
+    - `HomeScreen.tsx`: wire `onAddRecord` to navigate to `'AddRecord'`.
+    - `PendingScreen.tsx`: wire the `onEdit` passed to
+      `TransactionDetailContent` to navigate to `'EditTransaction'` with the
+      transaction's id (close the review bottom sheet first if that's
+      cleaner UX, your call, but don't leave the sheet open and unusable
+      underneath the pushed screen).
+    - `TransactionDetailScreen.tsx`: wire its `onEdit` the same way.
+
+T4. Give both new screens a minimal header (back button + title) consistent
+    with how `TransactionDetailScreen.tsx` already does its own custom header
+    (no native-stack header is used anywhere else in this app — match that
+    existing pattern, don't suddenly introduce native-stack headers for just
+    these two screens).
+
+GATES (all must pass before you report done):
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests still pass. Add a focused unit test or two
+  for the zod schema (amount validation rejecting 0/negative/non-numeric,
+  required fields) under an appropriate `__tests__` folder — light, not
+  exhaustive.
+- `cd android && ./gradlew assembleDebug` (JAVA_HOME exported per STATE.md) —
+  BUILD SUCCESSFUL. (This should be a fast incremental build — you only added
+  a pure-JS npm package and TS/TSX files, no native code changed.)
+- On the connected device (force-stop, install, launch fresh per the pattern
+  used in Phase 1 — see `01-persistence-foundation.md` for the exact adb
+  command sequence that worked): perform a REAL end-to-end manual test, not
+  just a static check:
+  1. Navigate to Home, tap "Add Record" (find its exact bounds via
+     `uiautomator dump`, don't guess coordinates).
+  2. Fill the form with an account — if zero accounts exist (expected after
+     Phase 1), you will hit the "add an account first" message. That's
+     CORRECT behavior, not a bug — to actually test the full form, you may
+     need to insert one test account directly via the `accountRepository`
+     from a throwaway script/REPL-style check, OR temporarily call
+     `useTransactionsStore.getState().addAccount(...)` through some
+     reachable path — do NOT wire the real Add Account UI (that's Phase 3),
+     but you need SOME account to exist to prove the transaction form truly
+     works end-to-end. Document exactly how you created that test account in
+     your output log, and confirm it doesn't leave the app in a broken state
+     for Phase 3 (an extra test account sitting in the real on-device
+     database is fine and expected — Phase 3 will add the real UI to manage
+     accounts; just don't delete the user's data layer or leave the DB
+     corrupted).
+  3. Submit the Add Record form, confirm (via `uiautomator dump`, not
+     screenshot) that the new transaction now appears on the Pending tab
+     with status reflecting "pending", correct amount/merchant.
+  4. Approve it via the existing Approve button (already working from before
+     this session's earlier fixes) and confirm it now appears in Transactions
+     /Home as approved with the correct amount affecting the balance.
+  5. Test Edit: open an existing transaction (the one you just created and
+     approved, or the fresh pending one before approving — your call which
+     is more convincing), tap Edit, change one field (e.g. the merchant name
+     or amount), submit, and confirm via `uiautomator dump` that the change
+     persisted (re-open the detail view or check the list).
+  - Throughout: `adb logcat -d` must show zero `FATAL EXCEPTION` and zero
+    `Maximum update depth exceeded`.
+  - Respect STATE.md's privacy rules: no screenshots unless you've confirmed
+    `com.tracker` is genuinely focused, and even then prefer text-based
+    `uiautomator dump` verification over pixels wherever sufficient.
+
+SCOPE GUARDS:
+- Do not wire `onSyncSms` (Phase 4) or `onAddAccount`/`onAddNewMoneySource`
+  (Phase 3) — leave those as `() => {}` still.
+- Do not modify the database schema (no new columns/tables needed for this
+  phase — the `transactions` table already has every field a manual entry
+  needs).
+- Do not modify `AndroidManifest.xml`.
+- Don't touch `src/features/onboarding/` or `TourIllustration.tsx`.
+- The ONLY new npm dependency allowed this phase is `@hookform/resolvers`.
+
+OUTPUT: write a detailed chronological log (every file created/changed, the
+exact test-account workaround you used for on-device verification and
+confirmation it's harmless for Phase 3, every gate's actual output, and the
+full step-by-step on-device manual test results) to:
+  ongoing/realtime-persistence/02-forms-add-edit.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified count>,
+<one-line verdict on whether Add Record → Pending → Approve → shows in
+Transactions, and Edit, all genuinely work end-to-end on the real device>. Do
+not paste file contents, logcat, or uiautomator XML into your reply.

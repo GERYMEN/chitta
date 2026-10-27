@@ -1,0 +1,176 @@
+<!DOCTYPE html><html class="h-full" lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_blank" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "on-tertiary-fixed-variant": "#663e00", "surface-container-low": "#ecf5fe", "secondary-container": "#e1e2e7", "on-primary-fixed": "#002202", "outline-variant": "#bbcbb3", "inverse-on-surface": "#e9f2fb", "surface-variant": "#dbe4ed", "surface-dim": "#d2dbe4", "error": "#ba1a1a", "on-secondary": "#ffffff", "on-secondary-container": "#626468", "on-secondary-fixed-variant": "#44474b", "tertiary": "#865300", "tertiary-fixed": "#ffddb9", "inverse-surface": "#293138", "on-primary-fixed-variant": "#00530d", "on-tertiary-fixed": "#2b1700", "error-container": "#ffdad6", "surface-container-highest": "#dbe4ed", "surface-tint": "#006e14", "on-surface-variant": "#3c4b38", "on-background": "#141d23", "tertiary-container": "#fea51f", "primary": "#006e14", "surface-container": "#e6eff8", "primary-container": "#00d632", "primary-fixed": "#73ff6f", "secondary-fixed-dim": "#c5c6cb", "on-primary": "#ffffff", "on-secondary-fixed": "#191c1f", "secondary": "#5c5f62", "on-tertiary-container": "#694000", "secondary-fixed": "#e1e2e7", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", "on-surface": "#141d23", "tertiary-fixed-dim": "#ffb961", "surface": "#f6faff", "background": "#f6faff", "primary-fixed-dim": "#2ae540", "on-primary-container": "#00560e", "on-error-container": "#93000a", "outline": "#6c7b67", "surface-container-high": "#e0e9f2", "on-error": "#ffffff", "inverse-primary": "#2ae540", "surface-bright": "#f6faff" }, borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, spacing: { "space-sm": "0.5rem", "margin-mobile": "1rem", "space-xl": "2rem", "gutter": "1rem", "space-xs": "0.25rem", "space-md": "1rem", "space-lg": "1.5rem", "gutter-mobile": "0.75rem", "margin": "1.5rem" }, fontFamily: { "body-lg": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "display-hero": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "display-hero-mobile": ["Plus Jakarta Sans"] }, fontSize: { "body-lg": ["16px", { lineHeight: "24px", fontWeight: "500" }], "headline-md": ["22px", { lineHeight: "28px", fontWeight: "700" }], "label-md": ["12px", { lineHeight: "16px", fontWeight: "600" }], "display-hero": ["56px", { lineHeight: "64px", fontWeight: "800" }], "headline-lg-mobile": ["26px", { lineHeight: "34px", fontWeight: "700" }], "label-sm": ["10px", { lineHeight: "14px", fontWeight: "700" }], "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }], "label-lg": ["14px", { lineHeight: "18px", fontWeight: "700" }], "headline-lg": ["32px", { lineHeight: "40px", fontWeight: "700" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "display-hero-mobile": ["44px", { lineHeight: "52px", fontWeight: "800" }] } } } }</script><style>@layer base{html,body{width:100%;min-height:100%;margin:0;padding:0;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-body-md text-on-surface flex flex-col min-h-full"><main class="flex flex-col flex-1 relative w-full bg-surface pt-safe pb-safe"><div class="flex flex-col w-full pb-safe">
+<div class="flex items-center justify-between px-space-md py-space-sm w-full">
+<div class="flex items-center space-x-2">
+<div class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center shadow-sm relative">
+<span class="material-symbols-outlined text-on-primary-container text-[20px]" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-primary rounded-full animate-ping"></span>
+<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-primary rounded-full"></span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center space-x-1.5">
+<span class="font-headline-sm text-headline-sm text-inverse-surface tracking-tight">Tracker</span>
+<span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.5 rounded-full uppercase tracking-wider">Pulse</span>
+</div>
+</div>
+</div>
+<button class="font-label-md text-label-md text-secondary hover:text-on-background px-3 py-1.5 rounded-full transition-colors active:scale-95" id="skip-btn">
+      Skip Tour
+    </button>
+</div>
+<div class="flex items-center justify-center space-x-1.5 py-space-xs my-space-xs">
+<div class="w-7 h-1.5 rounded-full bg-primary-container transition-all duration-300"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-secondary-container"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-secondary-container"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-secondary-container"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-secondary-container"></div>
+</div>
+<div class="flex flex-col px-space-md mt-space-xs">
+<div class="relative w-full bg-surface-container-low rounded-lg p-space-md shadow-sm overflow-hidden flex flex-col items-center">
+<div class="absolute -top-12 -left-12 w-36 h-36 bg-primary-container/15 rounded-full blur-2xl pointer-events-none"></div>
+<div class="absolute -bottom-10 -right-10 w-36 h-36 bg-tertiary-container/10 rounded-full blur-2xl pointer-events-none"></div>
+<div class="w-full flex items-center justify-between mb-space-sm">
+<div class="flex items-center space-x-1.5">
+<span class="material-symbols-outlined text-primary text-[16px]">bolt</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Continuous Flow</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container-highest text-inverse-surface px-2 py-0.5 rounded-full font-bold">Step 1 of 4</span>
+</div>
+<div class="w-full flex flex-col space-y-2 relative">
+<div class="bg-surface-container-lowest rounded-DEFAULT p-space-sm shadow-sm flex items-center justify-between">
+<div class="flex items-center space-x-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[18px]">notifications_active</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center space-x-1">
+<span class="font-label-sm text-label-sm text-secondary uppercase">UPI SMS</span>
+<span class="text-[10px] text-secondary">• Just now</span>
+</div>
+<span class="font-label-md text-label-md text-inverse-surface truncate">Swiggy ₹450.00 debited</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container text-secondary px-2 py-0.5 rounded-full shrink-0">Unread</span>
+</div>
+<div class="flex justify-center -my-1">
+<div class="w-5 h-5 rounded-full bg-surface-container-highest flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[13px]">arrow_downward</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-DEFAULT p-space-sm shadow-sm flex items-center justify-between">
+<div class="flex items-center space-x-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-tertiary-container text-[18px]">radar</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-tertiary uppercase">Smart Engine</span>
+<span class="font-label-md text-label-md text-inverse-surface truncate">Detected: Food &amp; Dining</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed-variant px-2 py-0.5 rounded-full shrink-0 font-bold">99% Match</span>
+</div>
+<div class="flex justify-center -my-1">
+<div class="w-5 h-5 rounded-full bg-surface-container-highest flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[13px]">arrow_downward</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-DEFAULT p-space-sm shadow-md ring-0 relative flex flex-col space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wide">Awaiting Decision</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Detected ≠ Recorded</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-low p-2 rounded-DEFAULT">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-inverse-surface font-bold">Swiggy Dineout</span>
+<span class="font-label-sm text-label-sm text-secondary">₹450 from HDFC **1042</span>
+</div>
+<button class="bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary transition-all px-3 py-1.5 rounded-full font-label-md text-label-md font-bold flex items-center space-x-1 shadow-sm active:scale-95" id="demo-approve-btn">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span id="demo-btn-text">Approve</span>
+</button>
+</div>
+</div>
+<div class="flex justify-center -my-1">
+<div class="w-5 h-5 rounded-full bg-surface-container-highest flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[13px]">arrow_downward</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-DEFAULT p-space-sm shadow-sm flex items-center justify-between">
+<div class="flex items-center space-x-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary uppercase">Ledger Record</span>
+<span class="font-label-md text-label-md text-inverse-surface truncate">Added to October Budget</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-error font-bold shrink-0">-₹450.00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col px-space-md pt-space-md pb-space-xs text-center">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-inverse-surface tracking-tight">
+      Your money, <span class="text-primary">automatically</span> tracked.
+    </h1>
+<p class="font-body-md text-body-md text-secondary mt-space-xs max-w-xs mx-auto leading-relaxed">
+      Tracker catches your income and expenses from SMS &amp; UPI notifications. You stay in control by approving every single entry before it's saved.
+    </p>
+</div>
+<div class="px-space-md my-space-xs">
+<div class="bg-surface-container rounded-DEFAULT px-space-md py-2.5 flex items-center space-x-2.5 shadow-xs">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0" style="font-variation-settings: 'FILL' 1;">security</span>
+<p class="font-label-sm text-label-sm text-inverse-surface leading-tight">
+<span class="font-bold">100% On-Device</span> · Zero Bank Credentials · Explicit Tap Always Required
+      </p>
+</div>
+</div>
+<div class="flex flex-col px-space-md pt-space-xs pb-space-sm space-y-2 mt-auto">
+<button class="w-full h-14 bg-primary-container text-on-primary-container rounded-full font-label-lg text-label-lg flex items-center justify-center space-x-2 shadow-md hover:opacity-95 active:scale-[0.98] transition-all" id="get-started-btn">
+<span>Get Started</span>
+<span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+<button class="w-full py-2.5 text-center font-label-md text-label-md text-secondary hover:text-on-background transition-colors" id="tour-detail-btn">
+      Take 30-sec Interactive Tour
+    </button>
+</div>
+</div>
+<script>
+  (function () {
+    const demoBtn = document.getElementById('demo-approve-btn');
+    const demoText = document.getElementById('demo-btn-text');
+    let approved = false;
+
+    if (demoBtn && demoText) {
+      demoBtn.addEventListener('click', function () {
+        approved = !approved;
+        if (approved) {
+          demoText.textContent = 'Approved!';
+          demoBtn.classList.remove('bg-primary-container', 'text-on-primary-container');
+          demoBtn.classList.add('bg-inverse-surface', 'text-on-primary');
+        } else {
+          demoText.textContent = 'Approve';
+          demoBtn.classList.add('bg-primary-container', 'text-on-primary-container');
+          demoBtn.classList.remove('bg-inverse-surface', 'text-on-primary');
+        }
+      });
+    }
+
+    const startBtn = document.getElementById('get-started-btn');
+    if (startBtn) {
+      startBtn.addEventListener('click', function () {
+        startBtn.classList.add('scale-95');
+        setTimeout(() => startBtn.classList.remove('scale-95'), 150);
+      });
+    }
+  })();
+</script></main></body></html>

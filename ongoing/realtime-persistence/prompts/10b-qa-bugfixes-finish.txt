@@ -1,0 +1,115 @@
+CONTEXT: this continues an interrupted Phase 10 run. The previous run died
+mid on-device verification due to an API/billing error on the executor's
+own side (not a code or device problem) — NOT a crash, NOT a sandbox
+rejection, just the run ending abruptly. Before doing anything else, read
+ongoing/realtime-persistence/STATE.md in full, then
+ongoing/realtime-persistence/09-qa-test-report.md and
+ongoing/realtime-persistence/prompts/10-qa-bugfixes.txt (the original
+phase spec — read it for full context on all 7 fixes' intent).
+
+GOOD NEWS, VERIFIED BY THE ORCHESTRATOR: all 7 code fixes (T1-T7) appear to
+already be implemented correctly. Do NOT redo the implementation work. Your
+job this run is ONLY to: (1) review each fix for correctness against the
+original spec, (2) run the full gate suite (never confirmed last run), (3)
+do complete on-device verification of all 7 fixes from scratch (the device
+may be in a slightly altered state from the interrupted run — e.g.
+READ_SMS may currently be revoked from a mid-test `pm revoke` call that
+never got reset), (4) write the report.
+
+Exact current state of each fix (verified present by the orchestrator via
+direct file inspection — confirm these yourself too, don't just trust this
+summary blindly, but you should NOT need to write new implementation code
+unless you find a genuine bug):
+
+- T1: `android/app/src/main/AndroidManifest.xml` line 18 now includes
+  `fontScale|density|locale` in `android:configChanges`.
+- T2: `transactionsStore.ts` has `deleteTransaction: async id => {...}`
+  (line 121) calling the repository delete + refresh. Both
+  `TransactionDetailScreen.tsx` and `PendingScreen.tsx` call
+  `deleteTransaction` via the store. Confirm a confirmation step exists
+  before the delete actually fires (check `TransactionDetailContent`
+  and/or the screens for an `Alert.alert` confirm step — the original spec
+  required one, verify it's really there, not just the delete wiring
+  itself).
+- T3: `smsPermission.ts`'s `requestSmsPermission` now returns
+  `'granted' | 'denied' | 'never_ask_again'` (a new
+  `SmsPermissionRequestResult` type). Check whether `syncSms.ts` and
+  `HomeScreen.tsx` were ALSO updated to thread this through (a new
+  `SmsSyncErrorCode` for the permanently-denied case, and a
+  `Linking.openSettings()` button in `HomeScreen.tsx`'s catch handler) —
+  the orchestrator only confirmed `smsPermission.ts` itself, not
+  necessarily the full chain. If `syncSms.ts`/`HomeScreen.tsx` were NOT
+  updated to use the new return type, finish that wiring now (small,
+  mechanical, matches the original Phase 10 spec's T3 exactly).
+- T4: NOT independently confirmed by the orchestrator — check
+  `TransactionDetailContent`'s Edit/Delete action row yourself for the
+  48dp-minimum-height and bottom-safe-margin fix; if it's missing or
+  incomplete, implement it now per the original spec.
+- T5: `currency.ts` now does `showPaise ? Math.floor(...) : Math.round(...)`
+  — confirm the existing `currency.test.ts` assertions were updated to
+  match (the orchestrator did not confirm this independently — check and
+  fix if a stale assertion still expects the old floor behavior for the
+  non-showPaise case).
+- T6: `AddAccountScreen.tsx` has a `findDuplicateAccount` check with an
+  "Account already exists" alert before submit. Confirm
+  `findDuplicateAccount` itself is implemented somewhere (likely
+  `accountForm.schema.ts` per its comment at line 48) and correctly
+  normalizes `(type, trimmed+lowercased name, lastFour)` — read it, don't
+  assume.
+- T7: `smsParser.ts` now imports and calls `normalizeAccountKey`, with a
+  "Human-facing display name" mapping near line 104. Confirm the dead old
+  functions (`extractBankName`, `BANK_NAME_WORD_PATTERN`,
+  `BANK_NAME_SIGNATURE_PATTERN`, `extractAccountKind`,
+  `CREDIT_CARD_PATTERN`, `BANK_ACCOUNT_PATTERN`, `extractLastFour`,
+  `LAST_FOUR_PATTERN`) were actually REMOVED, not left as unreferenced dead
+  code — check and clean up if they're still there. Confirm
+  `smsParser.test.ts` was updated with the previously-broken SBI/"State
+  Bank of India" cases now passing.
+
+DEVICE STATE NOTE: the interrupted run's last few commands revoked
+`READ_SMS` via `adb shell pm revoke` as part of testing T3 and relaunched
+Tracker — the permission may currently show `granted=false` on the device.
+This is expected residual state from the interrupted test, not a new bug;
+your own verification will naturally re-exercise the permission flow.
+
+APPLY EVERY PERMANENT RULE IN STATE.md'S DECISIONS LOG, NO EXCEPTIONS —
+app isolation (only `com.tracker` + expected system dialogs), no raw
+`tracker.db` access ever, filtered `uiautomator` dumps only, count-only
+for real SMS content (bank name/type/last-four is the one safe category),
+never pass a `/sdcard/...` path to a native file-read/write tool (always
+wrap in `adb shell`).
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all tests pass.
+- `cd android && ./gradlew assembleDebug` — BUILD SUCCESSFUL.
+- On-device, force-stop/install/launch fresh, verify ALL 7 fixes from
+  scratch exactly per the original phase's on-device verification steps
+  (re-read `prompts/10-qa-bugfixes.txt`'s "GATES" section's on-device list,
+  items 1-9) — do the full list, don't assume any of it already happened
+  since the device state is uncertain after the interruption. Pay
+  particular attention to:
+  1. T1's font-scale crash repro — must NOT crash. Restore font_scale to
+     1.0 when done.
+  3. T3 — you'll likely need to re-grant READ_SMS via the real permission
+     flow first (since it's currently revoked), confirm normal sync still
+     works, THEN test both a regular denial and a "don't ask again" denial
+     path and confirm each shows the right message/action. Figure out the
+     right way to reset the "don't ask again" flag between test attempts
+     if needed (e.g. `adb shell pm reset-permissions com.tracker` or a
+     fresh install) and document what worked.
+  9. `adb logcat -d` — zero `FATAL EXCEPTION` / `Maximum update depth
+     exceeded` across the whole session.
+  Return the device to a clean state when done (force-stop, font_scale
+  back to 1.0).
+
+OUTPUT: write the full report (not a diff/addendum — this file doesn't
+exist yet) to:
+  ongoing/realtime-persistence/10-qa-bugfixes.md
+covering: what was already correctly implemented, anything you had to
+finish/fix, every gate's result, and full on-device verification per fix.
+
+REPLY ONLY with: <all gates passed: yes/no>, <anything fixed/finished this
+run beyond what was already there: yes/no + one line each if yes>, <one
+line per fix T1-T7: confirmed fixed on-device / still broken + why>.

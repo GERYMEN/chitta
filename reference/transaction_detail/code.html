@@ -1,0 +1,400 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary": "#ffffff", "on-tertiary-container": "#694000", "tertiary-fixed": "#ffddb9", "inverse-primary": "#2ae540", "on-surface-variant": "#3c4b38", "surface-tint": "#006e14", "on-primary-container": "#00560e", "surface-variant": "#dbe4ed", "primary": "#006e14", "on-tertiary": "#ffffff", "surface-container-high": "#e0e9f2", "error-container": "#ffdad6", "surface-dim": "#d2dbe4", "surface-container-highest": "#dbe4ed", "on-background": "#141d23", "tertiary-fixed-dim": "#ffb961", "tertiary-container": "#fea51f", "on-error-container": "#93000a", "secondary-container": "#e1e2e7", "outline-variant": "#bbcbb3", "background": "#f6faff", "on-surface": "#141d23", "inverse-surface": "#293138", "surface-container": "#e6eff8", "secondary-fixed-dim": "#c5c6cb", "on-secondary-fixed": "#191c1f", "primary-fixed": "#73ff6f", "surface": "#f6faff", "inverse-on-surface": "#e9f2fb", "on-primary-fixed-variant": "#00530d", "tertiary": "#865300", "on-tertiary-fixed-variant": "#663e00", "primary-container": "#00d632", "on-tertiary-fixed": "#2b1700", "outline": "#6c7b67", "on-secondary-container": "#626468", "error": "#ba1a1a", "on-primary-fixed": "#002202", "on-error": "#ffffff", "surface-container-low": "#ecf5fe", "primary-fixed-dim": "#2ae540", "surface-bright": "#f6faff", "surface-container-lowest": "#ffffff", "secondary": "#5c5f62", "on-primary": "#ffffff", "secondary-fixed": "#e1e2e7", "on-secondary-fixed-variant": "#44474b" }, "borderRadius": { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, "spacing": { "space-lg": "1.5rem", "gutter-mobile": "0.75rem", "space-sm": "0.5rem", "space-xl": "2rem", "margin": "1.5rem", "margin-mobile": "1rem", "space-xs": "0.25rem", "space-md": "1rem", "gutter": "1rem" }, "fontFamily": { "headline-md": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "display-hero-mobile": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "display-hero": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Plus Jakarta Sans"] }, "fontSize": { "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }], "display-hero-mobile": ["44px", { "lineHeight": "52px", "fontWeight": "800" }], "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "700" }], "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "display-hero": ["56px", { "lineHeight": "64px", "fontWeight": "800" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-lg": ["14px", { "lineHeight": "18px", "fontWeight": "700" }], "headline-lg-mobile": ["26px", { "lineHeight": "34px", "fontWeight": "700" }] } } } }</script><style>@layer base{html,body{width:100%;margin:0;padding:0;min-height:100vh;}body{overscroll-behavior-y:none;font-family:'Plus Jakarta Sans',sans-serif;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-16 px-margin-mobile flex items-center justify-between"><div class="flex items-center gap-space-xs"><img alt="Smart Tracker App Icon" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1UGbRAJ4xAu_5Q7VQl3DBCxoAkHaGLA_NkUQH-g3YZitNM_PLApJu7FDM6QMv1BEnbKZPld0fOYQKglTgkI0B4Em_Ygv4dFR_pSNNz10aBAvIKebm7XfAJJsuA5UiY25fXhrhKU8Pggt_-SYpX-ypkPRAce4HXxZuwbXmQkp626dk1nnEWBYYkyX4OQkcvJ0-RZA80gC7QyG2rE9F4IK39fQSjvsl9I_y2Y1focWmoZ6Ah12Kw8yPpOfaiL"><div class="flex flex-col ml-1"><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none">Transactions</span><span class="font-label-sm text-label-sm text-on-surface-variant opacity-80 mt-0.5 tracking-wide uppercase">Tracker</span></div></div><div class="flex items-center gap-space-xs"><button class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[22px]">search</span></button><div class="relative flex items-center justify-center w-11 h-11"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6PurgcWxFW15mAGBducXHzblHYxwHMJ30VTqf4EEc2Dsxf899_fYrwH6bfzaMgDiJNNHqrAr2dVbnJHK7jZLb1XbhJnGxrPD6R_WbFXyveN7hJ4JLSuYtBQWJfE6VNAuY3MimS_Tgd9Xb57TGoSmzCR6PLciWHzLBk3GU8WE2xA7adpijS5x5D8kJiAEoXvITihmi2o3GzwW2mLWTrIo6uxMaFMmFYCAqItrJ_BaMGBfAUKdIPhPDwQ"></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-24 bg-surface"><div class="flex flex-col w-full">
+<!-- Interactive View State Bar (Prototype Switcher) -->
+<div class="px-margin-mobile pt-space-xs pb-space-sm">
+<div class="bg-surface-container-high p-1 rounded-full flex items-center shadow-sm">
+<button class="flex-1 py-1.5 px-3 rounded-full flex items-center justify-center gap-1.5 bg-surface-container-lowest text-on-surface font-label-md text-label-md transition-all duration-200" id="stateBtnPending" onclick="switchState('pending')">
+<span class="w-2 h-2 rounded-full bg-tertiary-container animate-pulse"></span>
+<span>Pending Review</span>
+</button>
+<button class="flex-1 py-1.5 px-3 rounded-full flex items-center justify-center gap-1.5 text-secondary hover:text-on-surface font-label-md text-label-md transition-all duration-200" id="stateBtnApproved" onclick="switchState('approved')">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span>Approved Ledger</span>
+</button>
+</div>
+</div>
+<!-- Screen Top Bar with Back and Actions -->
+<div class="px-margin-mobile py-space-xs flex items-center justify-between">
+<button class="w-10 h-10 rounded-full flex items-center justify-center bg-surface-container-low text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<div class="flex flex-col items-center">
+<span class="font-headline-sm text-headline-sm text-on-surface">Transaction</span>
+<span class="font-label-sm text-label-sm text-tertiary font-bold tracking-wide uppercase flex items-center gap-1" id="headerSyncMeta">
+<span class="material-symbols-outlined text-[12px]">sync_problem</span>
+        Awaiting Confirmation
+      </span>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-10 h-10 rounded-full flex items-center justify-center bg-surface-container-low text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[19px]">share</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center bg-surface-container-low text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Main Scrollable Content Container -->
+<div class="px-margin-mobile flex flex-col gap-space-md mt-space-xs pb-6">
+<!-- Hero Card: Merchant, Amount & State Badge -->
+<div class="bg-surface-container-lowest rounded-3xl p-space-lg flex flex-col items-center shadow-sm relative overflow-hidden">
+<!-- Ambient decorative gradient splash behind hero icon -->
+<div class="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-primary-container/10 blur-2xl pointer-events-none"></div>
+<!-- Status Chip (Adaptive) -->
+<div class="bg-tertiary-fixed text-on-tertiary-fixed-variant px-3 py-1 rounded-full flex items-center gap-1.5 shadow-xs mb-space-md" id="statusBadge">
+<span class="material-symbols-outlined text-[15px] text-tertiary">schedule</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider font-extrabold" id="statusBadgeText">Pending Approval</span>
+</div>
+<!-- Merchant Avatar with Icon & Category Badge -->
+<div class="relative mb-space-sm">
+<div class="w-20 h-20 rounded-full bg-tertiary-container/20 flex items-center justify-center shadow-inner">
+<span class="material-symbols-outlined text-[36px] text-on-tertiary-container">lunch_dining</span>
+</div>
+<div class="absolute bottom-0 right-0 bg-primary-container text-on-primary-fixed w-7 h-7 rounded-full flex items-center justify-center shadow-md">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+</div>
+</div>
+<!-- Merchant Title & Match Score -->
+<div class="flex items-center gap-1.5 mb-1">
+<h2 class="font-headline-md text-headline-md text-on-surface">Swiggy</h2>
+<span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-2 py-0.5 rounded-full flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px] text-primary">check_circle</span>
+          98% match
+        </span>
+</div>
+<!-- Hero Outflow Amount -->
+<div class="flex items-baseline gap-1 my-1">
+<span class="font-display-hero-mobile text-display-hero-mobile text-on-surface tracking-tight font-extrabold">-₹450.00</span>
+</div>
+<!-- Outflow / Category Chip -->
+<div class="flex items-center gap-2 mt-1">
+<span class="bg-error-container text-on-error-container font-label-sm text-label-sm px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">arrow_outward</span>
+          Expense Outflow
+        </span>
+<span class="text-tertiary font-label-sm text-label-sm font-semibold bg-tertiary-fixed/40 px-2 py-0.5 rounded-full" id="balanceImpactTag">
+          Not counted in balance
+        </span>
+</div>
+<!-- Subtitle metadata -->
+<p class="font-body-md text-body-md text-secondary mt-space-sm text-center">
+        Today · 7:32 PM · UPI · HDFC Bank (•••• 4021)
+      </p>
+</div>
+<!-- Core Transaction Information Card -->
+<div class="bg-surface-container-lowest rounded-3xl p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Transaction Details</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-0.5 font-bold cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+          Audit Rules
+        </span>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Row 1: Type -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">swap_vert</span>
+</div>
+<span class="font-body-md text-body-md text-secondary">Type</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="font-body-lg text-body-lg text-on-surface font-semibold">Debit Expense</span>
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+</div>
+</div>
+<!-- Row 2: Category -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">restaurant</span>
+</div>
+<span class="font-body-md text-body-md text-secondary">Category</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-2.5 py-1 rounded-full cursor-pointer active:bg-surface-container">
+<span class="font-body-md text-body-md text-on-surface font-semibold">🍔 Food &amp; Dining</span>
+<span class="material-symbols-outlined text-[15px] text-secondary">edit</span>
+</div>
+</div>
+<!-- Row 3: Account -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">account_balance</span>
+</div>
+<span class="font-body-md text-body-md text-secondary">Account</span>
+</div>
+<div class="text-right">
+<span class="font-body-md text-body-md text-on-surface font-semibold block">HDFC Bank •••• 4021</span>
+<span class="font-label-sm text-label-sm text-secondary">Instant UPI Debit</span>
+</div>
+</div>
+<!-- Row 4: Date & Timestamp -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+</div>
+<span class="font-body-md text-body-md text-secondary">Date &amp; Time</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface font-semibold">Oct 1, 2026 · 7:32 PM</span>
+</div>
+<!-- Row 5: Personal Note -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">sticky_note_2</span>
+</div>
+<span class="font-body-md text-body-md text-secondary">Personal Note</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface font-body-md text-body-md font-medium cursor-pointer">
+<span class="truncate max-w-[150px]">Dinner order with team</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">edit_note</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Detection Transparency Card (Progressive Disclosure) -->
+<div class="bg-surface-container-lowest rounded-3xl p-space-lg shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center justify-between cursor-pointer" onclick="toggleDetectionDetails()">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">smart_toy</span>
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Detection Transparency</span>
+</div>
+<button class="flex items-center gap-1 font-label-md text-label-md text-primary font-bold" id="detectionToggleBtn">
+<span>Hide</span>
+<span class="material-symbols-outlined text-[18px]" id="detectionChevron">expand_less</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-sm mt-1" id="detectionBody">
+<!-- Detection stats mini grid -->
+<div class="grid grid-cols-2 gap-2 mt-1">
+<div class="bg-surface-container-low p-2.5 rounded-2xl flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary">Detected From</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary">notifications_active</span>
+              UPI SMS Push
+            </span>
+</div>
+<div class="bg-surface-container-low p-2.5 rounded-2xl flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary">Confidence</span>
+<span class="font-body-md text-body-md text-primary font-bold mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">format_image_left</span>
+              98% High Match
+            </span>
+</div>
+</div>
+<!-- Parser details -->
+<div class="flex items-center justify-between text-secondary px-1 pt-1 font-label-sm text-label-sm">
+<span>Parser: On-Device SMS v2.4</span>
+<span>Ref ID: 427509182341</span>
+</div>
+<!-- Sanitized Source Payload -->
+<div class="bg-surface-container-low rounded-2xl p-3 flex flex-col gap-1.5 mt-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">Sanitized Source Message</span>
+<span class="material-symbols-outlined text-[14px] text-secondary">lock</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant font-mono bg-surface-container-lowest/80 p-2 rounded-xl leading-relaxed select-all">
+            "Dear HDFC Bank User, INR 450.00 debited from a/c **4021 on 01-10-2026 19:32:15 to VPA swiggy@icici UPI Ref 427509182341. Balance info protected."
+          </p>
+<div class="flex items-center gap-1.5 pt-0.5 text-primary">
+<span class="material-symbols-outlined text-[14px]">verified_user</span>
+<span class="font-label-sm text-label-sm font-semibold">Zero credentials stored · Sanitized entirely on-device</span>
+</div>
+</div>
+<!-- Collapsed Technical Ledger Dropdown (Keeps technical jargon out of the way) -->
+<div class="pt-1">
+<button class="w-full py-2 px-3 bg-surface-container-high rounded-full flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm font-bold" onclick="toggleAdvancedAudit()">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">code</span>
+              Advanced Cryptographic &amp; Audit Logs
+            </span>
+<span class="material-symbols-outlined text-[16px]" id="auditChevron">expand_more</span>
+</button>
+<div class="hidden mt-2 p-2.5 rounded-2xl bg-surface-container-high text-on-surface-variant font-mono text-[11px] leading-tight space-y-1" id="advancedAuditContent">
+<div>SHA256: 7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069</div>
+<div>Ledger Stage: STAGING_UNCOMMITTED</div>
+<div>Sync State: LOCAL_ONLY_PENDING_USER_ACK</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Visual Hint / State Comparison Ribbon -->
+<div class="bg-surface-container-low rounded-2xl p-3 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">tips_and_updates</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-bold">Unified Ledger Flow</span>
+<p class="font-body-md text-body-md text-secondary mt-0.5" id="stateComparisonHint">
+          When Approved, this card permanently integrates with your October spending graphs and updates available cash flow.
+        </p>
+</div>
+</div>
+<!-- Sticky Bottom CTAs Area -->
+<div class="mt-space-sm flex flex-col gap-2">
+<!-- Container for Dynamic Buttons based on state -->
+<div class="flex flex-col gap-2" id="pendingActionGroup">
+<!-- Primary Vibrant Action: Approve -->
+<button class="w-full h-14 bg-primary-container hover:bg-primary-container/90 text-on-primary-fixed rounded-full flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all font-label-lg text-label-lg font-extrabold tracking-wide" onclick="simulateApproval()">
+<span class="material-symbols-outlined text-[22px]">check_circle</span>
+<span>Approve Transaction (-₹450.00)</span>
+</button>
+<span class="font-label-sm text-label-sm text-secondary text-center px-4">
+          Approving permanently commits this record to your October 2026 balance.
+        </span>
+<!-- Secondary Action Row -->
+<div class="grid grid-cols-2 gap-2 mt-1">
+<button class="h-11 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-full flex items-center justify-center gap-1.5 font-label-md text-label-md font-bold active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+<span>Edit Details</span>
+</button>
+<button class="h-11 bg-surface-container-high hover:bg-error-container text-error rounded-full flex items-center justify-center gap-1.5 font-label-md text-label-md font-bold active:scale-95 transition-transform" onclick="simulateReject()">
+<span class="material-symbols-outlined text-[18px]">block</span>
+<span>Reject &amp; Ignore</span>
+</button>
+</div>
+</div>
+<!-- Approved State Action Group (Initially hidden, revealed when switched) -->
+<div class="hidden flex flex-col gap-2" id="approvedActionGroup">
+<div class="bg-primary-fixed/20 p-2.5 rounded-2xl flex items-center justify-center gap-2 text-on-surface-variant font-label-md text-label-md mb-1">
+<span class="material-symbols-outlined text-primary text-[18px]">task_alt</span>
+<span>Committed into Ledger · Oct 1, 2026 · 7:35 PM</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<button class="h-12 bg-surface-container-highest text-on-surface rounded-full flex items-center justify-center gap-1.5 font-label-md text-label-md font-bold active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">edit_note</span>
+<span>Edit Entry</span>
+</button>
+<button class="h-12 bg-surface-container-high text-secondary hover:text-error rounded-full flex items-center justify-center gap-1.5 font-label-md text-label-md font-bold active:scale-95 transition-transform" onclick="switchState('pending')">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+<span>Move to Pending</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  let currentState = 'pending';
+
+  function switchState(state) {
+    currentState = state;
+    const btnPending = document.getElementById('stateBtnPending');
+    const btnApproved = document.getElementById('stateBtnApproved');
+    const statusBadge = document.getElementById('statusBadge');
+    const statusBadgeText = document.getElementById('statusBadgeText');
+    const balanceImpactTag = document.getElementById('balanceImpactTag');
+    const headerSyncMeta = document.getElementById('headerSyncMeta');
+    const pendingActions = document.getElementById('pendingActionGroup');
+    const approvedActions = document.getElementById('approvedActionGroup');
+    const hint = document.getElementById('stateComparisonHint');
+
+    if (state === 'approved') {
+      // Toggle button pills styling
+      btnApproved.className = "flex-1 py-1.5 px-3 rounded-full flex items-center justify-center gap-1.5 bg-surface-container-lowest text-on-surface font-label-md text-label-md shadow-xs transition-all duration-200";
+      btnPending.className = "flex-1 py-1.5 px-3 rounded-full flex items-center justify-center gap-1.5 text-secondary hover:text-on-surface font-label-md text-label-md transition-all duration-200";
+
+      // Status Chip styling to Approved
+      statusBadge.className = "bg-primary-container text-on-primary-fixed px-3 py-1 rounded-full flex items-center gap-1.5 shadow-xs mb-space-md";
+      statusBadgeText.innerText = "RECORDED IN LEDGER";
+      statusBadge.querySelector('.material-symbols-outlined').innerText = "verified";
+
+      // Balance indicator & Header
+      balanceImpactTag.className = "text-primary font-label-sm text-label-sm font-semibold bg-primary-fixed/50 px-2 py-0.5 rounded-full flex items-center gap-0.5";
+      balanceImpactTag.innerHTML = "<span class='material-symbols-outlined text-[12px]'>trending_down</span> Counted in Cash Flow";
+
+      headerSyncMeta.className = "font-label-sm text-label-sm text-primary font-bold tracking-wide uppercase flex items-center gap-1";
+      headerSyncMeta.innerHTML = "<span class='material-symbols-outlined text-[12px]'>cloud_done</span> Verified &amp; Synced";
+
+      // Switch bottom CTA set
+      pendingActions.classList.add('hidden');
+      approvedActions.classList.remove('hidden');
+
+      hint.innerText = "This transaction is actively synced with your monthly budget and accounts ledger.";
+    } else {
+      // Toggle button pills styling back to Pending
+      btnPending.className = "flex-1 py-1.5 px-3 rounded-full flex items-center justify-center gap-1.5 bg-surface-container-lowest text-on-surface font-label-md text-label-md shadow-xs transition-all duration-200";
+      btnApproved.className = "flex-1 py-1.5 px-3 rounded-full flex items-center justify-center gap-1.5 text-secondary hover:text-on-surface font-label-md text-label-md transition-all duration-200";
+
+      // Status Chip styling to Pending
+      statusBadge.className = "bg-tertiary-fixed text-on-tertiary-fixed-variant px-3 py-1 rounded-full flex items-center gap-1.5 shadow-xs mb-space-md";
+      statusBadgeText.innerText = "PENDING APPROVAL";
+      statusBadge.querySelector('.material-symbols-outlined').innerText = "schedule";
+
+      // Balance indicator & Header
+      balanceImpactTag.className = "text-tertiary font-label-sm text-label-sm font-semibold bg-tertiary-fixed/40 px-2 py-0.5 rounded-full";
+      balanceImpactTag.innerText = "Not counted in balance";
+
+      headerSyncMeta.className = "font-label-sm text-label-sm text-tertiary font-bold tracking-wide uppercase flex items-center gap-1";
+      headerSyncMeta.innerHTML = "<span class='material-symbols-outlined text-[12px]'>sync_problem</span> Awaiting Confirmation";
+
+      // Switch bottom CTA set
+      pendingActions.classList.remove('hidden');
+      approvedActions.classList.add('hidden');
+
+      hint.innerText = "When Approved, this card permanently integrates with your October spending graphs and updates available cash flow.";
+    }
+  }
+
+  function toggleDetectionDetails() {
+    const body = document.getElementById('detectionBody');
+    const chevron = document.getElementById('detectionChevron');
+    const toggleBtn = document.getElementById('detectionToggleBtn').querySelector('span');
+
+    if (body.classList.contains('hidden')) {
+      body.classList.remove('hidden');
+      chevron.innerText = 'expand_less';
+      toggleBtn.innerText = 'Hide';
+    } else {
+      body.classList.add('hidden');
+      chevron.innerText = 'expand_more';
+      toggleBtn.innerText = 'Show';
+    }
+  }
+
+  function toggleAdvancedAudit() {
+    const content = document.getElementById('advancedAuditContent');
+    const chevron = document.getElementById('auditChevron');
+    if (content.classList.contains('hidden')) {
+      content.classList.remove('hidden');
+      chevron.innerText = 'expand_less';
+    } else {
+      content.classList.add('hidden');
+      chevron.innerText = 'expand_more';
+    }
+  }
+
+  function simulateApproval() {
+    switchState('approved');
+  }
+
+  function simulateReject() {
+    if (confirm('Discard this detected SMS record? It will not be tracked.')) {
+      alert('Transaction ignored and archived.');
+    }
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.04)]" data-active-classes="text-on-surface font-bold"><div class="flex justify-around items-center h-16 px-gutter-mobile"><a class="flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="dashboard" href="#"><span class="material-symbols-outlined text-[24px]">home</span><span class="font-label-sm text-label-sm mt-1">Home</span></a><a class="flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="transactions" href="#"><span class="material-symbols-outlined text-[24px]">receipt_long</span><span class="font-label-sm text-label-sm mt-1">Transactions</span></a><a class="relative flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="pending-transactions" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[24px]">schedule</span><span class="absolute -top-1 -right-2 bg-tertiary-container text-on-tertiary-container font-label-sm text-[10px] h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center font-bold">5</span></div><span class="font-label-sm text-label-sm mt-1">Pending</span></a><a class="flex flex-col items-center justify-center min-w-[64px] h-12 text-secondary hover:text-on-surface transition-colors" data-path="accounts" href="#"><span class="material-symbols-outlined text-[24px]">account_balance_wallet</span><span class="font-label-sm text-label-sm mt-1">Accounts</span></a></div></nav></body></html>

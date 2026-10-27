@@ -1,0 +1,352 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full FIRST
+(especially the CRITICAL PRIVACY RULE about the connected device's real SMS
+inbox), then read 01-persistence-foundation.md, 02-forms-add-edit.md, and
+03-accounts-forms.md (prior phase reports). Do not re-derive or contradict
+any of them. This is a genuinely new, more involved phase — it adds a small
+Android native module. Read carefully before writing code.
+
+ADDITIONAL GROUND FACTS specific to this phase (verified by the orchestrator,
+exact current file state, not guesses):
+
+- No SMS-reading capability exists anywhere yet. `src/native/android/sms/`,
+  `src/native/android/permissions/`, `src/native/android/notifications/` are
+  EMPTY placeholder directories (no files) — this phase is the first to put
+  real files in `sms/` and `permissions/`. Leave `notifications/` empty, out
+  of scope.
+- `android/app/src/main/java/com/tracker/MainApplication.kt` (Kotlin, New
+  Architecture, exact current content):
+  ```kotlin
+  package com.tracker
+  import android.app.Application
+  import com.facebook.react.PackageList
+  import com.facebook.react.ReactApplication
+  import com.facebook.react.ReactHost
+  import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
+  import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+
+  class MainApplication : Application(), ReactApplication {
+    override val reactHost: ReactHost by lazy {
+      getDefaultReactHost(
+        context = applicationContext,
+        packageList = PackageList(this).packages.apply {
+          // Packages that cannot be autolinked yet can be added manually here
+        },
+      )
+    }
+    override fun onCreate() { super.onCreate(); loadReactNative(this) }
+  }
+  ```
+  `newArchEnabled=true` in `android/gradle.properties`. Despite New
+  Architecture being on, a plain legacy-style `ReactPackage` /
+  `ReactContextBaseJavaModule` (no TurboModule codegen spec needed) still
+  works fine for a simple synchronous-bridge module like this one via RN's
+  interop layer — do NOT attempt to write a TurboModule/codegen spec, that
+  is unnecessary complexity for this task. Just add your package to the
+  `packageList.apply { add(SmsReaderPackage()) }` block above.
+- `android/app/src/main/AndroidManifest.xml` currently only declares
+  `INTERNET`. This phase is the ONE exception to prior phases' "do not
+  modify AndroidManifest.xml" scope guard — you must add:
+  `<uses-permission android:name="android.permission.READ_SMS" />`
+  Do NOT request `RECEIVE_SMS` or `WRITE_SMS` — not needed, out of scope,
+  and `RECEIVE_SMS`/becoming the default SMS app pulls in a much bigger
+  Android requirement (default-SMS-app role) this v1 explicitly does not
+  need. Plain `READ_SMS` lets any app read the inbox via
+  `ContentResolver`/`content://sms/inbox` once the user grants the runtime
+  permission — that's all this phase needs.
+- Domain types (`src/domain/transactions/transaction.types.ts`, do not
+  redesign):
+  ```ts
+  export type SourceType = 'sms' | 'notification' | 'manual';
+  export interface Transaction {
+    id, type, status, amountMinor, currency, merchantName, categoryId,
+    accountId, paymentMethod, occurredAt, detectedAt, approvedAt, note,
+    sourceType, sourceReferenceHash, sanitizedPreview, confidenceScore,
+    parserVersion, createdAt, updatedAt
+  }
+  ```
+  A parsed-from-SMS transaction: `sourceType: 'sms'`, `status: 'pending'`
+  (same Detect→Review→Approve→Record principle as manual entry — SMS-derived
+  transactions are NEVER auto-approved), `approvedAt: null`,
+  `confidenceScore`: a number 0–1 your parser assigns per match (higher for
+  a clean "debited"/"credited" + amount + clear merchant match; lower if any
+  part was ambiguous) — reuse `confidenceTier`/`canFastApprove` from
+  `src/domain/transactions/transaction.rules.ts` for display, don't
+  duplicate that logic. `parserVersion`: a literal string you choose, e.g.
+  `'sms-heuristic-v1'` (do NOT claim a fancier version number — be honest
+  this is a v1 heuristic parser, not a sophisticated classifier).
+  `sourceReferenceHash`: a dedup key so re-running Sync SMS twice doesn't
+  create duplicate transactions for the same message — derive it from the
+  SMS row's own device-local `_id` + `date` columns (both are just an
+  Android-internal row id and a timestamp, not personal data) via a short
+  string, e.g. `` `sms-${row._id}-${row.date}` `` — do NOT derive it from or
+  include the sender address/phone number anywhere, even hashed.
+  `sanitizedPreview`: build this ONLY from your own already-parsed
+  structured fields, e.g. `` `${type === 'expense' ? 'Debited' : 'Credited'}
+  ₹${amountRupees} — ${merchantName}` `` — NEVER a substring or excerpt of
+  the raw SMS body, and never include the sender address. This matches the
+  field's existing doc comment in `transaction.types.ts` ("Sanitized preview
+  only — never the complete raw message body").
+- Every `Transaction` requires non-null `categoryId` and `accountId` — a
+  parsed SMS has neither for certain. v1 heuristic assignment (acceptable,
+  document as a known limitation in your output, don't over-engineer):
+  - `accountId`: try to match the SMS body against each existing
+    `store.accounts[].lastFour` (if the body contains that 4-digit
+    sequence). If no match, or no accounts exist at all, fall back to the
+    FIRST account in `store.accounts` (if any exist — if `store.accounts`
+    is empty, skip creating ANY transactions from SMS and surface that to
+    the user, same "add an account first" principle as Phase 2's Add
+    Record).
+  - `categoryId`: no reliable signal in v1 — pick the existing system
+    category matching the transaction's `type` with the closest generic
+    fit: for `expense` use the `'shopping'` category id, for `income` use
+    the `'salary'` category id (look up the actual ids from
+    `src/features/transactions/state/transactionsStore.ts`'s
+    `state.categories` at runtime by `name`/`type`, don't hardcode a
+    specific id string since ids are generated). The user can always
+    recategorize via Edit (Phase 2) after reviewing.
+- `src/features/transactions/state/transactionsStore.ts` already has
+  `addTransaction` (Phase 1/2) and `transactions` array — use
+  `state.transactions.some(t => t.sourceReferenceHash === hash)` for the
+  dedup check before calling `addTransaction` for each parsed candidate.
+- `src/features/onboarding/screens/PermissionsScreen.tsx` currently has a
+  non-functional SMS permission row (just UI, `locked: true` switch, no real
+  `PermissionsAndroid` call) and its "Enable & Continue to Home" button just
+  calls `navigation.reset(...)` with no permission request at all. This
+  phase makes that button actually request the real `READ_SMS` permission.
+  "Enter transactions manually instead" (the text link below it) must
+  continue to skip straight to Home WITHOUT requesting the permission — that
+  path is for users who decline automatic detection entirely, matching the
+  app's own stated principle ("You Always Have The Final Say").
+- `src/features/home/components/BalanceCard.tsx` passes `onSyncSms` down to
+  a `<Button label="Sync SMS" variant="ghost" onPress={onSyncSms} .../>`.
+  `src/features/home/screens/HomeScreen.tsx` line ~57 currently has
+  `onSyncSms={() => {}}` — this is the dead button to wire.
+- Android's `READ_SMS` is a normal dangerous runtime permission (API 23+) —
+  requestable via `PermissionsAndroid.request('android.permission.READ_SMS')`
+  from RN, no special "become the default SMS app" role needed (that's only
+  required for `RECEIVE_SMS`/`WRITE_SMS` intents, which this phase does not
+  use). Use `PermissionsAndroid.check(...)` first to avoid re-prompting if
+  already granted.
+- Reuse `src/shared/ui/*` and theme tokens for any new UI (e.g. a simple
+  result `Alert` or inline banner after sync) — keep it minimal, a native
+  `Alert.alert('Synced', 'Found N new transactions, M pending review.')` is
+  an acceptable, simple UX for this v1 (no new screen strictly required,
+  your call if a tiny results screen is cleaner, but don't over-build it).
+
+TASKS:
+
+T1. Native Android module (Kotlin) — create
+    `android/app/src/main/java/com/tracker/SmsReaderModule.kt` and
+    `android/app/src/main/java/com/tracker/SmsReaderPackage.kt`:
+    - `SmsReaderModule` extends `ReactContextBaseJavaModule`. Method
+      `getName()` returns `"SmsReader"`.
+    - `@ReactMethod fun readInbox(limit: Double, promise: Promise)`:
+      checks `ContextCompat.checkSelfPermission(reactApplicationContext,
+      Manifest.permission.READ_SMS)` is granted (if not, `promise.reject`
+      with a clear error code, do not crash); queries
+      `reactApplicationContext.contentResolver.query(Uri.parse("content://sms/inbox"),
+      arrayOf("_id", "address", "body", "date"), null, null, "date DESC")`,
+      iterates the cursor up to `limit.toInt()` rows, builds a
+      `WritableArray` of `WritableMap` each with `id` (string), `address`
+      (string — yes, pass the raw address across the bridge; it is consumed
+      immediately by the JS parser and MUST NOT be logged/persisted anywhere
+      downstream per the privacy rule — see T2/T3), `body` (string, same
+      caveat), `date` (double, epoch millis). Always close the cursor
+      (`use { }` or try/finally). Resolve the promise with the array.
+    - `SmsReaderPackage` implements `ReactPackage`: `createNativeModules`
+      returns `listOf(SmsReaderModule(reactContext))`,
+      `createViewManagers` returns `emptyList()`.
+    - Register it: add `add(SmsReaderPackage())` inside the
+      `packageList.apply { }` block in `MainApplication.kt`.
+
+T2. Manifest: add `<uses-permission
+    android:name="android.permission.READ_SMS" />` to
+    `android/app/src/main/AndroidManifest.xml`.
+
+T3. JS/TS native bridge wrapper + permission helper:
+    - `src/native/android/sms/smsReader.ts`: thin typed wrapper around
+      `NativeModules.SmsReader.readInbox(limit)`, exporting an
+      `SmsMessage { id: string; address: string; body: string; date: number
+      }` type and a `readInbox(limit = 200): Promise<SmsMessage[]>`
+      function. This is the ONLY file in the app allowed to touch the raw
+      `address`/`body` fields before they're reduced to parsed, sanitized
+      data (see T4) — do not pass raw `SmsMessage[]` any further up the
+      call stack than the parser.
+    - `src/native/android/permissions/smsPermission.ts`: exports
+      `checkSmsPermission(): Promise<boolean>` and
+      `requestSmsPermission(): Promise<boolean>` wrapping
+      `PermissionsAndroid.check`/`.request` for
+      `PermissionsAndroid.PERMISSIONS.READ_SMS`.
+
+T4. SMS parser (pure TS, fully unit-testable, no native/device dependency) —
+    create `src/features/sms-sync/smsParser.ts`:
+    - `parseSmsMessage(msg: SmsMessage): ParsedSmsTransaction | null` where
+      `ParsedSmsTransaction = { type: TransactionType; amountMinor: number;
+      merchantName: string; occurredAt: string; confidenceScore: number;
+      sanitizedPreview: string; sourceReferenceHash: string }`.
+    - Heuristic v1 rules (keep it genuinely simple, regex-based, document
+      your exact patterns in the output log):
+      - Reject (`return null`) if body matches an OTP/promotional pattern
+        (e.g. contains `OTP`, `one time password`, case-insensitive) or
+        doesn't contain any currency/amount pattern at all.
+      - Detect amount via a pattern like
+        `/(?:rs\.?|inr|₹)\s*([\d,]+\.?\d{0,2})/i`, strip commas, parse to
+        paise via `Math.round(parseFloat(x) * 100)`.
+      - Detect direction: `expense` if body matches
+        `/debited|spent|paid|withdrawn/i`; `income` if it matches
+        `/credited|received|deposited/i`. If neither matches, `return
+        null` (ambiguous, don't guess).
+      - Extract a merchant name with a best-effort pattern like
+        `/(?:at|to|from)\s+([A-Za-z0-9&.\-_ ]{3,30})/i` (trim result);
+        fall back to `'Unknown'` if no match — still create the
+        transaction (a pending review with "Unknown" merchant is better
+        than silently dropping a real detected transaction; the user fixes
+        it via Edit).
+      - `occurredAt`: `new Date(msg.date).toISOString()`.
+      - `confidenceScore`: start at `0.9` if direction + amount + merchant
+        all matched cleanly, `0.6` if merchant fell back to `'Unknown'`,
+        `0.4` if amount format was ambiguous (e.g. no decimal places found
+        but a number was present) — your call on exact thresholds, just be
+        reasonable and document them.
+      - `sourceReferenceHash`: `` `sms-${msg.id}-${msg.date}` ``.
+      - `sanitizedPreview`: built from already-parsed fields only, per the
+        ground facts above — never raw `msg.body`.
+    - `parseSmsMessage` must NEVER include `msg.address` or `msg.body` in
+      its return value, only derived/sanitized fields.
+
+T5. Sync orchestration — create
+    `src/features/sms-sync/syncSms.ts` exporting an async
+    `syncSms(): Promise<{ scanned: number; created: number; skipped: number
+    }>`:
+    - Checks/requests SMS permission (via T3's helpers) — if denied,
+      throw/return a result the caller can show a clear message for (e.g. a
+      typed error), do not crash.
+    - If `store.accounts.length === 0`, same as above — return a result
+      signaling "no accounts" so the caller can prompt the user to add one
+      first (reuse the same UX pattern Phase 2 used for Add Record).
+    - Reads up to e.g. 200 inbox messages via `readInbox`, runs each through
+      `parseSmsMessage`, filters out nulls, filters out any whose
+      `sourceReferenceHash` already exists in `store.transactions`, resolves
+      `accountId`/`categoryId` per the ground-facts heuristic, builds a full
+      `CreateTransactionInput` per message (status 'pending', sourceType
+      'sms', the rest per T4's parsed fields + resolved account/category),
+      and calls `store.addTransaction(...)` for each. Returns counts
+      (`scanned` = total inbox messages read, `created` = transactions
+      actually added, `skipped` = scanned minus created, whether from
+      parse-rejection or dedup).
+
+T6. Wiring:
+    - `HomeScreen.tsx`: wire `onSyncSms` to call `syncSms()`, show the
+      result via `Alert.alert(...)` with ONLY the counts (e.g. "Scanned 42
+      messages, found 3 new transactions — check Pending to review them."),
+      NEVER any message content. Handle the "permission denied" and "no
+      accounts" cases with their own clear `Alert` messages (for "no
+      accounts", offer to navigate to the Accounts tab, consistent with
+      Phase 2's pattern for Add Record).
+    - `PermissionsScreen.tsx`: `enterApp` (triggered by "Enable & Continue
+      to Home") becomes `async`, calls `requestSmsPermission()` BEFORE
+      navigating (await it, but navigate to Home regardless of the result —
+      don't block onboarding on a denial, the user can still grant it later
+      via the Sync SMS button's own request-on-demand flow in T6). "Enter
+      transactions manually instead" keeps navigating WITHOUT requesting
+      the permission at all (unchanged behavior, just don't let your edit
+      accidentally make it request too).
+
+GATES (all must pass before you report done):
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass. Add real unit tests for
+  `smsParser.ts` using FABRICATED synthetic sample SMS strings you write
+  yourself (never real device data) covering: a clean debit match, a clean
+  credit match, an OTP message correctly rejected, a promotional message
+  correctly rejected, a message with no amount correctly rejected, a
+  message with amount+direction but no extractable merchant (falls back to
+  'Unknown', still returns non-null), and the exact `sourceReferenceHash`/
+  `sanitizedPreview` shape. Also test the dedup logic in `syncSms`-adjacent
+  code if it's easily unit-testable in isolation (e.g. a pure helper that
+  takes `existingHashes: Set<string>` + parsed candidates and filters), and
+  the account/category fallback resolution logic as a pure function if you
+  factor it that way.
+- `cd android && ./gradlew assembleDebug` (JAVA_HOME + PATH exported per
+  STATE.md) — BUILD SUCCESSFUL. This phase DOES touch native Kotlin code
+  and the manifest, so expect a real (not purely incremental) compile; if
+  Kotlin compilation fails, fix the actual Kotlin error, don't work around
+  it by reverting to a no-op module.
+- On the connected device, perform a REAL end-to-end manual test:
+  1. Force-stop, install, launch fresh (pattern from
+     `01-persistence-foundation.md`).
+  2. Verify the Permissions screen's "Enable & Continue to Home" button now
+     triggers a real Android system permission dialog (confirm via
+     `uiautomator dump` that a `com.android.permissioncontroller` (or
+     equivalent OEM permission UI) window appears — do NOT screenshot it,
+     text-dump only). Tap "Allow" (find its bounds via dump, this is a
+     system UI tap like any other — same rules apply: fresh dump, exact
+     bounds, no stale coordinates). Confirm the app lands on Home
+     afterward.
+  3. Confirm granted state: `adb shell dumpsys package com.tracker | grep
+     READ_SMS` (or equivalent) shows it granted — this is a permission NAME
+     check only, not personal data, fine to include in your output log.
+  4. Go to Accounts, confirm the accounts from Phase 3 (HDFC Salary
+     Account, Cash Wallet, Test Account) are still present (needed for
+     account-matching to have something to match against).
+  5. Tap "Sync SMS" on Home (fresh `uiautomator dump` for bounds). Wait for
+     it to complete.
+  6. Verify via `uiautomator dump`/`adb logcat -d` (text only) that: the
+     app did not crash (zero `FATAL EXCEPTION`, zero `Maximum update depth
+     exceeded`), the result Alert shows plausible scanned/created/skipped
+     counts (whatever the REAL counts are on this REAL device — report
+     ONLY these numbers, e.g. "scanned 37, created 2, skipped 35" — NEVER
+     any merchant name, amount, sender, or message text from the real
+     device, even if it appears in a UI dump; if a dump incidentally
+     captures such text, do not transcribe it into your output file or
+     reply, just confirm structurally that pending items appeared).
+  7. If `created > 0`: go to Pending tab, confirm that many new items
+     appear with `status: pending` and a plausible merchant/amount
+     (again — do NOT transcribe the actual merchant/amount values into your
+     report, just confirm structurally, e.g. "N new pending items visible
+     with non-empty amount and merchant fields, categorized under
+     Shopping/Salary as expected").
+  8. Re-tap "Sync SMS" a second time immediately — confirm via the result
+     Alert's counts that `created` is now 0 (or much lower) for the exact
+     same messages, proving the dedup-by-`sourceReferenceHash` logic works
+     and repeated syncs don't duplicate transactions.
+  - Respect STATE.md's privacy rule throughout — this is the phase it was
+    written for. No screenshots unless foreground is confirmed AND you are
+    certain nothing sensitive is on-screen (prefer skipping screenshots
+    entirely this phase, text dumps only). Never put real SMS content,
+    sender numbers, or full message bodies into your output file, your
+    reply, logcat captures you quote, or anywhere else.
+
+SCOPE GUARDS:
+- Do not implement `RECEIVE_SMS`, default-SMS-app role, or background/
+  real-time SMS listening (e.g. a `BroadcastReceiver`) — this phase is a
+  manual, user-triggered "Sync SMS" button only, reading the existing
+  inbox. Real-time detection is explicitly out of scope (not asked for,
+  bigger permission footprint).
+- Do not build the full multi-signal classifier from `docs/PROJECT.md` §14
+  — this is a deliberately scoped v1 heuristic regex parser, say so plainly
+  in your output report, don't oversell it.
+- Do not add account/category EDITING UI — reuse Phase 2's existing Edit
+  screen for the user to fix a wrong auto-assigned category/account on a
+  synced transaction.
+- Do not modify the database schema — the `transactions` table already
+  supports every field a parsed SMS transaction needs.
+- Don't touch `src/features/onboarding/components/TourIllustration.tsx` or
+  any other onboarding screen besides `PermissionsScreen.tsx`.
+- No new npm dependencies needed (everything is either already installed or
+  built as plain Kotlin/TS in this phase) — if you find yourself wanting to
+  `npm install` an SMS-reading library, stop, the native module above is
+  the intended approach and is not large.
+
+OUTPUT: write a detailed chronological log (every file created/changed,
+your exact regex patterns and confidence-score thresholds, every gate's
+actual output, and the full step-by-step on-device manual test results with
+ONLY structural counts, never real message content) to:
+  ongoing/realtime-persistence/04-sms-sync.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified count>,
+<one-line verdict on whether Sync SMS genuinely requests the real Android
+permission, reads the real inbox, creates real pending transactions from it,
+and correctly dedupes on a second sync — with zero real SMS content
+anywhere in your reply>. Do not paste file contents, logcat, uiautomator
+XML, or any SMS-derived text into your reply.

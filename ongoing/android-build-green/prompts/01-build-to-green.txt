@@ -1,0 +1,140 @@
+GROUND FACTS (already verified — do not re-derive, do not second-guess):
+
+- Project root: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker
+- Work ONLY inside this directory. This is a local solo dev machine, not a
+  shared repo — there is no git worktree to use, the project is not even a
+  git repository. Do not run `git init` or add one.
+- Before ANY ./gradlew invocation, export:
+    JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+    PATH=$JAVA_HOME/bin:$PATH
+  (there is no system Java otherwise; gradle will fail with a confusing
+  error if you skip this).
+- android/local.properties already points sdk.dir at
+  /opt/homebrew/share/android-commandlinetools — you do not need to set
+  ANDROID_HOME for gradle itself.
+- Installed Android SDK packages: platform-tools, platforms;android-37.0,
+  build-tools;37.0.0, ndk;27.1.12297006. These match what
+  android/build.gradle asks for (compileSdkVersion=37, buildToolsVersion
+  37.0.0, ndkVersion 27.1.12297006). Do NOT change these version numbers in
+  build.gradle to "fix" a mismatch — if you hit a version-not-found error,
+  the fix is almost certainly something else (stale cache, wrong SDK
+  component actually needed) — investigate before editing version pins.
+- Gradle wrapper (9.4.1) and the AGP/Kotlin plugin classpath have already
+  been downloaded and cached once successfully in ~/.gradle. A previous
+  `./gradlew help` run got as far as configuring :app and
+  :react-native-community_datetimepicker before failing on a now-fixed
+  issue (react-native-sqlite-storage calling the removed jcenter()
+  repository — that package has since been REMOVED from package.json and
+  replaced with @op-engineering/op-sqlite, already npm installed). So the
+  bulk of first-time setup cost is already paid; further failures should be
+  faster to iterate on.
+- NETWORK QUIRK: plain JVM HttpURLConnection-based downloaders (the old
+  `sdkmanager` CLI, Gradle wrapper's own bootstrap downloader) are
+  unreliable on this machine for large files — they hang indefinitely or
+  reset mid-download. `curl` to the exact same URLs works fine (tested at
+  ~4-5 MB/s with retries). If gradle or sdkmanager hangs/resets trying to
+  download something large (another SDK component, a big Maven artifact),
+  do NOT just retry the same command in a loop — instead: (a) identify the
+  exact URL/artifact it's trying to fetch from the error/verbose log, (b)
+  curl-download it directly (with --retry 10 --retry-delay 3 -C - for
+  resume), (c) place it in the exact cache/SDK path gradle or sdkmanager
+  expects, (d) retry the build. Document which artifact needed this
+  treatment in your output log.
+- No Android emulator or physical device is connected in this environment.
+  Do NOT attempt `./gradlew installDebug`, `npx react-native run-android`,
+  or anything requiring `adb devices` to show a target. The finish line is
+  a successful `assembleDebug` producing an APK file, nothing beyond that.
+- react-native-reanimated, react-native-worklets, @gorhom/bottom-sheet, and
+  react-native-gesture-handler were deliberately removed earlier (real
+  upstream version incompatibility between reanimated 4.7.0's source and
+  the only published stable worklets 0.13.0 — confirmed via direct
+  investigation, not a guess). If you hit any error mentioning these
+  packages, that means something in node_modules or package.json
+  re-introduced them (maybe as a transitive peer dependency of something
+  else you installed) — report this as a finding rather than "fixing" it
+  by reinstalling or patching those three packages back to life. Check
+  `npm ls react-native-reanimated` to see what pulled it in if this
+  happens, and prefer removing/replacing whatever pulled it in.
+- AGP deprecation warnings about android.builtInKotlin, android.newDsl,
+  obsolete variant APIs (applicationVariants/testVariants/unitTestVariants)
+  are expected noise on this RN 0.87 + newer AGP combo. They are warnings,
+  not failures — do not spend time "fixing" them unless a FAILURE directly
+  names one of these settings as the cause.
+
+READ FIRST:
+- ongoing/android-build-green/STATE.md (full context, more detail than this prompt repeats)
+
+TASK:
+B1. cd android && (with JAVA_HOME exported as above) run `./gradlew assembleDebug`.
+B2. If it fails, read the actual error carefully (not just the last line —
+    Gradle often prints the real root cause a few lines above "A problem
+    occurred..."). Common categories you may hit, in rough likely order:
+      - Another dependency's own build.gradle using a removed/legacy API
+        (like the jcenter() one already fixed) — the fix is usually to
+        update or replace that specific dependency, not to patch Gradle
+        globally.
+      - A missing SDK/NDK component — install it via
+        `sdkmanager "package;id"` first; if that hangs/resets, use the
+        curl fallback described above.
+      - A Kotlin/AGP compatibility issue from a library's prebuilt AAR
+        expecting an older AGP — check if a newer version of that specific
+        library is available and whether upgrading it (not downgrading our
+        AGP/Gradle) resolves it.
+      - react-native-vector-icons' fonts.gradle or the manually-copied font
+        files under android/app/src/main/assets/fonts/ causing a resource
+        or duplicate-asset error — if so, read how fonts.gradle expects
+        fonts to be referenced before changing anything, since this was
+        wired manually earlier this session.
+B3. Fix one issue at a time, re-running `./gradlew assembleDebug` after each
+    fix to confirm progress before moving to the next error. Do not batch
+    multiple speculative fixes together without re-testing in between —
+    that makes it impossible to tell which fix actually mattered.
+B4. Once `BUILD SUCCESSFUL` is reached for assembleDebug, also run
+    `./gradlew lint` if it exists as a task (quick sanity check, not a hard
+    requirement — if it surfaces pre-existing lint issues unrelated to your
+    fixes, just note them, don't fix them).
+B5. Confirm the APK actually exists:
+    ls -la android/app/build/outputs/apk/debug/app-debug.apk
+
+POLICIES:
+- Prefer swapping/upgrading a specific broken dependency over patching
+  node_modules files directly or adding global Gradle workarounds — patches
+  to node_modules are silently lost on the next `npm install` and we want a
+  durable fix recorded in package.json instead.
+- If you do need to patch a node_modules file as a stopgap because no
+  maintained alternative exists, say so explicitly in your output log and
+  flag it as "needs a durable fix later" rather than presenting it as done.
+- Never edit compileSdkVersion/targetSdkVersion/minSdkVersion/ndkVersion/
+  buildToolsVersion in android/build.gradle to work around an error unless
+  you have confirmed (and state in your log) exactly why the pinned version
+  is actually wrong — these were deliberately matched to the installed SDK
+  components.
+- Don't touch src/, App.tsx, index.js, or anything outside android/ and
+  package.json/package-lock.json/node_modules unless a build error
+  genuinely traces back to application source (unlikely for this task).
+
+GATES (must pass before you report done):
+- `./gradlew assembleDebug` prints "BUILD SUCCESSFUL".
+- android/app/build/outputs/apk/debug/app-debug.apk exists and is non-trivial
+  size (> 1 MB, i.e. not an empty/broken artifact).
+- `npx tsc --noEmit -p tsconfig.json` (run from the Tracker root) still
+  passes clean — confirms no accidental source edits broke typechecking.
+- `git status` is not applicable (no git repo) — instead run `npm ls` from
+  Tracker root and make sure it doesn't report new "invalid"/"missing"
+  peer issues beyond what already existed (the 49 pre-existing high-severity
+  npm audit findings in jest/RN-CLI/metro tooling are known and NOT your
+  concern — don't try to fix those).
+
+OUTPUT: write a detailed, chronological log of every error hit and exactly
+how it was fixed (or if still unresolved, exactly what you tried and where
+it's stuck) to:
+  ongoing/android-build-green/01-build-to-green.md
+
+Include: every dependency version changed (before → after), every SDK
+component installed, every file edited (with the actual diff or final
+content of changed lines, not just "I edited X"), and the final
+`assembleDebug` output tail (last ~30 lines) as proof.
+
+REPLY ONLY with: <BUILD SUCCESSFUL: yes/no>, <APK size>, <number of distinct
+issues fixed>, <one-line verdict>. Do not paste file contents or logs into
+your reply — everything detailed goes in the output file.

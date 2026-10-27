@@ -1,0 +1,165 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full first, then
+05-sync-feedback-toast.md (the immediately prior phase). Do not re-derive or
+contradict either. Re-apply the permanent device-isolation rule from
+STATE.md's decisions log for any on-device verification (interact only with
+`com.tracker`, count-only checks for anything SMS-derived — this phase
+doesn't touch SMS data directly but the device may already have real
+SMS-derived transactions in its Pending list from Phase 4, so the same
+caution applies to anything you look at on Home/Pending screens: counts and
+layout only, never transcribe real transaction content).
+
+CONTEXT: the user sent real device screenshots (their own, shared
+intentionally) showing two concrete UI/UX problems to fix:
+
+1. On the Home screen, the "Good morning, Siraj" header text and the date
+   line render UNDER the Android status bar (clock/notification icons) —
+   clipped/overlapping, not readable. Confirmed root cause (verified by the
+   orchestrator): `src/features/home/screens/HomeScreen.tsx` has NO
+   `SafeAreaView` at all — its root is a plain `ScrollView` directly, so
+   content starts at the physical top edge of the screen under the status
+   bar. Every other top-level screen in this app
+   (`AccountsScreen.tsx`, `TransactionDetailScreen.tsx`,
+   `PermissionsScreen.tsx`, etc.) wraps its content in
+   `<SafeAreaView style={...} edges={['top', 'bottom']}>` (or just
+   `['top']` where a bottom tab bar already handles the bottom inset) from
+   `react-native-safe-area-context` — `HomeScreen.tsx` is the one screen
+   that's missing this.
+2. The onboarding Tour + Permissions flow currently shows on EVERY app
+   launch, not just the first one. Confirmed root cause: `RootNavigator.tsx`
+   hardcodes `initialRouteName="Onboarding"` unconditionally — there is no
+   persisted "has this user already completed onboarding" flag anywhere in
+   the app.
+
+ADDITIONAL GROUND FACTS (verified, exact current state):
+
+- `src/data/db/schema.ts` exports `SCHEMA_STATEMENTS: string[]`, an array
+  of `CREATE TABLE IF NOT EXISTS ...` DDL strings (accounts, categories,
+  transactions, audit_events), run once at startup via
+  `src/data/db/connection.ts`. Add ONE new table here:
+  ```sql
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  ```
+  This is the right place/pattern for a tiny persisted flag — do NOT
+  install `@react-native-async-storage/async-storage` or any other new
+  storage dependency, the app already has real SQLite, use it (consistent
+  with the whole "local-first, real persistence, no half-measures"
+  direction of this entire task).
+- `src/features/transactions/state/transactionsStore.ts` already has an
+  `isHydrated: boolean` + `hydrate(): Promise<void>` pattern (Phase 1) that
+  runs once at app startup before the UI renders real data. Extend this
+  SAME store (do not create a parallel store/context for this — it's one
+  boolean, not worth a new store) with:
+  ```ts
+  hasOnboarded: boolean;
+  completeOnboarding: () => Promise<void>;
+  ```
+  `hydrate()` should also read the `app_settings` row with
+  `key = 'has_onboarded'` (via a small new repository — see below) and set
+  `hasOnboarded` accordingly (missing row / value !== `'true'` → `false`).
+  `completeOnboarding()` writes `('has_onboarded', 'true')` to
+  `app_settings` (INSERT OR REPLACE) and sets `hasOnboarded: true` in the
+  store.
+- Create `src/data/repositories/settings.repository.ts` exporting a
+  `settingsRepository` with `getValue(key: string): Promise<string | null>`
+  and `setValue(key: string, value: string): Promise<void>`, using the
+  same `@op-engineering/op-sqlite` `db.execute(...)` pattern as
+  `transaction.repository.ts`/`account.repository.ts` (parameterized `?`
+  placeholders — no string interpolation into SQL).
+- `RootNavigator.tsx` currently renders unconditionally with
+  `initialRouteName="Onboarding"`. The app's root (`App.tsx` — check its
+  current content, it's also where `hydrate()` is presumably already
+  called per Phase 1) already has to wait for `isHydrated` before showing
+  real data somewhere in this app's startup flow — find and reuse that
+  exact existing gating pattern (check `App.tsx` and any existing loading/
+  splash state) rather than inventing a second one. Once hydration
+  (including the new `hasOnboarded` read) is complete, render
+  `RootNavigator` with `initialRouteName={hasOnboarded ? 'Tabs' :
+  'Onboarding'}` — pass this down as a prop since `initialRouteName` must
+  be known at first render (don't try to change it after mount, that's not
+  how React Navigation works — gate on hydration first, exactly like this
+  app already gates other UI on `isHydrated`).
+- `src/features/onboarding/screens/PermissionsScreen.tsx` has two exit
+  paths: `enterApp` (awaits `requestSmsPermission()` then
+  `navigation.reset(...)` to Tabs) and `enterAppManual` (skips the
+  permission request, same reset). BOTH paths must call
+  `useTransactionsStore.getState().completeOnboarding()` before/alongside
+  the `navigation.reset(...)` — either outcome (granted SMS access or not)
+  counts as "onboarding complete", so the Tour never shows again on
+  subsequent launches.
+
+TASKS:
+
+T1. Fix `HomeScreen.tsx`: wrap its existing return value in
+    `<SafeAreaView style={styles.screen} edges={['top']}>` (bottom edge is
+    already handled by the bottom tab bar, matching other tab screens —
+    check how `AccountsScreen.tsx`/`TransactionsScreen.tsx` handle this for
+    the exact convention to follow) from `react-native-safe-area-context`
+    (already installed and used elsewhere). Move/adjust the existing
+    `ScrollView` to be a child of the new `SafeAreaView` rather than the
+    root. Verify visually (device test, T4) that the header text clears
+    the status bar.
+
+T2. Add the `app_settings` table (schema.ts), `settings.repository.ts`, and
+    the `hasOnboarded`/`completeOnboarding` additions to
+    `transactionsStore.ts`'s `hydrate()` exactly as described above.
+
+T3. Wire `App.tsx`/`RootNavigator.tsx` so the Onboarding flow only shows
+    before the user has ever completed it, using the existing hydration-gate
+    pattern already in this app (read `App.tsx` first to find it — don't
+    invent a new loading screen if one already exists for this purpose).
+
+T4. Wire both `PermissionsScreen.tsx` exit paths to call
+    `completeOnboarding()`.
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass. Add a focused unit test for
+  `settingsRepository` (get/set round-trip) if there's an existing pattern
+  of repository unit tests to follow (check for one, e.g. account/
+  transaction repository tests) — light, match existing conventions.
+- `cd android && ./gradlew assembleDebug` — BUILD SUCCESSFUL.
+- On-device (force-stop, UNINSTALL first this time — `adb uninstall
+  com.tracker` — then reinstall fresh, because you need to prove the FIRST
+  launch after a clean install still shows Onboarding, and the SECOND
+  launch does not; an uninstall is the only clean way to reset the new
+  `app_settings` flag for this test):
+  1. Fresh install, launch. Confirm Onboarding/Tour shows (first launch,
+     expected).
+  2. Complete it via "Enter transactions manually instead" (simpler path,
+     avoids re-triggering the SMS permission dialog). Confirm you land on
+     Home, and confirm via `uiautomator dump` that the greeting header text
+     node's top bound is now clearly below the status bar (compare against
+     the screen height/status bar height — don't need pixel-perfect
+     verification, just confirm it's no longer at y≈0-30 overlapping where
+     the status bar icons are).
+  3. Force-stop (`adb shell am force-stop com.tracker`) and relaunch
+     (`am start`, NOT a fresh install this time). Confirm you land DIRECTLY
+     on Home — Onboarding/Tour must NOT appear this second time.
+  4. `adb logcat -d` — zero `FATAL EXCEPTION` / `Maximum update depth
+     exceeded` throughout.
+  - Per the permanent device-isolation rule: only interact with
+    `com.tracker`, and if the Home screen shows real SMS-derived pending
+    items from Phase 4, only note counts/layout, never transcribe content.
+
+SCOPE GUARDS:
+- Do not touch `src/features/sms-sync/*`, `syncSms.ts`, or the SMS
+  permission/parser files — unrelated to this phase.
+- Do not touch `OnboardingScreen.tsx`'s own tour-slide content or
+  `TourIllustration.tsx`.
+- No new npm dependencies (SQLite already covers this, per the ground
+  facts above — if you catch yourself about to `npm install` an async
+  storage library, stop, use the `app_settings` table instead).
+
+OUTPUT: write a chronological log (files changed, schema addition, exact
+gating logic used in App.tsx/RootNavigator, each gate's result, the
+install → onboard → relaunch → skip-onboarding device test results) to:
+  ongoing/realtime-persistence/06-ui-onboarding-polish.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified count>,
+<one-line verdict: header clears status bar + onboarding shows once then
+never again, confirmed on-device>. Do not paste file contents, logcat,
+uiautomator XML, or any app content.

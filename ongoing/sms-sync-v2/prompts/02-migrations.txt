@@ -1,0 +1,200 @@
+GROUND FACTS: read ongoing/sms-sync-v2/STATE.md in full first, then
+ongoing/sms-sync-v2/01-normalize-account-key.md (the phase this builds
+alongside — do NOT wire `normalizeAccountKey` into anything yet, that's a
+later phase; this phase is schema/types/repositories only). Also read
+ongoing/sms-sync-v2/skill/references/schema.md in full — it is the exact
+target shape for this phase.
+
+SCOPE FOR THIS PHASE — CODE ONLY, NO DEVICE WORK:
+This phase does NOT touch the connected device at all. No `adb`, no app
+install, no on-device verification. Gates stop at `tsc`/`eslint`/`jest`/
+`gradlew assembleDebug` (a local Gradle compile only — it does not install
+or run anything on the phone). A LATER phase (after the currently-running
+on-device QA work finishes) will do the real on-device verification that
+these migrations apply cleanly against the device's actual accumulated
+data. State this explicitly in your output report — do not claim on-device
+verification you did not do.
+
+ADDITIONAL GROUND FACTS (verified, exact current state):
+
+- `src/data/db/schema.ts` exports `SCHEMA_STATEMENTS: string[]`, a flat
+  array of `CREATE TABLE IF NOT EXISTS ...` strings. `src/data/db/
+  connection.ts`'s `runMigrations()` just loops over `SCHEMA_STATEMENTS`
+  and executes each one, every app start — this works today ONLY because
+  every existing statement is a `CREATE TABLE IF NOT EXISTS`, which is
+  naturally idempotent. **This phase needs `ALTER TABLE ... ADD COLUMN`
+  statements, which are NOT idempotent** (running one twice throws
+  "duplicate column name"). You must introduce real migration versioning
+  to make this safe. Do not skip this — it's the core of why this phase is
+  called "migrations", not just "schema".
+- `src/data/repositories/account.repository.ts` and `transaction.repository.ts`
+  both use a `COLUMNS` array + a `valuesFor(row)` helper + a mapper
+  (`src/data/mappers/account.mapper.ts` / `transaction.mapper.ts`) to
+  round-trip domain objects to/from SQL rows. Follow this exact existing
+  pattern for any new column — do not invent a different persistence
+  style.
+- `src/domain/accounts/account.types.ts`'s `Account` interface and
+  `src/domain/transactions/transaction.types.ts`'s `Transaction` interface
+  are the domain shapes these repositories produce/consume.
+- Repository tests in this codebase mock `getDatabase()` directly (see
+  `src/data/repositories/__tests__/settings.repository.test.ts` for the
+  exact pattern: `jest.mock('../../db/connection', () => ({ getDatabase:
+  jest.fn() }))`, then a per-test fake `db.execute` that pattern-matches
+  the SQL string). There is ALSO a dumb manual mock at
+  `__mocks__/@op-engineering/op-sqlite.js` used for app-level tests that
+  just returns empty results — it has no real SQL semantics (no real
+  table/column state), so it cannot itself prove idempotency; use the
+  settings.repository.test.ts-style per-test fake `db.execute` instead,
+  tracking which SQL strings were called and how many times, to prove your
+  migration-versioning logic only runs each ALTER once.
+
+TASKS:
+
+T1. **Migration versioning mechanism** — in `src/data/db/schema.ts` and
+    `connection.ts` (or a new `src/data/db/migrations.ts` if that's
+    cleaner — your call, but keep `runMigrations()` as the single
+    entrypoint everything else already calls):
+    - Add `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER
+      PRIMARY KEY, applied_at INTEGER NOT NULL)` to the existing
+      idempotent `SCHEMA_STATEMENTS` list (safe, no guard needed).
+    - Keep ALL existing `CREATE TABLE IF NOT EXISTS` / future `CREATE
+      INDEX IF NOT EXISTS` statements exactly as they are today, re-run
+      every start exactly as now — they're naturally idempotent, don't
+      wrap them in version-guarding, that would be unnecessary extra
+      complexity.
+    - Introduce a SEPARATE, ordered list of numbered, non-idempotent
+      migrations (the ALTER TABLE statements from T3 below), each run
+      inside its own `db.transaction`, each checked against
+      `schema_migrations` first (`SELECT 1 FROM schema_migrations WHERE
+      version = ?`) and skipped if already applied; on successful
+      application, insert a row recording that version + `Date.now()`.
+    - This must work correctly for devices that already have the
+      pre-existing tables/data (every device this session has been
+      testing on) — `schema_migrations` will be empty the first time this
+      runs on such a device, so migration 1 (or whatever number you start
+      numbered migrations at) runs for the first time then, which is
+      correct: the ALTER TABLE columns genuinely don't exist yet on any
+      device, versioned or not.
+
+T2. **New tables** (add directly to the existing idempotent
+    `SCHEMA_STATEMENTS` list, no version-guard needed — `CREATE TABLE IF
+    NOT EXISTS` is already safe): `account_suggestion_decisions`,
+    `account_suggestion_candidates`, `sms_sync_runs` — exact DDL from
+    `skill/references/schema.md`. Column names may be adapted to this
+    repo's existing snake_case convention if schema.md's names already
+    match it (they do — keep them as-is).
+
+T3. **New columns via versioned migrations** (T1's non-idempotent path):
+    - `accounts`: `balance_anchor_minor INTEGER`, `balance_anchor_at
+      INTEGER`, `deleted_at INTEGER` (all nullable, no default — NULL
+      means "not set"/"active" per the skill).
+    - `transactions`: `bulk_batch_id TEXT` (nullable).
+
+T4. **New indexes** (add to the idempotent `SCHEMA_STATEMENTS` list —
+    `CREATE INDEX IF NOT EXISTS` is safe): `ix_tx_status_date ON
+    transactions(status, occurred_at)`, `ix_tx_account_date ON
+    transactions(account_id, occurred_at)`.
+
+T5. **Unique index with explicit duplicate handling** —
+    `ux_tx_source_hash ON transactions(source_reference_hash)`. Per
+    schema.md: "If the unique index fails to create because duplicates
+    already exist, stop and report — do not delete rows to make it pass."
+    Implement this as its own guarded step (can be part of T1's versioned
+    migration list): attempt `CREATE UNIQUE INDEX IF NOT EXISTS
+    ux_tx_source_hash ON transactions(source_reference_hash)`; if it
+    throws (duplicate values exist), catch the error, do NOT swallow it
+    silently and do NOT delete/modify any rows — instead leave that one
+    migration unrecorded in `schema_migrations` (so it retries on the next
+    app start once the user/a later phase resolves the duplicates) and
+    surface a clear thrown/logged error so this is visible, not silently
+    ignored forever. Document this exact behavior in your output report.
+    Note: `source_reference_hash` is nullable (manual transactions have
+    `NULL`) — SQLite's UNIQUE index treats multiple NULLs as NOT
+    conflicting with each other (standard SQL NULL semantics), so this
+    should only ever fail if two NON-null hashes collide, which would
+    indicate a real dedup bug if it ever happens — don't downgrade this
+    index to a partial/filtered one to work around a failure; if it fails,
+    that's useful signal, report it.
+
+T6. **Domain types** — add the new nullable fields to `Account`
+    (`balanceAnchorMinor: number | null`, `balanceAnchorAt: string | null`,
+    `deletedAt: string | null`) and `Transaction` (`bulkBatchId: string |
+    null`) in their respective `*.types.ts` files. Use the same
+    ISO-string-for-dates convention already used everywhere else in this
+    codebase for `*At` fields (even though the DB column is `INTEGER`
+    epoch ms per schema.md — follow schema.md's column TYPE in the DDL,
+    but convert to/from ISO string at the mapper boundary, exactly how
+    this codebase already handles every other `*_at` column, e.g. check
+    how `occurred_at`/`created_at` are mapped in `transaction.mapper.ts`
+    and mirror that exact pattern for the new `balance_anchor_at` column
+    so it's consistent, not a special case).
+
+T7. **Mappers** — update `account.mapper.ts`/`transaction.mapper.ts` to
+    round-trip the new fields (nullable, default `null` when absent from a
+    row — for backward compatibility with any row inserted before this
+    migration ran, though in practice every row will have the column once
+    the ALTER runs since SQLite fills new columns with NULL for all
+    existing rows automatically).
+
+T8. **Repository additions**:
+    - `accountRepository`: add `listActiveAccounts(): Promise<Account[]>`
+      (`WHERE deleted_at IS NULL`) and `listAllAccounts(): Promise<
+      Account[]>` (no filter — identical to today's `listAll` SQL). Keep
+      the existing `listAll` method too for now (do NOT remove it or
+      change any existing call site this phase — that wiring is a later
+      phase's job, per the skill's "Repository rules": screens/pickers
+      should eventually call `listActiveAccounts`, transaction labeling
+      should eventually call `listAllAccounts`, but since `deleted_at` is
+      always NULL right now — nothing soft-deletes anything yet — this
+      distinction has zero behavioral effect today and wiring it
+      prematurely would just be unexercised code).
+    - `transactionRepository`: update its `COLUMNS` array to include
+      `bulk_batch_id` so `create`/`update` round-trip it (default `null`
+      when not provided).
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass. Add tests:
+  - A migration-versioning test (mocking `getDatabase()` per the
+    settings.repository.test.ts pattern) proving: calling `runMigrations()`
+    twice issues each ALTER TABLE statement exactly ONCE (track call counts
+    on the fake `db.execute`), and that `schema_migrations` gets a row
+    recorded per applied version.
+  - A test proving the `ux_tx_source_hash` creation failure path does NOT
+    delete/modify rows and does NOT silently swallow the error — assert it
+    throws or surfaces clearly, and that no destructive SQL (`DELETE`,
+    `DROP`) is ever issued by your migration code under this condition.
+  - `accountRepository.listActiveAccounts`/`listAllAccounts` tests (mock
+    `db.execute`, assert the right `WHERE` clause is/isn't present).
+  - Mapper round-trip tests for the new nullable fields on `Account`/
+    `Transaction` (present and absent/null cases).
+- `cd android && ./gradlew assembleDebug` — BUILD SUCCESSFUL. This is a
+  LOCAL COMPILE ONLY — do not install the APK, do not touch `adb`, do not
+  touch the connected device in any way this phase.
+
+SCOPE GUARDS:
+- Do NOT wire `normalizeAccountKey` (Phase 1) into anything yet.
+- Do NOT change `calculateBalance` (that's a later phase, D7).
+- Do NOT change any screen/UI code or any existing call site of `listAll`/
+  `accountRepository`/`transactionRepository` — this phase only ADDS
+  capability, it does not change current app behavior at all. The app
+  must behave identically to before this phase from a user's perspective
+  (verified later, on-device, in a subsequent phase).
+- Do NOT touch the device. No `adb`. No app install. No on-device gate.
+- Do NOT implement D5 (suggestion decision resolution), D6 (hidden
+  accounts), D8 (bulk approve), or D9 (periods) logic — schema/types/
+  repository plumbing only, per this phase's exact scope in the build
+  order.
+
+OUTPUT: write a chronological log (the versioning mechanism's exact design,
+every new table/column/index, the `ux_tx_source_hash` failure-handling
+behavior, every gate's actual result) to:
+  ongoing/sms-sync-v2/02-migrations.md
+Explicitly state near the top: "No device work was performed this phase;
+on-device migration verification against real accumulated data is deferred
+to a later phase."
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified
+count>, <one-line confirmation that re-running the migration logic twice in
+a test does not re-issue any ALTER TABLE statement>.

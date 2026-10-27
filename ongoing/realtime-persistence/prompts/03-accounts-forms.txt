@@ -1,0 +1,178 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full FIRST, then
+read ongoing/realtime-persistence/01-persistence-foundation.md and
+ongoing/realtime-persistence/02-forms-add-edit.md (Phase 1/2 reports — this
+phase builds on both). Do not re-derive or contradict any of them.
+
+ADDITIONAL GROUND FACTS specific to this phase (verified by the orchestrator,
+exact current file contents, not guesses):
+
+- `src/domain/accounts/account.types.ts` (do not redesign, build on top):
+  ```ts
+  export type AccountType = 'bank' | 'cash' | 'credit_card' | 'upi' | 'other';
+  export interface Account {
+    id: string;
+    name: string;
+    type: AccountType;
+    lastFour: string | null;
+    openingBalanceMinor: number;
+    currency: 'INR';
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }
+  ```
+- `src/features/transactions/state/transactionsStore.ts` already exposes
+  `addAccount: (input: CreateAccountInput) => Promise<void>` (implemented in
+  Phase 1, backed by real SQLite via `accountRepository.create`).
+  `CreateAccountInput = Omit<Account, 'id' | 'createdAt' | 'updatedAt'>` is
+  exported from `src/data/repositories/account.repository.ts`. Call
+  `useTransactionsStore.getState().addAccount(input)` (or via the hook) on
+  form submit — do not duplicate persistence logic, the repository/store
+  already handles the SQLite insert and refreshing `state.accounts`.
+- The two exact dead buttons to wire, in
+  `src/features/accounts/screens/AccountsScreen.tsx`:
+  - Line ~52, inside the dark balance Card: `<Button label="Add Account"
+    variant="brand" onPress={() => {}} />`
+  - Line ~92, bottom CTA: `<Button label="Add New Money Source"
+    variant="primary" onPress={() => {}} icon={<Icon name="plus" size={18}
+    color={colors.onObsidian} />} />`
+  Both should navigate to the SAME new `AddAccountScreen` — there is no
+  product difference between the two entry points, they are just two
+  surfaces that both start the same "add a money source" flow. Do not build
+  two different screens or forms.
+- Follow the Phase 2 pattern exactly: a dumb reusable form component +
+  zod schema (see `src/features/transactions/components/TransactionForm.tsx`
+  and its sibling `transactionForm.schema.ts` as the reference pattern) + a
+  screen that owns submit logic and navigation. Use `react-hook-form` +
+  `zod` + `@hookform/resolvers/zod` (all already installed, no new
+  dependency needed this phase).
+- Money: `openingBalanceMinor` is integer paise. The form takes a rupee
+  string input (e.g. "1500.00", default "0") and converts via
+  `Math.round(parseFloat(value) * 100)` only at submit — same boundary
+  pattern as Phase 2's amount field. Validate it's a valid non-negative
+  number (an opening balance of 0 is valid and common — a fresh empty
+  account — do NOT require > 0 the way Phase 2's transaction amount did).
+- `lastFour` is optional (`string | null`) — a cash account or "other" type
+  has no card/account number. Treat the field as optional free text in the
+  form (no numeric-only enforcement needed, some banks show alphanumeric
+  references), empty string submits as `null`.
+- `currency` is always `'INR'` — do not render a picker for it, hardcode it
+  in the submitted input.
+- `isActive` is always `true` for a newly created account — do not expose
+  this field in the form.
+- `type` picker: use the shared `Chip` component (see Phase 2's type/payment
+  method pickers in `TransactionForm.tsx` for the exact pattern) with these
+  5 options and human labels: `bank` → "Bank Account", `cash` → "Cash",
+  `credit_card` → "Credit Card", `upi` → "UPI", `other` → "Other". Reuse
+  `AccountsScreen.tsx`'s existing `ACCOUNT_ICON`/`GROUP_LABEL` records if
+  useful for consistent icon/label choices, but don't feel bound to copy
+  them exactly if the form needs simpler labels.
+- Navigation: `src/app/navigation/routes.ts` has `RootStackParamList` with
+  `Tabs`, `TransactionDetail`, `AddRecord`, `EditTransaction`, `Onboarding`,
+  `Permissions` (the last two added across this session; `AddRecord`/
+  `EditTransaction` added in Phase 2). `RootNavigator.tsx` registers each as
+  a `Stack.Screen`. Add one new route: `AddAccount: undefined`.
+- Give the new screen the same minimal custom header pattern as
+  `AddRecordScreen.tsx`/`EditTransactionScreen.tsx` (back arrow + title) —
+  no native-stack header, consistent with the rest of the app.
+- Reuse `src/shared/ui/*` (`Button`, `Card`, `Chip`) and theme tokens
+  (`src/theme`) — match existing screens' look, no new ad-hoc styling.
+
+TASKS:
+
+T1. Schema + form — create
+    `src/features/accounts/components/accountForm.schema.ts` (zod schema,
+    `AccountFormValues`/`AccountFormInitialValues` types mirroring Phase 2's
+    `transactionForm.schema.ts` naming) and
+    `src/features/accounts/components/AccountForm.tsx` (dumb reusable form,
+    `onSubmit(values)` + optional `initialValues` + `submitting` props, same
+    shape as `TransactionForm.tsx`). Fields: `name` (text, required,
+    non-empty), `type` (Chip picker, required, default `'bank'`), `lastFour`
+    (optional text), `openingBalance` (text input, rupees, default "0",
+    validated non-negative number).
+
+T2. New screen `src/features/accounts/screens/AddAccountScreen.tsx`: renders
+    `AccountForm` with no initial values. On submit, build
+    `CreateAccountInput` (`name`, `type`, `lastFour: lastFour || null`,
+    `openingBalanceMinor` from the converted rupee string, `currency:
+    'INR'`, `isActive: true`) and call
+    `useTransactionsStore.getState().addAccount(input)`, then
+    `navigation.goBack()` so the user lands back on Accounts and sees the
+    new account/updated balance immediately (the store's `addAccount`
+    already refreshes `state.accounts`, confirm this still holds — if it
+    doesn't, that's a Phase 1 regression to fix, not a new pattern to
+    invent).
+
+T3. Navigation wiring:
+    - Add `AddAccount: undefined` to `RootStackParamList` in `routes.ts`.
+    - Register it as a `Stack.Screen` in `RootNavigator.tsx`.
+    - `AccountsScreen.tsx`: wire BOTH the "Add Account" button and the "Add
+      New Money Source" button to `navigation.navigate('AddAccount')`. Check
+      how `AccountsScreen.tsx` currently gets its navigation prop (it may
+      not use `useNavigation` yet — add it following the same typed pattern
+      as `HomeScreen.tsx`/other screens in this codebase).
+
+GATES (all must pass before you report done):
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests still pass. Add a focused unit test or two
+  for the new zod schema (name required, opening balance rejects negative/
+  non-numeric but accepts 0 and decimals) under an appropriate `__tests__`
+  folder — light, not exhaustive.
+- `cd android && ./gradlew assembleDebug` (JAVA_HOME exported per STATE.md)
+  — BUILD SUCCESSFUL. Pure JS/TSX change, no native code, should be a fast
+  incremental build.
+- On the connected device (force-stop, install, launch fresh per the
+  pattern in `01-persistence-foundation.md`): perform a REAL end-to-end
+  manual test, not just a static check.
+  1. Before this phase, the on-device database should contain the one test
+     account Phase 2 created for its own verification (per
+     `02-forms-add-edit.md` — read it to find out exactly what that test
+     account's name/type was, so you can recognize it and NOT confuse it
+     with a new one you create this phase).
+  2. Navigate to the Accounts tab, tap "Add Account" (find exact bounds via
+     fresh `uiautomator dump`, do not reuse stale coordinates across screen
+     transitions — re-dump before every tap). Fill the form (name, pick a
+     type, optionally lastFour, an opening balance e.g. "5000.00"), submit.
+  3. Confirm via `uiautomator dump` (not screenshot) that: you're back on
+     Accounts, the new account now appears in the list with the correct
+     name/type, and the dark balance Card total correctly reflects the sum
+     including the new account's opening balance.
+  4. Repeat via the bottom "Add New Money Source" button with a second,
+     different test account (e.g. a `cash` type with opening balance "0")
+     to prove both entry points genuinely reach the same working flow —
+     confirm it too appears correctly.
+  5. Go to Add Record (Phase 2's screen) and confirm the new account(s) now
+     appear as selectable options in its account picker — this proves the
+     store's `accounts` state is shared/live across features, not a stale
+     per-screen copy.
+  - Throughout: `adb logcat -d` must show zero `FATAL EXCEPTION` and zero
+    `Maximum update depth exceeded`.
+  - Respect STATE.md's privacy rules: no screenshots unless you've
+    confirmed `com.tracker` is genuinely focused, prefer text-based
+    `uiautomator dump` over pixels wherever sufficient. Be aware of the
+    gesture-nav exclusion zone documented in `02-forms-add-edit.md` (bottom
+    ~100-150px of screen can eat taps) — scroll content up first if a
+    button you need to tap sits down there.
+
+SCOPE GUARDS:
+- Do not wire `onSyncSms` (Phase 4, next) — leave it as `() => {}` still.
+- Do not add account editing/deletion — only creation this phase. The
+  Accounts screen's existing account cards remain read-only/non-interactive
+  beyond what already exists.
+- Do not modify the database schema.
+- Do not modify `AndroidManifest.xml`.
+- Don't touch `src/features/onboarding/` or `TourIllustration.tsx`.
+- No new npm dependencies this phase — everything needed is already
+  installed.
+
+OUTPUT: write a detailed chronological log (every file created/changed, every
+gate's actual output, and the full step-by-step on-device manual test
+results including both entry points) to:
+  ongoing/realtime-persistence/03-accounts-forms.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified count>,
+<one-line verdict on whether both "Add Account" and "Add New Money Source"
+genuinely create real accounts end-to-end on the real device and show up
+correctly everywhere (Accounts balance, Add Record picker)>. Do not paste
+file contents, logcat, or uiautomator XML into your reply.

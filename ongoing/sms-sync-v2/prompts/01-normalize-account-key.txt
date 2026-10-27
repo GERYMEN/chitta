@@ -1,0 +1,157 @@
+GROUND FACTS: read ongoing/sms-sync-v2/STATE.md in full first, then
+ongoing/sms-sync-v2/skill/SKILL.md and ongoing/sms-sync-v2/skill/references/
+schema.md in full. Do NOT read or touch the device for this phase — it is
+pure TypeScript + Jest, no `adb`, no app install, no native code. (A
+different phase is concurrently doing on-device QA work; this phase must
+stay entirely off-device to avoid any conflict.)
+
+This phase implements ONLY decision D4 (normalized, versioned account key)
+from the skill — step 1 of its 9-step build order. Do not implement D1-D3 or
+D5+ yet; those are later phases. Do not touch `smsSyncLogic.ts`'s
+`resolveAccountIdForSms`/`groupUnmatchedIntoSuggestions` or `smsParser.ts`'s
+existing `extractBankName`/`extractAccountKind`/`extractLastFour` — this
+phase adds a NEW, separate, better function alongside them. A LATER phase
+will wire it in to replace the old inline logic; wiring it in is explicitly
+OUT OF SCOPE here, to keep this phase small and independently testable.
+
+ADDITIONAL GROUND FACTS (verified, exact current state):
+
+- `src/features/sms-sync/smsParser.ts` currently has inline, ad-hoc
+  `extractBankName`/`extractAccountKind`/`extractLastFour` functions (not
+  exported) used by `parseSmsMessage`. These have known gaps already
+  confirmed this session: `extractBankName` only catches a bank name
+  adjacent to the literal word "Bank" (e.g. "HDFC Bank", "-Federal Bank")
+  and misses phrasing like "SBI Card ending 5368" or "SBI A/C 5368" (no
+  word "Bank" nearby), falling through to the literal string 'Unknown
+  Bank'. D4 is the real fix for this class of bug — via a bank ALIAS MAP
+  keyed on sender-ID-style tokens and common bank name variants, not a
+  single generic regex.
+- `src/features/sms-sync/smsSyncLogic.ts` has `SmsAccountMatch = Pick<
+  ParsedSmsTransaction, 'accountKind' | 'lastFour'>` and
+  `resolveAccountIdForSms` doing a direct `account.type ===
+  candidate.accountKind && account.lastFour === candidate.lastFour` check.
+  D4's normalized key is meant to eventually replace the raw `accountKind`+
+  `lastFour` pair this compares — but that wiring is a later phase.
+- `src/domain/accounts/account.types.ts`'s `AccountType = 'bank' | 'cash' |
+  'credit_card' | 'upi' | 'other'` — reuse this exact type, do not invent a
+  new one.
+- Schema target (from `skill/references/schema.md`, for CONTEXT only — do
+  NOT create any migration or table this phase, that's step 2):
+  `account_suggestion_decisions`/`account_suggestion_candidates` both have
+  a composite key `(bank_canonical, account_kind, last_four)` with
+  `last_four TEXT NOT NULL DEFAULT ''` (empty string sentinel for
+  "unidentified account", never NULL — SQLite treats NULLs in a key as
+  distinct from each other, which would break matching). `
+  normalizer_version INTEGER NOT NULL` is stored alongside every row so a
+  future version bump can re-canonicalize existing stored keys via a
+  migration.
+
+TASK — create `src/features/sms-sync/normalizeAccountKey.ts`:
+
+Export:
+```ts
+export const ACCOUNT_KEY_NORMALIZER_VERSION = 1; // bump + migrate on any future change to the logic below
+
+export interface AccountKey {
+  bankCanonical: string;   // e.g. 'hdfc', 'federal', 'sbi', 'unknown'
+  accountKind: AccountType; // 'bank' | 'credit_card' | 'upi' (never cash/other from SMS)
+  lastFour: string;        // '' sentinel for unidentified, NEVER null/undefined
+  normalizerVersion: number; // always ACCOUNT_KEY_NORMALIZER_VERSION
+}
+
+export function normalizeAccountKey(body: string): AccountKey;
+
+/** Stable string form for use as a Map key / DB composite key equality check. */
+export function accountKeyToString(key: AccountKey): string; // e.g. `${bankCanonical}:${accountKind}:${lastFour}`
+```
+
+Implementation requirements:
+
+1. **Bank alias map** — a `Record<string, string>` (or similar) mapping many
+   real-world variants to one canonical lowercase bank id. At minimum cover
+   these aliases (case-insensitive matching against the message body),
+   each mapping to its canonical id:
+   - `hdfc` ← "HDFC", "HDFC Bank", "HDFCBK" (a sender-ID-style token that
+     can appear standalone in some message formats)
+   - `federal` ← "Federal Bank", "Federal", "FEDBNK"
+   - `sbi` ← "SBI", "State Bank of India", "SBI Card", "SBICRD" — THIS IS
+     THE SPECIFIC CASE THAT WAS BROKEN BEFORE: "SBI Card ending 5368" and
+     "SBI A/C 5368" must both resolve to canonical `'sbi'`, not fall
+     through to unknown. Check for the alias token "SBI" on its own
+     (word-boundary, case-insensitive) BEFORE requiring an adjacent word
+     "Bank" — that is the structural fix for the bug.
+   - `icici` ← "ICICI", "ICICI Bank", "ICICIB"
+   - `axis` ← "Axis", "Axis Bank", "AXISBK"
+   - `kotak` ← "Kotak", "Kotak Mahindra", "KOTAKB"
+   - `pnb` ← "PNB", "Punjab National Bank"
+   - `boi` ← "Bank of India", "BOI"
+   - `canara` ← "Canara Bank", "Canara"
+   - `union` ← "Union Bank", "Union Bank of India"
+   - `yes` ← "Yes Bank", "YESBNK"
+   - `idfc` ← "IDFC", "IDFC First", "IDFC FIRST Bank"
+   You do not need every Indian bank — this is a v1 alias map, extensible
+   later. Document in the file's own comment that it's not exhaustive and
+   new banks fall back to `'unknown'` (not a crash, not a wrong bank).
+   Check the MOST SPECIFIC alias match first (e.g. "IDFC First Bank"
+   before a bare "IDFC" fallback) so longer/more specific tokens win.
+   No match at all → `bankCanonical: 'unknown'`.
+2. **accountKind** — reuse the same precedence already proven correct in
+   `smsParser.ts` (credit card wording wins over bank/account wording,
+   which wins over a bare UPI fallback) — you may literally copy those two
+   regexes (`CREDIT_CARD_PATTERN`, `BANK_ACCOUNT_PATTERN`) into this new
+   file since this phase doesn't touch `smsParser.ts`, or factor them into
+   a small shared file if you prefer — your call, just don't diverge the
+   actual logic between the two without a reason.
+3. **lastFour extraction across varied formats** — must correctly extract
+   the last 4 digits from ALL of these real-world formats (test every one):
+   `XX1859`, `*1859`, `X1859`, `XXXX1859`, `a/c ending 1859`, `a/c X1859`,
+   `card ending 8123`, `A/C *7302`, `Acct XX1234`. Reuse/extend the
+   existing `LAST_FOUR_PATTERN` idea from `smsParser.ts` if it already
+   covers most of these — verify with tests, don't assume. Return `''`
+   (empty string, the sentinel — NEVER `null`/`undefined`) when truly
+   unextractable (a bare UPI-only message with no account reference at
+   all).
+4. **Determinism**: the SAME input body must always produce the exact same
+   `AccountKey` (pure function, no randomness, no Date.now()).
+5. `accountKeyToString` must produce a string suitable as both a JS `Map`
+   key (for in-memory grouping, replacing `smsSyncLogic.ts`'s current raw
+   template-string grouping key in a LATER phase) and conceptually match
+   the DB composite key's semantics (bank_canonical, account_kind,
+   last_four) in that exact order.
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass. Add a thorough test file
+  `src/features/sms-sync/__tests__/normalizeAccountKey.test.ts` (FABRICATED
+  synthetic SMS strings only, never real data) covering:
+  - Each bank alias from the list above, in at least 2 different real-world
+    phrasings per bank where plausible (e.g. both "SBI Card ending 5368"
+    and "SBI A/C 5368" must both → `bankCanonical: 'sbi'`).
+  - The specific previously-broken SBI case explicitly, by name in the
+    test description, so a future regression is obvious in CI output.
+  - Every lastFour format listed in requirement 3, each as its own test
+    case.
+  - accountKind precedence (credit card wins over bank wording; UPI
+    fallback when neither matches).
+  - No match at all → `bankCanonical: 'unknown'`, `lastFour: ''` (not
+    null), `accountKind` still resolved independently.
+  - `normalizerVersion` is always `ACCOUNT_KEY_NORMALIZER_VERSION` on every
+    returned key.
+  - `accountKeyToString` round-trips distinctly for different keys and
+    identically for the same key called twice (determinism).
+  - At least one test proving two DIFFERENT last-four formats for the
+    SAME underlying account number produce the SAME `AccountKey` (e.g.
+    "ending 1859" and "X1859" and "*1859" all → `lastFour: '1859'`).
+
+This phase does NOT need `cd android && ./gradlew assembleDebug` or any
+on-device step — it's pure TS/Jest, explicitly out of scope per the top of
+this prompt. Do not run any `adb` command.
+
+OUTPUT: write a short log (the alias map's exact coverage, the lastFour
+regex used and which formats it handles, test results) to:
+  ongoing/sms-sync-v2/01-normalize-account-key.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created count>,
+<one-line confirmation that the previously-broken SBI case now resolves to
+bankCanonical 'sbi' instead of 'unknown', with a test proving it>.

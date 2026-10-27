@@ -26,6 +26,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fonts/PlusJakartaSans-Regular.ttf</string>
+		<string>Fonts/PlusJakartaSans-Medium.ttf</string>
+		<string>Fonts/PlusJakartaSans-SemiBold.ttf</string>
+		<string>Fonts/PlusJakartaSans-Bold.ttf</string>
+		<string>Fonts/PlusJakartaSans-ExtraBold.ttf</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->

@@ -1,0 +1,158 @@
+CONTEXT: this continues an interrupted Phase 4 (sms-sync) run. The previous
+run crashed mid-verification (a sandboxed shell command was rejected) before
+it could run the static gates or write its report. Before you do ANYTHING
+else, read ongoing/realtime-persistence/STATE.md in full, then
+01/02/03-*.md. Do NOT redo T1-T6 from the original phase — the code already
+exists, verified present by the orchestrator:
+  - android/app/src/main/java/com/tracker/SmsReaderModule.kt (created)
+  - android/app/src/main/java/com/tracker/SmsReaderPackage.kt (created)
+  - android/app/src/main/AndroidManifest.xml: READ_SMS permission added
+  - MainApplication.kt: `add(SmsReaderPackage())` registered
+  - src/native/android/sms/smsReader.ts (created)
+  - src/native/android/permissions/smsPermission.ts (created)
+  - src/features/sms-sync/{syncSms.ts, smsSyncLogic.ts, smsParser.ts} (created)
+  - src/features/sms-sync/__tests__/{smsParser.test.ts, smsSyncLogic.test.ts} (created)
+  - src/features/home/screens/HomeScreen.tsx: `onSyncSms` wired to a real
+    `handleSyncSms` calling `syncSms()` with Alert-based result/error handling
+  - src/features/onboarding/screens/PermissionsScreen.tsx: `enterApp` now
+    calls `requestSmsPermission()`, `enterAppManual` skips it
+Your job this run is ONLY to: (1) review that existing code is sound, fixing
+genuine bugs if you find any, (2) run the gates that were never confirmed,
+(3) do a MUCH more constrained on-device verification than before (see the
+new hard rule below — this is critical), (4) write the report.
+
+============================================================
+CRITICAL — READ THIS BEFORE TOUCHING THE DEVICE
+============================================================
+The previous run of this phase committed a real privacy violation: while
+verifying Sync SMS, it navigated OUT of the Tracker app into the device's
+actual stock Messages app (`com.google.android.apps.messaging`) and ran
+`uiautomator dump` there, capturing real message text — real sender bank
+names, real UPI transfer amounts, and real counterparty names of the
+device owner's actual contacts — into its own command output. That output
+became part of a log file the orchestrator had to discover and delete. This
+must never happen again, and the rule now has zero tolerance, stated
+explicitly:
+
+- You may interact with EXACTLY ONE app on this device during verification:
+  `com.tracker`. Before every single `adb shell input tap`/`swipe`/
+  `uiautomator dump`, you MUST first confirm via
+  `adb shell dumpsys activity activities | grep topResumedActivity` that
+  `com.tracker/.MainActivity` is the resumed activity. If it ever is not —
+  for ANY reason, including "just to check something" — STOP immediately,
+  do not dump/inspect/screenshot whatever app is now foreground, and use
+  `adb shell input keyevent KEYCODE_BACK` (or `am start -n
+  com.tracker/.MainActivity`) to return to Tracker before doing anything
+  else.
+- NEVER open, launch, or interact with the Messages/SMS app, Settings, or
+  any other app on this device, for any reason, including "to verify the
+  parser's accuracy against the real message" or "to see what triggered a
+  permission dialog." The ONLY exception is the Android system permission
+  grant dialog itself (`com.android.permissioncontroller` or OEM
+  equivalent) that appears directly on top of Tracker when
+  `requestSmsPermission()` fires — that is expected and fine to dump/tap
+  "Allow" on, same as before.
+- NEVER run any `adb shell cat`, `run-as ... cat databases/...`, `sqlite3`,
+  or any other command that reads the raw contents of `tracker.db` or any
+  device file that could contain SMS-derived data. If you need to know
+  whether transactions were created, read the COUNT shown in Tracker's own
+  UI (the Sync result `Alert`'s numbers, or the Pending tab's badge number)
+  — never the underlying data.
+- When reading ANY `uiautomator dump` of a Tracker screen that lists
+  transactions (Pending, Transactions, Home recents, Transaction Detail),
+  you may look at it ONLY to count list items or confirm a screen loaded —
+  extract and report COUNTS ONLY (e.g. "Pending badge shows N", "list has M
+  rows"). Do NOT transcribe, quote, or otherwise include in your report or
+  reply any merchant name, amount, account number, or note text that
+  originated from a real SMS-derived transaction. (Phase 2/3's own
+  synthetic test accounts/transactions that YOU fabricated — "Test
+  Account", "HDFC Salary Account", "Cash Wallet", "EditedMerchant" — are
+  fine to reference by name since they are not real user data; anything
+  else now in the Pending/Transactions list after a real Sync SMS is real
+  user data and must be treated as off-limits to quote.)
+- If you are ever unsure whether something you are about to look at,
+  capture, or write down is real personal data vs. your own fabricated test
+  data, treat it as real and do not capture it. Ask fewer questions of the
+  device, not more — a successful verification here is boring and
+  numbers-only.
+
+TASKS THIS RUN:
+
+B1. Run the deferred static gates (these were never confirmed last run):
+    - `npx tsc --noEmit -p tsconfig.json` — must be clean. Fix any real type
+      errors in the Phase 4 files listed above if present.
+    - `npx eslint src --ext .ts,.tsx` — no new errors.
+    - `npx jest` — all tests pass, including the new
+      `smsParser.test.ts`/`smsSyncLogic.test.ts`. If any fail, fix the
+      actual bug (in the parser/sync logic or the test, whichever is
+      wrong) — do not weaken a correct test to make it pass.
+    - `cd android && ./gradlew assembleDebug` (JAVA_HOME + PATH exported
+      per STATE.md) — BUILD SUCCESSFUL.
+
+B2. Quick code review of the 5 new TS/Kotlin files + the two edited screens
+    for correctness against the original phase spec (re-read
+    `ongoing/realtime-persistence/prompts/04-sms-sync.txt` if it's still on
+    disk for the exact spec) — specifically confirm: `sourceReferenceHash`
+    never incorporates the sender address, `sanitizedPreview` is built only
+    from parsed fields (grep the parser file yourself to confirm — do not
+    trust your memory of what the previous run did), dedup checks
+    `sourceReferenceHash` against `store.transactions` before inserting.
+    Fix anything that doesn't match.
+
+B3. On-device verification — constrained per the CRITICAL rule above:
+    1. `adb shell dumpsys activity activities | grep topResumedActivity` —
+       confirm current state before doing anything.
+    2. If Tracker is not already installed with this run's code, rebuild/
+       install/launch fresh per the usual pattern (force-stop, install,
+       launch), re-confirm `com.tracker/.MainActivity` is resumed.
+    3. Note the CURRENT Pending tab badge count (a number only) before
+       doing anything else this run — the device may already have pending
+       items from the previous run's partial sync plus Phase 2/3 test data.
+    4. Navigate to Home (confirm foreground stays `com.tracker` throughout
+       — re-check after every navigation), tap "Sync SMS".
+    5. If a system permission dialog appears (first-time) tap "Allow" —
+       otherwise it should proceed directly (permission likely already
+       granted from the previous run).
+    6. Read the result `Alert`'s scanned/created/skipped numbers via
+       `uiautomator dump` filtered to just that dialog's text nodes — report
+       ONLY these three numbers.
+    7. Check the Pending badge count again — confirm it increased by
+       exactly the `created` count from step 6 (or didn't change if
+       `created` was 0).
+    8. Tap "Sync SMS" a SECOND time immediately. Confirm via the new
+       Alert's numbers that `created` is now 0 or much lower than the first
+       run for the same underlying messages (dedup proof) — report numbers
+       only.
+    9. `adb logcat -d` grep for `FATAL EXCEPTION`/`Maximum update depth
+       exceeded` — must be zero matches throughout.
+    10. Return device to a clean state when done:
+        `adb shell am force-stop com.tracker`.
+    Do NOT open the Pending tab's individual transaction rows to inspect
+    their content, do NOT open Transaction Detail on any SMS-sourced item,
+    do NOT dump the Accounts screen's per-account list this run beyond a
+    plain foreground-confirmation dump — there is no need, this phase is
+    about Sync SMS working and deduping, which the badge-count delta and
+    Alert numbers already prove.
+
+GATES:
+- All 4 static gates in B1 pass.
+- On-device: zero crashes, Sync SMS genuinely requests/uses the real
+  permission, genuinely reads the real inbox (proven by `created` > 0 on
+  first tap, OR a clear, honest explanation in your report if `created`
+  was 0 and why — e.g. "no accounts matched" or "all messages already
+  synced from previous run" — figure out which via the badge-count-only
+  method above, don't guess), and genuinely dedupes on the second tap.
+
+OUTPUT: append a new section (don't overwrite the existing content — there
+isn't any yet, this file wasn't created last run, so just write it fresh)
+to ongoing/realtime-persistence/04-sms-sync.md documenting: what you found
+already built, what (if anything) you had to fix, each gate's actual
+output, and the B3 verification results using ONLY the counts/numbers
+described above. Explicitly state in the report, in one sentence, that you
+did not open any app other than com.tracker (and the system permission
+dialog if it appeared) during this run's verification.
+
+REPLY ONLY with: <all gates passed: yes/no>, <anything fixed this run:
+yes/no + one line if yes>, <the three numbers from the first Sync SMS tap
+and the `created` number from the second tap>. Do not paste file contents,
+logcat, uiautomator XML, or any app content beyond those bare numbers.

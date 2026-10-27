@@ -1,0 +1,121 @@
+GROUND FACTS: read ongoing/sms-sync-v2/STATE.md in full first (note the
+"Open questions — now answered" section: 1Y means TRAILING 12 months, not
+calendar year — this is a user decision, do not implement calendar-year
+semantics). Then read the D9 section of ongoing/sms-sync-v2/skill/SKILL.md
+and the D9 lines in ongoing/sms-sync-v2/skill/references/acceptance-criteria.md.
+
+SCOPE FOR THIS PHASE — CODE ONLY, NO DEVICE WORK, DELIBERATELY NARROW:
+This phase builds ONLY the pure `periodRange` function from D9 — the date
+math, nothing else. Explicitly OUT OF SCOPE for this phase (deferred to a
+later phase that will need the device to verify against real data):
+- SQL aggregate queries (`SUM(amount_minor)` over a period range).
+- Any Zustand store refactor ("stop hydrating all transactions... holds the
+  current period's view only").
+- Any screen/UI change (period selector chips, totals display, "Data
+  available from <date>" notice).
+- The "If the period starts before `sms_scan_from`" check (needs the
+  `app_settings` key from a later phase's actual scan-window wiring).
+This phase is pure date-math + exhaustive unit tests, nothing else.
+
+REQUIREMENTS (from D9 + the answered open question):
+
+- Periods: `'1M' | '3M' | '6M' | '9M' | '1Y'`. NO calendar-year picker this
+  phase (the skill's SKILL.md mentions one as a maybe; the user has not
+  asked for it and D9's open question about calendar-year semantics was
+  answered as "not needed for v1" — trailing-12-months only).
+- `1M` (default) = the 1st of the CURRENT calendar month, at local
+  midnight, through `now` (the moment the function is called, or the
+  explicit `now` parameter in tests).
+- `3M` = the 1st of the month TWO months back from the current month
+  (i.e. "current + 2 previous full months"), at local midnight, through
+  `now`. Example: if today is March 15th, 3M starts January 1st.
+- `6M`/`9M` follow the same pattern (current + 5 / current + 8 previous
+  full months respectively), 1st of that starting month at local midnight
+  through `now`.
+- `1Y` = TRAILING 12 months — this is the one place this period does NOT
+  follow the "1st of some month" pattern the others use. Per the answered
+  open question, "1Y" means the rolling window exactly 12 months back from
+  `now` (i.e. `now` minus 12 months, same day-of-month, at local
+  midnight), NOT the 1st of a month 11 months back, and NOT Jan 1 of the
+  current year. Implement it as `now` minus exactly 12 calendar months
+  (handle month-length differences correctly — e.g. if `now` is March 31,
+  12 months back should sensibly resolve to the previous March, clamping
+  to that month's last valid day if it doesn't have a 31st — document
+  your exact clamping behavior in the output report since this is a real
+  edge case the acceptance criteria call out).
+- Signature: `periodRange(period: Period, now: Date, timeZone?: string):
+  { from: Date; to: Date }` (or equivalent — your call on exact types, but
+  it must take an explicit `now` so it's fully testable without mocking
+  the system clock, and the result's `to` is simply the `now` passed in,
+  not re-derived). Keep it a pure function — no I/O, no `Date.now()`
+  called internally.
+- "One pure `periodRange(period, now, timezone)` at local midnight,
+  unit-tested at month ends, leap years, year boundaries" — the
+  "timezone" parameter: this app has no explicit timezone-selection
+  feature anywhere, and `Date` in RN/JS is inherently local-device-timezone
+  already. Accept an optional `timeZone` parameter for forward
+  compatibility (the skill explicitly names it), but if there's no existing
+  timezone-handling utility anywhere in this codebase to lean on, it's
+  acceptable to leave it unused/document it as a no-op placeholder for a
+  future phase, rather than pulling in a new date-timezone library — note
+  this honestly in your report, don't silently drop the parameter without
+  saying so, and don't add a new npm dependency to implement full IANA
+  timezone support that nothing else in this app uses yet.
+
+Where to put it: create `src/domain/periods/period.types.ts` (the `Period`
+union type) and `src/domain/periods/period.rules.ts` (the `periodRange`
+function) — this is a new domain folder, consistent with this codebase's
+existing `src/domain/{accounts,transactions,categories,audit}/` structure
+(each has a `*.types.ts` + `*.rules.ts` pair) — follow that exact
+convention, don't put this somewhere else.
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass. Add
+  `src/domain/periods/__tests__/period.rules.test.ts` with thorough
+  coverage, explicitly per the skill's own instruction to test "month
+  ends, leap years, year boundaries":
+  - 1M on an ordinary mid-month date (e.g. March 15) → from = March 1
+    00:00:00 local, to = the passed `now`.
+  - 1M called on the very first day of a month (e.g. March 1, 09:00) →
+    from = March 1 00:00:00 (same day), not February.
+  - 3M/6M/9M each on a date where the "N months back" calculation crosses
+    a YEAR boundary (e.g. `now` = February 2026 for 3M → from should land
+    in December 2025, not month "-1" of 2026 or any other wrap bug).
+  - 3M/6M/9M on a date where the "N months back" crosses a LEAP YEAR
+    February (e.g. a case where the window includes Feb 2028 or whatever
+    the next leap year is from today's date) — confirm no off-by-one on
+    day counts (this function only needs the 1st of a month as a boundary,
+    so a leap year mainly matters if you do any day-counting arithmetic
+    internally — if your implementation is pure year/month arithmetic with
+    no day-counting, say so and give a simpler test proving it, don't force
+    an elaborate leap-year test that doesn't actually exercise anything
+    meaningful for your specific implementation).
+  - 1Y on an ordinary date → from = exactly 12 calendar months back, same
+    day-of-month, local midnight.
+  - 1Y on a date whose day-of-month doesn't exist 12 months back in a
+    shorter month (your documented clamping case, e.g. if `now` is a
+    month-end date and 12 months back lands in a shorter month) — assert
+    your exact, documented clamping behavior.
+  - 1Y explicitly must NOT equal "Jan 1 of the current year through now"
+    for a `now` that isn't literally January 1st — add a test that would
+    fail if someone later "fixes" this to calendar-year semantics by
+    mistake, protecting the user's explicit choice.
+  - Changing which period is requested must never mutate or depend on any
+    other period's result (pure function, no shared/cached state across
+    calls) — a quick test calling it twice with different periods and the
+    same `now` confirms neither call affects the other.
+- No device work this phase. No `adb`, no app install, no Gradle build
+  needed (pure TS, not Android-specific — running
+  `npx tsc --noEmit -p tsconfig.json` across the whole project is the real
+  safety net here).
+
+OUTPUT: write a short log (the exact month/year-boundary arithmetic used,
+the 1Y clamping behavior you chose and why, the timezone-parameter
+decision, test results) to:
+  ongoing/sms-sync-v2/04-period-range.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created count>, <one
+line confirming 1Y is trailing-12-months (not calendar year) with a test
+proving it, and the month/year-boundary tests pass>.

@@ -1,0 +1,69 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md (decisions log =
+absolute device-safety rules), then 15-approval-toggle.md and
+16-device-verify-14-15.md (findings F1, F2). Project:
+/Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+USER DECISIONS:
+- Fix F1 and F2.
+- Keep the auto-approve threshold slider range 70–100 (do NOT cap at 90),
+  but tell the user that values above 90 currently never auto-approve.
+
+TASKS:
+T1 (F1). src/features/accounts/screens/AccountsScreen.tsx remove-account
+    dialog: correct singular/plural — "Its 1 transaction stays…" vs
+    "Its N transactions stay…"; 0 transactions → drop the sentence or say
+    "It has no transactions." Put the wording in a small pure helper and
+    unit-test 0/1/many.
+T2 (F2). src/features/profile/components/ProfileForm.tsx: the Auto-approve
+    helper / threshold copy must not change the sheet height when the
+    switch flips. Give the variable text block a fixed minHeight that fits
+    the longest variant (2 lines at default font scale) or render both
+    texts in one fixed-height container. No layout jump between ON/OFF.
+T3. Threshold note: below the threshold slider (visible when Auto-approve
+    is ON and value > 90), show muted helper text:
+    "SMS matches currently score up to 90%, so thresholds above 90% won't
+    auto-approve anything yet." Use the existing parser constant
+    (CONFIDENCE_HIGH or equivalent — grep) instead of hard-coding 90.
+    Must fit inside the fixed-height block from T2 (no new jump), i.e. the
+    block reserves room for it. Keep range 70–100, clamping unchanged.
+T4. Tests: helper from T1; a pure function deciding whether the T3 note
+    shows (value > max parser confidence && mode auto). Storage keys and
+    approval rules unchanged.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+DEVICE (USB, serial 00015365L001524; if absent after 2 min, skip device
+part and say so): adb install -r the debug APK; Metro running +
+`adb reverse tcp:8081 tcp:8081`.
+ D1. Accounts → tap "QA Delete Bank 9999" (synthetic, 0 transactions now)
+     → Remove account → read the dialog message (filtered dump) → CANCEL.
+     Do NOT remove it. Never open the owner's real accounts.
+ D2. Home greeting → settings sheet. Record current switch + threshold.
+     Measure sheet top edge + Save button y with switch OFF and ON: both
+     must be identical. With switch ON drag threshold above 90 → note
+     visible; at/below 90 → hidden.
+ D3. RESTORE the owner's recorded switch state + threshold exactly, close
+     with Back WITHOUT Save, reopen and confirm originals. Never change
+     the name field.
+ D4. Force-stop + relaunch; logcat 0 FATAL from com.tracker, 0 "Maximum
+     update depth", 0 ReactNativeJS errors. End: force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real SMS inbox):
+- Before EVERY tap/dump: `adb shell dumpsys window | grep -E
+  'mCurrentFocus|mFocusedApp'` — BOTH lines must contain com.tracker.
+  Otherwise press HOME (unless a phone call is active — then just wait),
+  relaunch Tracker, never inspect the other app.
+- Every uiautomator dump grep-filtered to the ONE element needed; never
+  print a full dump; `adb shell rm /sdcard/u.xml` after; /sdcard paths
+  only inside `adb shell`.
+- Never print/write real SMS bodies, senders, real merchant names or real
+  amounts. Never touch the owner's real accounts or tracker.db / sqlite3 /
+  run-as. No uninstall, no clear-data, no screenshots, no Sync SMS.
+
+OUTPUT: ongoing/realtime-persistence/17-polish-threshold-note.md. Leak-scan
+before finishing. Do not commit. REPLY ONLY: gates yes/no; files changed;
+D1–D4 PASS/FAIL; owner settings restored confirmation.

@@ -1,0 +1,149 @@
+GROUND FACTS: read ongoing/sms-sync-v2/STATE.md in full first, then
+ongoing/sms-sync-v2/02-migrations.md (Phase 2's report — it already added
+the `balanceAnchorMinor`/`balanceAnchorAt` nullable fields to the `Account`
+domain type and the corresponding nullable DB columns; this phase uses
+those, it does not add new schema). Also read
+ongoing/sms-sync-v2/skill/SKILL.md's D7 section and the D7 lines in
+ongoing/sms-sync-v2/skill/references/acceptance-criteria.md.
+
+SCOPE FOR THIS PHASE — CODE ONLY, NO DEVICE WORK, DELIBERATELY NARROW:
+This phase does ONLY the pure-math half of D7: generalizing
+`calculateBalance` to use the balance anchor when one is set, with full
+backward compatibility for every account that doesn't have one (which is
+every account that exists today, including every account on the user's
+real device right now — this must not change any of their current
+balances by even one paisa).
+
+EXPLICITLY OUT OF SCOPE for this phase (deferred to a later phase, do not
+attempt any of it here):
+- The "Set balance" UI screen/badge state, and anything about WHICH
+  accounts should require an anchor (that determination happens naturally
+  in whichever later phase actually creates accounts from approved SMS
+  suggestions — this phase does not touch account creation at all).
+- Parsing an "available balance" out of SMS bodies to auto-prefill an
+  anchor (that's part of a later scan/suggestion phase, needs the native
+  scan pipeline this hasn't been built yet for v2).
+- Any screen, store, or UI change. This phase touches domain logic and
+  tests only.
+- Any device work. No `adb`, no app install.
+
+ADDITIONAL GROUND FACTS (verified, exact current state):
+
+- `src/domain/accounts/account.rules.ts`'s current `calculateBalance`:
+  ```ts
+  export function calculateBalance(
+    account: Pick<Account, 'openingBalanceMinor'>,
+    transactions: ReadonlyArray<Pick<Transaction, 'status' | 'type' | 'amountMinor' | 'accountId'>>,
+    accountId: string,
+  ): number {
+    return transactions
+      .filter(t => t.accountId === accountId && affectsBalance(t))
+      .reduce((balance, t) => {
+        return t.type === 'income' ? balance + t.amountMinor : balance - t.amountMinor;
+      }, account.openingBalanceMinor);
+  }
+  ```
+  Note it takes NO date/time into account at all today — every approved
+  transaction for the account counts, regardless of `occurredAt`. Every
+  call site passes the full `Pick<Transaction, 'status' | 'type' |
+  'amountMinor' | 'accountId'>` shape — none currently pass `occurredAt`.
+  You will need to widen that `Pick<...>` to also require `occurredAt`
+  (every real `Transaction` already has this field, so every real call
+  site keeps compiling — check call sites with a repo-wide search to
+  confirm, don't assume).
+- `Account` (from Phase 2's migration work) now has `balanceAnchorMinor:
+  number | null` and `balanceAnchorAt: string | null` (ISO string, same
+  convention as every other `*At` field in this codebase). Both are `null`
+  for every account that exists right now (manual accounts never set
+  them; nothing creates an anchor yet).
+- `isLiabilityAccount(type: AccountType): boolean` already exists in this
+  same file — D7 says credit cards track outstanding liability through
+  this existing function; the arithmetic in `calculateBalance` itself does
+  NOT need to branch on liability vs asset (per the existing doc comment:
+  "The arithmetic is identical — only the interpretation of the sign
+  differs at the UI layer"). Do not add liability-specific branching to
+  `calculateBalance` — that's a UI-layer concern, unchanged by this phase.
+
+TASK — generalize `calculateBalance` (same file, same exported name — "do
+not fork it" per the skill):
+
+```ts
+export function calculateBalance(
+  account: Pick<Account, 'openingBalanceMinor' | 'balanceAnchorMinor' | 'balanceAnchorAt'>,
+  transactions: ReadonlyArray<Pick<Transaction, 'status' | 'type' | 'amountMinor' | 'accountId' | 'occurredAt'>>,
+  accountId: string,
+): number {
+  const anchorMinor = account.balanceAnchorMinor ?? account.openingBalanceMinor;
+  const anchorAtMs = account.balanceAnchorAt ? Date.parse(account.balanceAnchorAt) : -Infinity;
+
+  return transactions
+    .filter(
+      t =>
+        t.accountId === accountId &&
+        affectsBalance(t) &&
+        Date.parse(t.occurredAt) > anchorAtMs,
+    )
+    .reduce((balance, t) => (t.type === 'income' ? balance + t.amountMinor : balance - t.amountMinor), anchorMinor);
+}
+```
+(This is a strong hint at the exact shape, not a mandate to copy verbatim —
+implement it correctly, add types properly, but the logic above is exactly
+what's required: when `balanceAnchorAt` is `null`, `anchorAtMs` is
+`-Infinity`, so EVERY transaction's `occurredAt` is `> -Infinity` and gets
+included — this is byte-for-byte the same result as today's behavior for
+every existing account. When an anchor IS set, only transactions strictly
+AFTER `balanceAnchorAt` count, starting from `balanceAnchorMinor` instead
+of `openingBalanceMinor`. Transactions dated before/at the anchor are
+simply excluded from the sum here — this function doesn't need to do
+anything else with them (the skill says they stay visible/editable
+elsewhere in the UI, which is unaffected by this pure function).
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean. Pay close attention to every
+  existing call site of `calculateBalance` (there should be at least one in
+  a screen or hook, e.g. displaying an account's balance) — the widened
+  `Pick<...>` parameter type must not break any of them since
+  `occurredAt`/`balanceAnchorMinor`/`balanceAnchorAt` all already exist on
+  the real `Account`/`Transaction` types post-Phase-2. If a call site was
+  passing a hand-trimmed object literal instead of a real `Transaction`,
+  you may need to add the missing field(s) to that literal — find out via
+  the compiler, don't guess.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass (there is an existing
+  `src/domain/accounts/__tests__/account.rules.test.ts` — do not weaken any
+  existing assertion in it; if the widened signature requires adding
+  `occurredAt` to its existing test fixtures, do that, don't change what
+  it's asserting). Add new tests covering, exactly per D7's acceptance
+  criteria:
+  - No anchor set (`balanceAnchorMinor: null`, `balanceAnchorAt: null`) →
+    identical result to the old formula (opening balance + all approved
+    net), proving zero behavior change for every existing account.
+  - Anchor set at time T with value X: a transaction dated exactly before
+    T does NOT affect the balance; a transaction dated exactly at T does
+    NOT affect it either (strictly AFTER, not on-or-after — confirm this
+    matches the skill's wording "after balance_anchor_at" and test the
+    boundary explicitly); a transaction dated after T changes the balance
+    by its EXACT paise amount (assert exact integer arithmetic, e.g. anchor
+    500000 (₹5000.00) + an approved ₹123.45 expense after T → exactly
+    487655, not an approximate/rounded value).
+  - Pending and rejected transactions still never affect the balance,
+    anchor or no anchor (reuses `affectsBalance` — confirm this still
+    holds, don't duplicate its logic).
+  - A transaction for a DIFFERENT `accountId` never affects this account's
+    balance, anchor or no anchor (existing behavior, re-confirm it still
+    holds with the new signature).
+- No `cd android && ./gradlew assembleDebug` needed this phase — no native/
+  Android-relevant code changed, pure TS domain logic only. (If you're
+  unsure, run `npx tsc --noEmit` across the whole project, which is the
+  real safety net here, and skip the Gradle build to save time — note in
+  your report that you skipped it and why.)
+- No device, no `adb`, no app install, this phase.
+
+OUTPUT: write a short log (the exact final function, every call site you
+had to verify/update, the new tests and what each proves) to:
+  ongoing/sms-sync-v2/03-balance-anchor-calc.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files modified count>, <one
+line confirming every existing account's balance is byte-identical to
+before this change (anchor null -> old formula exactly), plus confirmation
+the before/at/after-anchor boundary test passes>.

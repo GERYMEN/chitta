@@ -1,0 +1,240 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md in full first
+(especially the permanent device-isolation rule — interact only with
+`com.tracker` during verification, count-only checks for anything
+SMS-derived, NEVER transcribe real message content, sender, merchant, or
+account numbers from the real device into your report or reply), then
+04-sms-sync.md and 06-ui-onboarding-polish.md (the phases this builds on —
+04 built the SMS sync pipeline, 06 may have changed `App.tsx`/
+`RootNavigator.tsx` startup gating, read its actual diff via the file
+contents, not assumption). Do not redo Phase 4's native module, permission
+flow, or dedup logic — this phase only changes the ACCOUNT-MATCHING part of
+the pipeline plus adds one small new review screen.
+
+CONTEXT: the user reviewed real Sync SMS results on their device and gave
+concrete, specific feedback (their own screenshots, which the orchestrator
+has already seen and translated into generic requirements below — you do
+NOT need to see or reproduce any of the user's actual message content,
+everything you need is already generalized here):
+
+1. Real bank/UPI transaction SMS always carry a bank name and a 4-digit
+   account or card number embedded in the message (e.g. "...from a/c X1859
+   ... -Federal Bank", "...From HDFC Bank A/C *7302...", "...HDFC Bank card
+   ending 8123..."). The CURRENT parser (Phase 4) ignores this entirely —
+   `resolveAccountIdForSms` in `src/features/sms-sync/smsSyncLogic.ts` only
+   checks if an EXISTING account's `lastFour` happens to appear in the
+   body, and if nothing matches, silently falls back to `accounts[0]`. This
+   is wrong: it can silently misattribute a transaction to the wrong
+   account.
+2. A credit card number and a bank account number are DIFFERENT kinds of
+   account even if the 4 digits were ever coincidentally similar — the
+   parser must distinguish `credit_card` from `bank` from `upi` (the
+   existing `AccountType` already has `'credit_card'` as a distinct value
+   from `'bank'`/`'upi'`, per `src/domain/accounts/account.types.ts` — this
+   phase is about actually USING that distinction during SMS matching,
+   which Phase 4 never did).
+3. When a message's extracted (bank name + account kind + last-4) doesn't
+   match any EXISTING account by BOTH `lastFour` AND `type` (not lastFour
+   alone), the app must NOT silently fall back to the first account. It
+   must instead SUGGEST a new account to the user and let them approve
+   creating it before any transaction from that account/card is recorded —
+   same "Detect→Review→Approve→Record" principle this whole app already
+   applies to transactions, just extended one level up to accounts
+   discovered via SMS.
+
+ADDITIONAL GROUND FACTS (verified, exact current state):
+
+- `src/features/sms-sync/smsParser.ts`'s `ParsedSmsTransaction` type
+  (Phase 4) currently has: `type, amountMinor, merchantName, occurredAt,
+  confidenceScore, sanitizedPreview, sourceReferenceHash`. Extend it with:
+  `bankName: string`, `accountKind: AccountType` (reuse the existing
+  `AccountType` from `src/domain/accounts/account.types.ts` —
+  `'bank'|'cash'|'credit_card'|'upi'|'other'`; a parsed SMS will only ever
+  produce `'bank'|'credit_card'|'upi'`, never `'cash'`/`'other'`), and
+  `lastFour: string | null` (4 digits, or null if truly unextractable —
+  treat an unextractable last-four as its own "unknown" bucket rather than
+  dropping the message, see T2).
+- Heuristic extraction (keep it genuinely simple regex, document your exact
+  patterns in the output report):
+  - `lastFour`: a pattern looking for 4 digits near an account/card
+    keyword, e.g.
+    `/(?:a\/?c|acct|account|card)[^\d]{0,20}(?:ending\s*)?[x*]{0,6}\s*(\d{4})\b/i`
+    — adjust as needed for robustness, test against varied synthetic
+    formats (see T4's test fixtures), but the core idea is: find a 4-digit
+    number that appears near the words "a/c", "account", or "card" (not
+    just any 4-digit number anywhere, which would false-match reference
+    numbers or balances).
+  - `accountKind`: `'credit_card'` if the body matches
+    `/credit\s*card|card\s+ending|\bcc\b/i`; else `'bank'` if it matches
+    `/\ba\/?c\b|\baccount\b|bank\s+a\/?c/i`; else `'upi'` as the default
+    fallback for a clear UPI transfer message with no bank/card wording at
+    all. Check `credit_card` before `bank` (a credit-card message may also
+    contain the word "account" loosely, card wording should win).
+  - `bankName`: look for a capitalized word immediately before the literal
+    word "Bank" (e.g. `/([A-Z][A-Za-z]+)\s+Bank\b/` capturing "HDFC",
+    "Federal", "SBI" if it appears as "SBI Bank", etc.) OR a trailing
+    signature pattern like `/-\s*([A-Za-z ]+Bank)\s*$/` at the message's
+    end. If nothing matches, use the literal string `'Unknown Bank'` — this
+    is a best-effort v1 heuristic, document its real limitations honestly
+    in your report (it does not use a lookup table of known bank names,
+    and the user will sometimes have to rename an auto-suggested account).
+- `resolveAccountIdForSms` (`smsSyncLogic.ts`) must be rewritten: given
+  `accounts: Account[]` and a parsed candidate's `{ bankName, accountKind,
+  lastFour }`, return the matching account's `id` ONLY if an existing
+  account has BOTH `account.type === accountKind` AND (`lastFour != null &&
+  account.lastFour === lastFour`). If no such match exists, return `null`
+  (NOT `accounts[0]` — remove that fallback entirely, it's the bug this
+  phase fixes). A `null` result means "needs a suggested account", handled
+  by T2/T3, NOT "assign to some arbitrary account".
+- `syncSms()` (`src/features/sms-sync/syncSms.ts`) currently creates a
+  transaction for every parsed, non-duplicate candidate. Change it so that
+  candidates whose `resolveAccountIdForSms` returns `null` are NOT turned
+  into transactions this run — they're grouped into suggestions instead
+  (T2). Candidates that DO match an existing account behave exactly as
+  Phase 4 (unchanged).
+- `src/app/navigation/routes.ts`/`RootNavigator.tsx`: add a new route
+  `SmsSuggestions: { suggestions: SmsAccountSuggestion[] }` (a plain
+  serializable array, fine as nav params — keep `SmsAccountSuggestion`'s
+  shape small: `{ bankName: string; accountKind: AccountType; lastFour:
+  string | null; messageCount: number }`, no SMS content in it). Also
+  extend `AddAccount`'s params from `undefined` to `{ prefill?: { name:
+  string; type: AccountType; lastFour: string | null } } | undefined` (stays
+  backward compatible — existing `navigation.navigate('AddAccount')` calls
+  with no params remain valid since the field is optional) so the
+  suggestions screen can deep-link into a pre-filled Add Account form
+  instead of a blank one.
+- `src/features/accounts/screens/AddAccountScreen.tsx` (Phase 3) already
+  renders `<AccountForm initialValues={...} .../>` — Phase 3's version
+  passes no `initialValues` (blank form). Read the route params'
+  `prefill` (if present) and map it into `AccountForm`'s
+  `initialValues` (`name`, `type`, `lastFour` — `openingBalance` stays
+  default `"0"`, the user fills in a real opening balance themselves, SMS
+  data never tells you an opening balance).
+
+TASKS:
+
+T1. Extend `smsParser.ts`: add `bankName`/`accountKind`/`lastFour`
+    extraction to `parseSmsMessage` per the heuristics above. These three
+    fields describe the SOURCE of the message (which bank/card/account it
+    came from) and are safe to include in a parsed result — they are
+    exactly the same category of info (bank name, account type, last 4
+    digits) the user already sees on their own Accounts screen for their
+    own accounts, not raw message content.
+
+T2. Add a pure helper (new function in `smsSyncLogic.ts`, easily
+    unit-testable) `groupUnmatchedIntoSuggestions(unmatched:
+    ParsedSmsTransaction[]): SmsAccountSuggestion[]` that groups candidates
+    with no account match by the signature `` `${accountKind}:${bankName}:
+    ${lastFour ?? 'unknown'}` ``, counting messages per group, and returns
+    one `SmsAccountSuggestion` per group (sorted by `messageCount`
+    descending, most common first).
+
+T3. Rewrite `resolveAccountIdForSms` per the ground facts (exact-match
+    only, `null` on no match, no fallback). Update `syncSms()`: partition
+    parsed+deduped candidates into `matched` (account resolved → create
+    transactions exactly as Phase 4) and `unmatched` (→ T2's grouping).
+    `syncSms()`'s return type grows to `{ scanned, created, skipped,
+    suggestions: SmsAccountSuggestion[] }`. `created`/`skipped` counts
+    still refer to transactions actually inserted vs not (an unmatched
+    candidate counts toward `skipped`, not `created`, consistent with
+    "skipped = scanned minus created").
+
+T4. New screen `src/features/sms-sync/screens/SmsSuggestionsScreen.tsx`:
+    reads `suggestions` from route params, renders one row per suggestion
+    (bank name, account type label, last four or "Unknown", message count,
+    e.g. "HDFC · Bank Account · •••• 7302 · 3 transactions waiting"), each
+    with an "Add Account" button navigating to `AddAccount` with
+    `prefill: { name: bankName, type: accountKind, lastFour: lastFour ??
+    '' }`. Minimal custom header (back arrow + "New Accounts Found" title)
+    matching the rest of the app's screens. If `suggestions` is empty,
+    this screen should never be navigated to in the first place (see T5) —
+    no need for an empty state.
+    Document as a known v1 limitation in your report: there's no
+    "dismiss/ignore this suggestion forever" action — a declined suggestion
+    will simply reappear on the next Sync SMS tap since suggestions are
+    recomputed fresh each run, not persisted. That's an acceptable,
+    honest v1 tradeoff (re-running sync after adding an account correctly
+    pulls in its transactions; re-running without adding one just
+    re-shows the same suggestion, which is harmless, not a duplicate-data
+    bug).
+
+T5. Wire `HomeScreen.tsx`'s `handleSyncSms` (Phase 5 added `ToastAndroid`
+    success/fail feedback here — keep that intact, extend it): after a
+    successful `syncSms()` call, if `result.suggestions.length > 0`,
+    navigate to `SmsSuggestions` with those suggestions (in addition to or
+    instead of the toast — your call, but the user needs to actually see
+    and act on the suggestions, a toast alone isn't enough for this case
+    since it requires action; a reasonable UX is: show the toast with the
+    scanned/created counts AS BEFORE, then immediately navigate to
+    `SmsSuggestions` if there are any, since that is itself the real
+    answer to "why wasn't everything synced"). If
+    `result.suggestions.length === 0`, behave exactly as Phase 5 (toast
+    only, no navigation).
+
+GATES:
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src --ext .ts,.tsx` — no new errors.
+- `npx jest` — all existing tests pass (update any Phase 4 tests that
+  assumed the old fallback-to-`accounts[0]` behavior — that behavior is
+  intentionally removed this phase, fix the test's expectation, don't
+  revert the fix to make an old test pass). Add unit tests (FABRICATED
+  synthetic SMS strings only, never real data) for: `bankName`/
+  `accountKind`/`lastFour` extraction across a few varied formats (a plain
+  bank UPI debit, a credit-card-ending message, a message with no
+  extractable bank name falling back to `'Unknown Bank'`), the new
+  `resolveAccountIdForSms` (exact type+lastFour match returns the id, a
+  lastFour-only coincidental match with a DIFFERENT type returns `null`,
+  no accounts returns `null`), and `groupUnmatchedIntoSuggestions`
+  (correct grouping/counting/sorting).
+- `cd android && ./gradlew assembleDebug` — BUILD SUCCESSFUL.
+- On-device, per the permanent isolation rule (ONLY `com.tracker`,
+  count-only for anything SMS-derived): force-stop/install/launch fresh.
+  1. Go to Accounts, confirm existing accounts from Phase 3 are present
+     (needed so SOME matching is possible to test against).
+  2. Tap Sync SMS. Since the device's real inbox will very likely contain
+     messages whose bank/last-four don't match any of your 3 synthetic
+     test accounts (Test Account, HDFC Salary Account, Cash Wallet — none
+     of which share a real last-four with the user's actual bank SMS),
+     expect to land on the new Suggestions screen. Confirm (structurally,
+     via `uiautomator dump`, COUNTS AND LABELS ONLY — bank name + account
+     type + last-four IS safe to report since it's the same category of
+     info already shown for the user's own accounts elsewhere in this
+     app's own UI, but do NOT report merchant names, amounts, or anything
+     else) that at least one suggestion row renders with a plausible bank
+     name / type / last-four / count.
+  3. Tap "Add Account" on one suggestion, confirm the Add Account form
+     opens PRE-FILLED with that suggestion's name/type/lastFour (confirm
+     structurally that the fields are non-empty/non-default, don't need to
+     quote exact values beyond what you already saw in step 2). Fill in an
+     opening balance (e.g. "0") and save. Confirm you're back on Accounts
+     with the new account listed.
+  4. Tap Sync SMS again. Confirm (via the toast / Pending badge delta,
+     counts only) that `created` is now greater than 0 for messages
+     matching that newly-added account, and the Suggestions screen no
+     longer includes that specific bank/type/last-four combination (fewer
+     suggestions than before, or none if that was the only one).
+  5. `adb logcat -d` — zero `FATAL EXCEPTION` / `Maximum update depth
+     exceeded` throughout.
+  - Return device to a clean state when done (`adb shell am force-stop
+    com.tracker`).
+
+SCOPE GUARDS:
+- Do not change the native `SmsReaderModule.kt`/`SmsReaderPackage.kt` or
+  the permission flow — unrelated to this phase.
+- Do not add a "merge this suggestion into an existing account" option or
+  a persistent dismiss/ignore — explicitly out of scope for v1, documented
+  as a known limitation (T4).
+- Do not change `categoryId` resolution logic.
+- No new npm dependencies.
+
+OUTPUT: write a chronological log (parser extraction patterns with exact
+regex, the new matching/grouping logic, the new screen, every gate's
+result, and the full device test results using only the safe categories of
+info described above — bank name/type/last-four/counts, never merchant
+names or amounts) to:
+  ongoing/realtime-persistence/07-sms-account-matching.md
+
+REPLY ONLY with: <all gates passed: yes/no>, <files created/modified count>,
+<one-line verdict: unmatched SMS now correctly produce an approvable account
+suggestion instead of silently misassigning to the wrong account, confirmed
+end-to-end on-device>. Do not paste file contents, logcat, uiautomator XML,
+or any app content beyond bank name/type/last-four/counts.

@@ -1,0 +1,44 @@
+GROUND FACTS: read ongoing/realtime-persistence/STATE.md, then
+13-profile-approval-mode.md and 14-soft-delete-account.md. Project:
+/Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+USER REQUEST: "change approval mode (manual or auto) as toggle".
+
+Current state (verified): src/features/profile/components/ProfileForm.tsx is
+the single shared form used by BOTH ProfileSetupScreen (onboarding) and
+ProfileSettingsSheet (Home greeting sheet). Line ~84 renders
+`<TwoPositionSlider>` (from src/shared/ui/Slider) for approvalMode
+('manual' | 'auto'); line ~94 conditionally renders the threshold
+`<Slider>` only when approvalMode === 'auto' (Phase 13 noted this makes the
+sheet jump ~324px when toggling).
+
+TASKS (code only — NO device work this phase):
+T1. Replace the TwoPositionSlider with an on/off toggle: React Native
+    `Switch` row — label "Auto-approve" + helper text
+    ("On: SMS transactions at or above your confidence threshold are
+    approved automatically. Off: you approve every transaction yourself.").
+    Switch ON = 'auto', OFF = 'manual'. Style trackColor/thumbColor with
+    theme tokens exactly like the existing Switch in
+    src/features/onboarding/screens/PermissionsScreen.tsx. Row ≥48dp,
+    accessibilityLabel "Auto-approve", accessibilityRole "switch".
+T2. Stop the layout jump: keep the threshold block always rendered; when
+    Manual, show it dimmed (opacity) and disabled (no drag), with copy
+    "Turn on Auto-approve to use the threshold". Keep the threshold slider
+    itself (user only asked to change the mode control).
+T3. If TwoPositionSlider is no longer used anywhere, delete it and its
+    export/tests (no dead code). Keep Slider + sliderMath.
+T4. Update/extend tests (profile form/schema tests if any exist; add a
+    light render test only if this codebase already renders components in
+    tests — otherwise rely on schema/store tests). Storage keys and
+    approval rules are unchanged.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+Do NOT touch the phone (it is disconnected; the orchestrator verifies on
+device later). Do not commit.
+
+OUTPUT: ongoing/realtime-persistence/15-approval-toggle.md. REPLY ONLY:
+gates yes/no; files changed; one line on what replaced what.
