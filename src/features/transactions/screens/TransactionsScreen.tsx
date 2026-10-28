@@ -1,13 +1,26 @@
 import React, { useMemo, useState } from 'react';
-import { SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, Chip, TransactionRow } from '../../../shared/ui';
+import { BottomSheet, Card, Chip, TransactionRow } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { useShallow } from 'zustand/react/shallow';
-import { useTransactionsStore, selectApproved } from '../state/transactionsStore';
+import {
+  useTransactionsStore,
+  selectActiveAccounts,
+  selectApproved,
+  selectDeletedAccounts,
+} from '../state/transactionsStore';
+import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
+import {
+  filterTransactions,
+  hasActiveFilters,
+  totalsFor,
+  TypeFilter,
+  typeCounts,
+} from '../filters/transactionFilters';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
@@ -33,18 +46,38 @@ function dayLabel(iso: string, now: Date): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }).toUpperCase();
 }
 
+type Picker = 'account' | 'category' | null;
+
 export function TransactionsScreen() {
   const navigation = useNavigation<Nav>();
   const approved = useTransactionsStore(useShallow(selectApproved));
-  const [query, setQuery] = useState('');
+  const activeAccountList = useTransactionsStore(useShallow(selectActiveAccounts));
+  const deletedAccountList = useTransactionsStore(useShallow(selectDeletedAccounts));
+  const accounts = useTransactionsStore(state => state.accounts);
+  const categories = useTransactionsStore(state => state.categories);
+  const filters = useTransactionsStore(state => state.transactionFilters);
+  const setFilters = useTransactionsStore(state => state.setTransactionFilters);
+  const resetFilters = useTransactionsStore(state => state.resetTransactionFilters);
+  const [picker, setPicker] = useState<Picker>(null);
 
-  const filtered = useMemo(
-    () =>
-      approved.filter(t =>
-        t.merchantName.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [approved, query],
-  );
+  // One pure predicate (transactionFilters.ts) drives the list, the chip
+  // counts and the totals, so all three always agree.
+  const filtered = useMemo(() => filterTransactions(approved, filters), [approved, filters]);
+  const counts = useMemo(() => typeCounts(approved, filters), [approved, filters]);
+  const totals = totalsFor(filtered);
+  const filtering = hasActiveFilters(filters);
+
+  const selectedAccount = accounts.find(a => a.id === filters.accountId) ?? null;
+  const selectedCategory = categories.find(c => c.id === filters.categoryId) ?? null;
+  const accountChipLabel = selectedAccount
+    ? selectedAccount.lastFour
+      ? `${selectedAccount.name} ••${selectedAccount.lastFour}`
+      : selectedAccount.name
+    : 'Account';
+
+  function chooseType(type: TypeFilter) {
+    setFilters({ type });
+  }
 
   const sections = useMemo(() => {
     const byDay = new Map<string, typeof filtered>();
@@ -63,8 +96,6 @@ export function TransactionsScreen() {
       }));
   }, [filtered]);
 
-  const inflow = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amountMinor, 0);
-  const spent = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amountMinor, 0);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -76,33 +107,94 @@ export function TransactionsScreen() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>Transactions</Text>
-            <Text style={styles.subtitle}>{approved.length} Settled · All Verified</Text>
+            <Text style={styles.subtitle}>
+              {filtering
+                ? `Showing ${filtered.length} of ${approved.length} settled`
+                : `${approved.length} Settled · All Verified`}
+            </Text>
 
             <Card style={styles.summaryCard}>
-              <SummaryStat label="INFLOW" value={formatRupeesFromMinor(inflow)} tone="income" />
+              <SummaryStat label="INFLOW" value={formatRupeesFromMinor(totals.inflowMinor)} tone="income" />
               <View style={styles.summaryDivider} />
-              <SummaryStat label="SPENT" value={formatRupeesFromMinor(spent)} tone="expense" />
+              <SummaryStat label="SPENT" value={formatRupeesFromMinor(totals.spentMinor)} tone="expense" />
               <View style={styles.summaryDivider} />
-              <SummaryStat label="NET" value={formatRupeesFromMinor(inflow - spent, { showPositiveSign: true })} tone="net" />
+              <SummaryStat label="NET" value={formatRupeesFromMinor(totals.netMinor, { showPositiveSign: true })} tone="net" />
             </Card>
+            {filtering ? (
+              <Text style={styles.totalsNote} testID="filtered-totals-note">
+                Totals reflect the current filters
+              </Text>
+            ) : null}
 
             <View style={styles.searchBar}>
               <Icon name="magnify" size={18} color={colors.outline} />
               <TextInput
-                placeholder="Search by merchant, tag, note..."
+                placeholder="Search merchant or notes"
                 placeholderTextColor={colors.outline}
-                value={query}
-                onChangeText={setQuery}
+                value={filters.query}
+                onChangeText={query => setFilters({ query })}
                 style={styles.searchInput}
+                testID="transactions-search"
               />
             </View>
 
-            <View style={styles.filterRow}>
-              <Chip label={`All ${approved.length}`} tone="active" />
-              <Chip label={`Expenses ${approved.filter(t => t.type === 'expense').length}`} tone="neutral" />
-              <Chip label={`Income ${approved.filter(t => t.type === 'income').length}`} tone="neutral" />
-            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}
+              keyboardShouldPersistTaps="handled">
+              <FilterChip
+                testID="filter-all"
+                label={`All ${counts.all}`}
+                active={filters.type === 'all'}
+                onPress={() => chooseType('all')}
+              />
+              <FilterChip
+                testID="filter-expense"
+                label={`Expenses ${counts.expense}`}
+                active={filters.type === 'expense'}
+                onPress={() => chooseType('expense')}
+              />
+              <FilterChip
+                testID="filter-income"
+                label={`Income ${counts.income}`}
+                active={filters.type === 'income'}
+                onPress={() => chooseType('income')}
+              />
+              <FilterChip
+                testID="filter-account"
+                label={accountChipLabel}
+                icon="bank-outline"
+                active={filters.accountId !== null}
+                onPress={() => setPicker('account')}
+              />
+              <FilterChip
+                testID="filter-category"
+                label={selectedCategory ? selectedCategory.name : 'Category'}
+                icon="shape-outline"
+                active={filters.categoryId !== null}
+                onPress={() => setPicker('category')}
+              />
+              {filtering ? (
+                <FilterChip
+                  testID="filter-reset"
+                  label="Reset"
+                  icon="filter-remove-outline"
+                  active={false}
+                  onPress={resetFilters}
+                />
+              ) : null}
+            </ScrollView>
           </>
+        }
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>
+              {filtering
+                ? 'No transactions match these filters.'
+                : 'No approved transactions yet — approve items in Pending to see them here.'}
+            </Text>
+          </View>
         }
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
@@ -128,7 +220,123 @@ export function TransactionsScreen() {
           );
         }}
       />
+
+      <BottomSheet visible={picker === 'account'} onClose={() => setPicker(null)}>
+        <Text style={styles.sheetTitle}>Filter by account</Text>
+        <PickerOption
+          label="All accounts"
+          selected={filters.accountId === null}
+          onPress={() => {
+            setFilters({ accountId: null });
+            setPicker(null);
+          }}
+        />
+        {activeAccountList.map(account => (
+          <PickerOption
+            key={account.id}
+            label={accountDisplayLabel(account)}
+            selected={filters.accountId === account.id}
+            onPress={() => {
+              setFilters({ accountId: account.id });
+              setPicker(null);
+            }}
+          />
+        ))}
+        {deletedAccountList.length > 0 ? (
+          <Text style={styles.sheetHeading}>Deleted</Text>
+        ) : null}
+        {deletedAccountList.map(account => (
+          <PickerOption
+            key={account.id}
+            label={accountDisplayLabel(account)}
+            selected={filters.accountId === account.id}
+            onPress={() => {
+              setFilters({ accountId: account.id });
+              setPicker(null);
+            }}
+          />
+        ))}
+      </BottomSheet>
+
+      <BottomSheet visible={picker === 'category'} onClose={() => setPicker(null)}>
+        <Text style={styles.sheetTitle}>Filter by category</Text>
+        <PickerOption
+          label="All categories"
+          selected={filters.categoryId === null}
+          onPress={() => {
+            setFilters({ categoryId: null });
+            setPicker(null);
+          }}
+        />
+        {categories.map(category => (
+          <PickerOption
+            key={category.id}
+            label={category.name}
+            selected={filters.categoryId === category.id}
+            onPress={() => {
+              setFilters({ categoryId: category.id });
+              setPicker(null);
+            }}
+          />
+        ))}
+      </BottomSheet>
     </SafeAreaView>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onPress,
+  icon,
+  testID,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  icon?: string;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={{ top: 6, bottom: 6 }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      testID={testID}>
+      <Chip
+        label={label}
+        tone={active ? 'active' : 'neutral'}
+        icon={
+          icon ? (
+            <Icon name={icon} size={14} color={active ? colors.onObsidian : colors.onSurfaceVariant} />
+          ) : undefined
+        }
+      />
+    </Pressable>
+  );
+}
+
+function PickerOption({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}>
+      <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]} numberOfLines={1}>
+        {label}
+      </Text>
+      {selected ? <Icon name="check" size={20} color={colors.primary} /> : null}
+    </Pressable>
   );
 }
 
@@ -211,7 +419,54 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    paddingVertical: spacing.xs,
     marginBottom: spacing.sm,
+  },
+  totalsNote: {
+    ...typography.labelMd,
+    color: colors.outline,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  empty: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...typography.bodyMd,
+    color: colors.outline,
+    textAlign: 'center',
+  },
+  sheetTitle: {
+    ...typography.headlineSm,
+    fontSize: 18,
+    color: colors.onSurface,
+    marginBottom: spacing.sm,
+  },
+  sheetHeading: {
+    ...typography.labelLg,
+    color: colors.outline,
+    letterSpacing: 0.5,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    gap: spacing.sm,
+  },
+  optionPressed: {
+    opacity: 0.6,
+  },
+  optionLabel: {
+    ...typography.bodyLg,
+    color: colors.onSurface,
+    flex: 1,
+  },
+  optionLabelSelected: {
+    color: colors.primary,
   },
   sectionHeader: {
     flexDirection: 'row',

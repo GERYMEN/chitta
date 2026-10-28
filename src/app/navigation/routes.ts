@@ -13,6 +13,7 @@ export const Routes = {
   EditTransaction: 'EditTransaction',
   AddAccount: 'AddAccount',
   SmsSuggestions: 'SmsSuggestions',
+  Activity: 'Activity',
   Onboarding: 'Onboarding',
   ProfileSetup: 'ProfileSetup',
   Permissions: 'Permissions',
@@ -34,6 +35,7 @@ export type RootStackParamList = {
     | { prefill?: { name: string; type: AccountType; lastFour: string | null } }
     | undefined;
   SmsSuggestions: { suggestions: SmsAccountSuggestion[] };
+  Activity: undefined;
   Onboarding: undefined;
   ProfileSetup: undefined;
   Permissions: undefined;

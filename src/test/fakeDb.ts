@@ -1,0 +1,135 @@
+/**
+ * Tiny in-memory stand-in for the op-sqlite `DB`, for repository/store tests.
+ * It understands only the statement shapes the repositories emit:
+ *   INSERT [OR REPLACE] INTO t (cols) VALUES (?, 'lit', ...)
+ *   UPDATE t SET a = ?, b = NULL WHERE id = ?
+ *   DELETE FROM t WHERE id = ?
+ *   SELECT * FROM t [WHERE id = ?] [ORDER BY ...]
+ * Every call is logged with whether it ran inside `db.transaction`.
+ */
+export interface FakeCall {
+  sql: string;
+  params: unknown[];
+  inTransaction: boolean;
+  transactionNo: number | null;
+}
+
+type Row = Record<string, unknown>;
+
+export interface FakeDb {
+  execute: jest.Mock;
+  transaction: jest.Mock;
+  calls: FakeCall[];
+  tables: Map<string, Map<string, Row>>;
+  transactionCount: () => number;
+  auditInserts: () => Array<{ row: Row; call: FakeCall }>;
+}
+
+const PRIMARY_KEY: Record<string, string[]> = {
+  app_settings: ['key'],
+  account_suggestion_decisions: ['bank_canonical', 'account_kind', 'last_four'],
+};
+
+function keyFor(table: string, row: Row): string {
+  const cols = PRIMARY_KEY[table] ?? ['id'];
+  return cols.map(c => String(row[c])).join('|');
+}
+
+function splitTopLevel(list: string): string[] {
+  return list.split(',').map(part => part.trim());
+}
+
+export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
+  const tables = new Map<string, Map<string, Row>>();
+  const calls: FakeCall[] = [];
+  let transactions = 0;
+
+  const table = (name: string) => {
+    if (!tables.has(name)) tables.set(name, new Map());
+    return tables.get(name)!;
+  };
+  for (const [name, rows] of Object.entries(seed)) {
+    for (const row of rows) table(name).set(keyFor(name, row), { ...row });
+  }
+
+  const run = (inTransaction: boolean, transactionNo: number | null) =>
+    jest.fn(async (rawSql: string, params: unknown[] = []) => {
+      const sql = rawSql.replace(/\s+/g, ' ').trim();
+      calls.push({ sql, params, inTransaction, transactionNo });
+
+      let m = /^INSERT (?:OR REPLACE )?INTO (\w+) \(([^)]*)\) VALUES \((.*)\)$/i.exec(sql);
+      if (m) {
+        const cols = splitTopLevel(m[2]);
+        const values = splitTopLevel(m[3]);
+        let p = 0;
+        const row: Row = {};
+        cols.forEach((col, i) => {
+          const v = values[i];
+          row[col] = v === '?' ? params[p++] : v === 'NULL' ? null : v.replace(/^'(.*)'$/, '$1');
+        });
+        const t = table(m[1]);
+        row.rowid = t.size + 1;
+        t.set(keyFor(m[1], row), row);
+        return { rows: [], rowsAffected: 1 };
+      }
+
+      m = /^UPDATE (\w+) SET (.*) WHERE id = \?$/i.exec(sql);
+      if (m) {
+        const id = String(params[params.length - 1]);
+        const existing = table(m[1]).get(id);
+        if (!existing) return { rows: [], rowsAffected: 0 };
+        let p = 0;
+        for (const assignment of splitTopLevel(m[2])) {
+          const [col, value] = assignment.split('=').map(x => x.trim());
+          existing[col] = value === '?' ? params[p++] : value === 'NULL' ? null : value;
+        }
+        return { rows: [], rowsAffected: 1 };
+      }
+
+      m = /^DELETE FROM (\w+) WHERE id = \?$/i.exec(sql);
+      if (m) {
+        table(m[1]).delete(String(params[0]));
+        return { rows: [], rowsAffected: 1 };
+      }
+
+      m = /^SELECT \* FROM (\w+) WHERE id = \?$/i.exec(sql);
+      if (m) {
+        const row = table(m[1]).get(String(params[0]));
+        return { rows: row ? [row] : [] };
+      }
+
+      m = /^SELECT \* FROM (\w+)(?: ORDER BY .*)?$/i.exec(sql);
+      if (m) return { rows: Array.from(table(m[1]).values()) };
+
+      return { rows: [], rowsAffected: 0 };
+    });
+
+  const execute = run(false, null);
+  const transaction = jest.fn(async (fn: (tx: { execute: jest.Mock }) => Promise<void>) => {
+    transactions++;
+    await fn({ execute: run(true, transactions) });
+  });
+
+  return {
+    execute,
+    transaction,
+    calls,
+    tables,
+    transactionCount: () => transactions,
+    auditInserts: () =>
+      calls
+        .filter(c => /^INSERT INTO audit_events/.test(c.sql))
+        .map(call => ({
+          call,
+          row: {
+            id: call.params[0],
+            transaction_id: call.params[1],
+            account_id: call.params[2],
+            event_type: call.params[3],
+            event_at: call.params[4],
+            actor: call.params[5],
+            metadata_json: call.params[6],
+          },
+        })),
+  };
+}

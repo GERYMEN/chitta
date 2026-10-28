@@ -37,6 +37,16 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       "UPDATE transactions SET confidence_score = confidence_score * 100 WHERE source_type = 'sms' AND confidence_score IS NOT NULL AND confidence_score <= 1",
     ],
   },
+  {
+    // R1 audit writer: account events need their own subject column, and the
+    // Activity feed pages by event_at and looks events up by transaction.
+    version: 4,
+    statements: [
+      'ALTER TABLE audit_events ADD COLUMN account_id TEXT',
+      'CREATE INDEX IF NOT EXISTS ix_audit_event_at ON audit_events(event_at)',
+      'CREATE INDEX IF NOT EXISTS ix_audit_transaction ON audit_events(transaction_id)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

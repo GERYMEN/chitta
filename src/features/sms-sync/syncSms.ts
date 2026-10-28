@@ -57,8 +57,13 @@ const INBOX_LIMIT = 200;
  * (clamped to 70..100) is approved through the same `store.approve` path a
  * manual approve uses (canTransition pending -> approved). Existing pending
  * items are never retroactively approved, and manual entries never go through
- * this path. There is no audit-event writer in the codebase yet, so no audit
- * row is recorded for auto-approvals.
+ * this path.
+ *
+ * Audit (R1): `store.addTransaction` writes one 'detected' event (actor
+ * 'system', confidence only — never SMS text/sender/preview) in the same
+ * db.transaction as each inserted pending row, and an auto-approval writes
+ * one 'auto_approved' event (actor 'system', confidence + threshold) in the
+ * same db.transaction as the status change.
  */
 export async function syncSms(): Promise<SmsSyncResult> {
   const granted = await checkSmsPermission();
@@ -147,7 +152,10 @@ export async function syncSms(): Promise<SmsSyncResult> {
     if (
       shouldAutoApprove(approvalMode, autoApproveThreshold, createdTransaction.confidenceScore)
     ) {
-      await useTransactionsStore.getState().approve(createdTransaction.id);
+      await useTransactionsStore.getState().approve(createdTransaction.id, {
+        confidence: createdTransaction.confidenceScore ?? 0,
+        threshold: autoApproveThreshold,
+      });
       const after = useTransactionsStore
         .getState()
         .transactions.find(t => t.id === createdTransaction.id);

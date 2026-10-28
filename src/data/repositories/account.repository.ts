@@ -7,6 +7,19 @@ import {
   accountKeyToString,
   AccountKey,
 } from '../../features/sms-sync/normalizeAccountKey';
+import { AuditEventDraft } from '../../domain/audit/audit.types';
+import { auditRepository, SqlExecutor } from './audit.repository';
+
+/** Write account audit drafts inside the caller's `tx` (same transaction). */
+async function writeAudit(
+  tx: SqlExecutor,
+  accountId: string,
+  audit: ReadonlyArray<AuditEventDraft>,
+): Promise<void> {
+  for (const draft of audit) {
+    await auditRepository.insert(tx, { ...draft, transactionId: null, accountId });
+  }
+}
 
 export type CreateAccountInput = Omit<
   Account,
@@ -57,7 +70,10 @@ async function getById(id: string): Promise<Account | null> {
   return result.rows.length > 0 ? rowToAccount(result.rows[0]) : null;
 }
 
-async function create(input: CreateAccountInput): Promise<Account> {
+async function create(
+  input: CreateAccountInput,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<Account> {
   const now = new Date().toISOString();
   const account: Account = {
     ...input,
@@ -72,15 +88,22 @@ async function create(input: CreateAccountInput): Promise<Account> {
   const row = accountToRow(account);
   const placeholders = COLUMNS.map(() => '?').join(', ');
 
-  await getDatabase().execute(
-    `INSERT INTO accounts (${COLUMNS.join(', ')}) VALUES (${placeholders})`,
-    valuesFor(row),
-  );
+  await getDatabase().transaction(async tx => {
+    await tx.execute(
+      `INSERT INTO accounts (${COLUMNS.join(', ')}) VALUES (${placeholders})`,
+      valuesFor(row),
+    );
+    await writeAudit(tx, account.id, audit);
+  });
 
   return account;
 }
 
-async function update(id: string, patch: AccountPatch): Promise<Account> {
+async function update(
+  id: string,
+  patch: AccountPatch,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<Account> {
   const existing = await getById(id);
   if (!existing) {
     throw new Error(`Account not found: ${id}`);
@@ -95,10 +118,10 @@ async function update(id: string, patch: AccountPatch): Promise<Account> {
   const row = accountToRow(updated);
   const assignments = COLUMNS.map(column => `${column} = ?`).join(', ');
 
-  await getDatabase().execute(
-    `UPDATE accounts SET ${assignments} WHERE id = ?`,
-    [...valuesFor(row), id],
-  );
+  await getDatabase().transaction(async tx => {
+    await tx.execute(`UPDATE accounts SET ${assignments} WHERE id = ?`, [...valuesFor(row), id]);
+    await writeAudit(tx, id, audit);
+  });
 
   return updated;
 }
@@ -108,7 +131,10 @@ async function update(id: string, patch: AccountPatch): Promise<Account> {
  * 'deleted' suggestion decision for the account's normalized key so new SMS
  * for it are not imported or re-suggested. Transactions are never touched.
  */
-async function softDelete(id: string): Promise<Account> {
+async function softDelete(
+  id: string,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<Account> {
   const existing = await getById(id);
   if (!existing) {
     throw new Error(`Account not found: ${id}`);
@@ -130,6 +156,7 @@ async function softDelete(id: string): Promise<Account> {
         VALUES (?, ?, ?, 'deleted', ?, ?, ?)`,
       [key.bankCanonical, key.accountKind, key.lastFour, id, key.normalizerVersion, nowMs],
     );
+    await writeAudit(tx, id, audit);
   });
 
   return { ...existing, deletedAt: nowIso, updatedAt: nowIso };
@@ -140,7 +167,10 @@ async function softDelete(id: string): Promise<Account> {
  * 'deleted' decision row(s). The next Sync SMS backfills the gap (dedup by
  * source_reference_hash). Transactions are never touched.
  */
-async function restore(id: string): Promise<Account> {
+async function restore(
+  id: string,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<Account> {
   const existing = await getById(id);
   if (!existing) {
     throw new Error(`Account not found: ${id}`);
@@ -157,6 +187,7 @@ async function restore(id: string): Promise<Account> {
       "DELETE FROM account_suggestion_decisions WHERE account_id = ? AND decision = 'deleted'",
       [id],
     );
+    await writeAudit(tx, id, audit);
   });
 
   return { ...existing, deletedAt: null, updatedAt: nowIso };

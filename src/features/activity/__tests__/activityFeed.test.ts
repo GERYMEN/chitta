@@ -1,0 +1,232 @@
+import {
+  accountShortLabel,
+  dayHeading,
+  describeActivity,
+  formatRelativeTime,
+  groupActivityByDay,
+  signedAmount,
+} from '../activityFeed';
+import { AuditFeedEvent } from '../../../domain/audit/audit.types';
+
+function event(partial: Partial<AuditFeedEvent>): AuditFeedEvent {
+  return {
+    id: 'aud-1',
+    seq: 1,
+    transactionId: 'txn-1',
+    accountId: 'acc-1',
+    eventType: 'approved',
+    eventAt: '2026-10-28T10:00:00.000Z',
+    actor: 'user',
+    metadata: null,
+    deletedSnapshot: null,
+    ...partial,
+  };
+}
+
+const EXPENSE = { merchantName: 'QA-Merchant-07', amountMinor: 5000, type: 'expense' as const };
+const INCOME = { merchantName: 'QA-Payer', amountMinor: 120000, type: 'income' as const };
+const ACCOUNT = { name: 'QA Delete Bank 9999', lastFour: '9999' };
+
+describe('describeActivity sentences', () => {
+  it('approved expense: sentence with amount, balance impact in expense tone', () => {
+    const item = describeActivity(event({}), { transaction: EXPENSE });
+    expect(item.sentence).toBe('You approved QA-Merchant-07 ₹50.00');
+    expect(item.impact).toEqual({ text: 'Balance -₹50.00', tone: 'expense' });
+    expect(item.transactionId).toBe('txn-1');
+    expect(item.transactionDeleted).toBe(false);
+    expect(item.icon).toBe('check-circle-outline');
+  });
+
+  it('approved income: positive green impact', () => {
+    const item = describeActivity(event({}), { transaction: INCOME });
+    expect(item.impact).toEqual({ text: 'Balance +₹1,200.00', tone: 'income' });
+  });
+
+  it('auto-approved: "at 90% match"', () => {
+    const item = describeActivity(
+      event({
+        eventType: 'auto_approved',
+        actor: 'system',
+        metadata: { kind: 'auto_approved', confidence: 90, threshold: 85 },
+      }),
+      { transaction: EXPENSE },
+    );
+    expect(item.sentence).toBe('Auto-approved QA-Merchant-07 ₹50.00 at 90% match');
+  });
+
+  it('created (manual) and detected (SMS) wait for approval', () => {
+    expect(describeActivity(event({ eventType: 'created' }), { transaction: EXPENSE })).toMatchObject({
+      sentence: 'You added QA-Merchant-07 ₹50.00',
+      impact: { text: 'Waiting for approval', tone: 'pending' },
+    });
+    expect(
+      describeActivity(
+        event({ eventType: 'detected', actor: 'system', metadata: { kind: 'detected', confidence: 90 } }),
+        { transaction: EXPENSE },
+      ),
+    ).toMatchObject({
+      sentence: 'Detected QA-Merchant-07 ₹50.00 from SMS',
+      impact: { text: 'Waiting for approval · 90% match', tone: 'pending' },
+    });
+  });
+
+  it('edited lists friendly field names', () => {
+    const item = describeActivity(
+      event({ eventType: 'edited', metadata: { kind: 'edited', fields: ['note', 'amountMinor'] } }),
+      { transaction: EXPENSE },
+    );
+    expect(item.sentence).toBe('You edited QA-Merchant-07');
+    expect(item.impact).toEqual({ text: 'Changed notes, amount', tone: 'neutral' });
+  });
+
+  it('rejected is not counted', () => {
+    const item = describeActivity(event({ eventType: 'rejected' }), { transaction: EXPENSE });
+    expect(item.sentence).toBe('You rejected QA-Merchant-07 ₹50.00');
+    expect(item.impact?.text).toBe('Not counted in balance');
+  });
+
+  it('deleted uses its own snapshot and flags the transaction as gone', () => {
+    const item = describeActivity(
+      event({
+        eventType: 'deleted',
+        metadata: { kind: 'deleted', ...EXPENSE, status: 'approved' },
+      }),
+      { transaction: null },
+    );
+    expect(item.sentence).toBe('You deleted QA-Merchant-07 ₹50.00');
+    expect(item.impact).toEqual({ text: 'No longer in balance (was -₹50.00)', tone: 'negative' });
+    expect(item.transactionDeleted).toBe(true);
+    expect(item.transactionId).toBe('txn-1');
+  });
+
+  it('deleted pending item: removed from records', () => {
+    const item = describeActivity(
+      event({ eventType: 'deleted', metadata: { kind: 'deleted', ...EXPENSE, status: 'pending' } }),
+    );
+    expect(item.impact?.text).toBe('Removed from records');
+  });
+
+  it('older events of a deleted transaction fall back to the deleted snapshot', () => {
+    const item = describeActivity(
+      event({ deletedSnapshot: { kind: 'deleted', ...EXPENSE, status: 'approved' } }),
+      { transaction: null },
+    );
+    expect(item.sentence).toBe('You approved QA-Merchant-07 ₹50.00');
+    expect(item.transactionDeleted).toBe(true);
+  });
+
+  it('unknown transaction: generic but never crashes', () => {
+    const item = describeActivity(event({ eventType: 'approved' }));
+    expect(item.sentence).toBe('You approved a transaction');
+    expect(item.impact).toBeNull();
+  });
+
+  it('account events use ••last four', () => {
+    const removed = describeActivity(
+      event({ eventType: 'account_removed', transactionId: null }),
+      { account: ACCOUNT },
+    );
+    expect(removed.sentence).toBe('You removed account ••9999');
+    expect(removed.impact?.tone).toBe('negative');
+    expect(removed.transactionId).toBeNull();
+    expect(removed.transactionDeleted).toBe(false);
+
+    expect(
+      describeActivity(event({ eventType: 'account_restored', transactionId: null }), {
+        account: ACCOUNT,
+      }).sentence,
+    ).toBe('You restored account ••9999');
+    expect(
+      describeActivity(event({ eventType: 'account_created', transactionId: null }), {
+        account: { name: 'Cash', lastFour: null },
+      }).sentence,
+    ).toBe('You added account Cash');
+    expect(
+      describeActivity(
+        event({
+          eventType: 'account_updated',
+          transactionId: null,
+          metadata: { kind: 'account_updated', fields: ['name'] },
+        }),
+        { account: ACCOUNT },
+      ).impact?.text,
+    ).toBe('Changed name');
+  });
+
+  it('settings changes', () => {
+    const on = describeActivity(
+      event({
+        eventType: 'settings_changed',
+        transactionId: null,
+        metadata: { kind: 'settings_changed', key: 'approval_mode', from: 'manual', to: 'auto' },
+      }),
+    );
+    expect(on.sentence).toBe('You turned on auto-approve');
+    const off = describeActivity(
+      event({
+        eventType: 'settings_changed',
+        transactionId: null,
+        metadata: { kind: 'settings_changed', key: 'approval_mode', from: 'auto', to: 'manual' },
+      }),
+    );
+    expect(off.sentence).toBe('You turned off auto-approve');
+    const threshold = describeActivity(
+      event({
+        eventType: 'settings_changed',
+        transactionId: null,
+        metadata: { kind: 'settings_changed', key: 'auto_approve_threshold', from: '90', to: '85' },
+      }),
+    );
+    expect(threshold.sentence).toBe('You set the auto-approve threshold to 85%');
+    expect(threshold.impact?.text).toBe('Was 90%');
+  });
+});
+
+describe('formatting helpers', () => {
+  it('signedAmount', () => {
+    expect(signedAmount(5000, 'expense')).toBe('-₹50.00');
+    expect(signedAmount(5000, 'income')).toBe('+₹50.00');
+  });
+
+  it('accountShortLabel', () => {
+    expect(accountShortLabel(ACCOUNT)).toBe('••9999');
+    expect(accountShortLabel({ name: 'Cash', lastFour: null })).toBe('Cash');
+    expect(accountShortLabel(null)).toBe('an account');
+  });
+
+  it('formatRelativeTime', () => {
+    const now = new Date(2026, 9, 28, 15, 0, 0);
+    const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+    expect(formatRelativeTime(ago(10_000), now)).toBe('Just now');
+    expect(formatRelativeTime(ago(5 * 60_000), now)).toBe('5 min ago');
+    expect(formatRelativeTime(ago(3 * 3_600_000), now)).toBe('3 h ago');
+    expect(formatRelativeTime(new Date(2026, 9, 27, 9, 5).toISOString(), now)).toMatch(/9:05/);
+  });
+
+  it('dayHeading', () => {
+    const now = new Date(2026, 9, 28, 15, 0, 0);
+    expect(dayHeading(new Date(2026, 9, 28, 1, 0).toISOString(), now)).toBe('Today');
+    expect(dayHeading(new Date(2026, 9, 27, 23, 0).toISOString(), now)).toBe('Yesterday');
+    expect(dayHeading(new Date(2026, 9, 20, 12, 0).toISOString(), now)).toMatch(/20/);
+  });
+});
+
+describe('groupActivityByDay', () => {
+  it('groups newest-first items by local day, preserving order', () => {
+    const now = new Date(2026, 9, 28, 15, 0, 0);
+    const at = (d: number, h: number) => new Date(2026, 9, d, h, 0).toISOString();
+    const items = [
+      describeActivity(event({ id: 'a', eventAt: at(28, 14) })),
+      describeActivity(event({ id: 'b', eventAt: at(28, 9) })),
+      describeActivity(event({ id: 'c', eventAt: at(27, 20) })),
+      describeActivity(event({ id: 'd', eventAt: at(20, 8) })),
+    ];
+    const sections = groupActivityByDay(items, now);
+    expect(sections.map(s => s.title.slice(0, 9))).toEqual(['Today', 'Yesterday', expect.any(String)]);
+    expect(sections.map(s => s.data.map(i => i.id))).toEqual([['a', 'b'], ['c'], ['d']]);
+  });
+
+  it('empty in, empty out', () => {
+    expect(groupActivityByDay([])).toEqual([]);
+  });
+});

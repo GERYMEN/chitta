@@ -43,10 +43,23 @@ export function TransactionDetailScreen() {
   }
 
   if (!transaction) {
+    // Reached from Activity for a transaction that has since been deleted
+    // (its audit history stays). Never crash — say so plainly.
     return (
-      <View style={styles.missing}>
-        <Text style={styles.missingText}>Transaction not found.</Text>
-      </View>
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+          <Text style={styles.headerTitle}>Transaction</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.missing}>
+          <Icon name="trash-can-outline" size={32} color={colors.outline} />
+          <Text style={styles.missingTitle}>Transaction deleted</Text>
+          <Text style={styles.missingText}>
+            This record was removed. Its history stays in Activity.
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -126,10 +139,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.xl,
     backgroundColor: colors.surface,
+  },
+  missingTitle: {
+    ...typography.headlineSm,
+    fontSize: 18,
+    color: colors.onSurface,
   },
   missingText: {
     ...typography.bodyLg,
     color: colors.outline,
+    textAlign: 'center',
   },
 });

@@ -18,7 +18,11 @@ export interface TransactionDetailContentProps {
   onApprove: (transaction: Transaction) => void;
   onEdit: (transaction: Transaction) => void;
   onReject: (transaction: Transaction) => void;
-  onDelete: (transaction: Transaction) => void;
+  /**
+   * Delete is only offered for non-pending transactions, and only when the
+   * caller passes this (Pending's review sheet does not — user decision B).
+   */
+  onDelete?: (transaction: Transaction) => void;
   /** 'sheet': compact Pending → Review surface. 'screen': full Transaction Detail. */
   variant?: 'sheet' | 'screen';
   /** When true, the action row is omitted so the parent can render it in a fixed footer. */
@@ -44,7 +48,7 @@ export interface TransactionDetailActionsProps {
   onApprove: (transaction: Transaction) => void;
   onEdit: (transaction: Transaction) => void;
   onReject: (transaction: Transaction) => void;
-  onDelete: (transaction: Transaction) => void;
+  onDelete?: (transaction: Transaction) => void;
 }
 
 /**
@@ -78,7 +82,9 @@ export function TransactionDetailActions({
       ) : (
         <View style={styles.secondaryActions}>
           <Button label="Edit" variant="ghost" onPress={() => onEdit(transaction)} style={styles.secondaryButton} />
-          <Button label="Delete" variant="destructive" onPress={() => onDelete(transaction)} style={styles.secondaryButton} />
+          {onDelete ? (
+            <Button label="Delete" variant="destructive" onPress={() => onDelete(transaction)} style={styles.secondaryButton} />
+          ) : null}
         </View>
       )}
     </View>

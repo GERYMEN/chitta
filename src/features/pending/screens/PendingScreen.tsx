@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { PendingTransactionCard } from '../components/PendingTransactionCard';
 import { TransactionDetailContent } from '../../transactions/components/TransactionDetailContent';
-import { BottomSheet, Chip, showDialog } from '../../../shared/ui';
+import { BottomSheet, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, spacing, typography } from '../../../theme';
 import { useShallow } from 'zustand/react/shallow';
@@ -26,7 +26,6 @@ export function PendingScreen() {
   const pending = useTransactionsStore(useShallow(selectPending));
   const approve = useTransactionsStore(state => state.approve);
   const reject = useTransactionsStore(state => state.reject);
-  const deleteTransaction = useTransactionsStore(state => state.deleteTransaction);
 
   const [filter, setFilter] = useState<Filter>('all');
   const [reviewing, setReviewing] = useState<Transaction | null>(null);
@@ -45,25 +44,6 @@ export function PendingScreen() {
 
   function closeReview() {
     setReviewing(null);
-  }
-
-  function handleDelete(transaction: Transaction) {
-    showDialog({
-      title: 'Delete transaction?',
-      message: 'This will permanently remove the record.',
-      icon: 'trash-can-outline',
-      actions: [
-        { label: 'Cancel', variant: 'ghost' },
-        {
-          label: 'Delete',
-          variant: 'destructive',
-          onPress: async () => {
-            await deleteTransaction(transaction.id);
-            closeReview();
-          },
-        },
-      ],
-    });
   }
 
   return (
@@ -136,7 +116,6 @@ export function PendingScreen() {
               closeReview();
               navigation.navigate('EditTransaction', { transactionId: t.id });
             }}
-            onDelete={t => handleDelete(t)}
           />
         ) : null}
       </BottomSheet>

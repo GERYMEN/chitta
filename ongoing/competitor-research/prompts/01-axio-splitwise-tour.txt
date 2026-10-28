@@ -1,0 +1,66 @@
+TASK: requirement gathering for Tracker's next phase. Browse two apps on the
+owner's personal phone in VIEW-ONLY mode, screenshot each screen, and turn
+what you see into a feature inventory + prioritized suggestions for Tracker.
+
+USER APPROVAL (explicit, this task only): the owner approved opening these
+two apps over adb and taking screenshots: Axio (package
+com.daamitt.walnut.app) and Splitwise (package com.Splitwise.SplitwiseMobile).
+Scope = every main/bottom tab + one level deep (one detail screen and one
+settings/menu screen per app), ~10–15 screens per app. No other apps.
+
+CONTEXT: read docs/PROJECT.md, docs/DESIGN.md and
+ongoing/realtime-persistence/STATE.md (phase table) so you know what Tracker
+already has (SMS sync + suggestions, accounts w/ soft delete, pending
+approval, auto-approve threshold, transactions, original SMS view).
+
+DEVICE: USB serial 00015365L001524. Setup:
+  export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+Launch: adb shell monkey -p <package> -c android.intent.category.LAUNCHER 1
+Screenshot: adb exec-out screencap -p > <SHOTS>/<app>-NN-<screen>.png
+  SHOTS=/private/tmp/claude-501/-Users-mohammedsiraj-Downloads-projects-experiment/7a5ecb0e-0287-4dbc-b368-ead5c275af23/scratchpad/competitor-shots
+  (mkdir -p it). View screenshots with the Read tool to analyze them.
+  NEVER save screenshots anywhere else; never inside the Tracker repo.
+Finding tap targets: prefer coordinates from the screenshot. If you use
+uiautomator, grep ONLY for the bounds of one known UI label (tab/menu name)
+and never print text values of the dump; `adb shell rm /sdcard/u.xml` after.
+
+VIEW-ONLY RULES (absolute):
+- Allowed taps: bottom/top tabs, nav drawer/menu/overflow icons, opening ONE
+  existing list item to see its detail screen, Settings/Profile pages, Back,
+  scrolling (swipe) to see the rest of a screen.
+- FORBIDDEN taps: anything that creates, changes, sends or pays — Add
+  expense/Add/+/FAB, Save, Settle up, Remind, Pay, Record payment, Delete,
+  Edit, Invite, Share, Export, Sync/Refresh-with-server, Link account,
+  Subscribe/Upgrade/Pro purchase, toggles/switches, Logout, any text field
+  (no typing at all), notification shade, ads/links leaving the app.
+- If a tap opens a create/edit form, dialog, permission request, login,
+  purchase or OTP screen: press Back immediately without interacting; never
+  grant/deny permissions or accept dialogs.
+- Before EVERY tap: `adb shell dumpsys window | grep -E
+  'mCurrentFocus|mFocusedApp'` — both lines must show the app you intend.
+  If another app/system UI is in front (e.g. an incoming call — then just
+  wait), do not screenshot or tap it; press HOME (unless a call is active)
+  and relaunch the intended app.
+- If the screen is locked/off, stop and report; do not unlock.
+- Do NOT open Tracker in this task.
+- End: press HOME and force-stop neither app (leave them as found).
+
+PRIVACY IN OUTPUT (absolute): the report must describe FEATURES, LAYOUT and
+UX patterns only. Never write real amounts, balances, merchant names,
+people/friend/group names, phone numbers, emails, bank last-4 digits or
+SMS text. Use placeholders ("Friend A", "₹X", "Group 1"). No screenshots
+or image content embedded in the report.
+
+OUTPUT: ongoing/competitor-research/01-axio-splitwise-tour.md with:
+ 1. Screen inventory per app: table # | screenshot filename | screen name |
+    what it shows / key features / notable UX.
+ 2. Feature comparison matrix: feature | Axio | Splitwise | Tracker today
+    (yes/partial/no).
+ 3. Suggestions for Tracker next phase, prioritized P0/P1/P2, each with:
+    what, why (which app inspired it + user value), effort S/M/L, fit with
+    Tracker's SMS-first/offline/privacy design, dependencies.
+ 4. Things NOT to copy (bad UX/dark patterns seen) — short list.
+Leak-scan the report for real names/amounts before finishing. Do not
+commit. Leave the screenshots in SHOTS (orchestrator deletes them).
+REPLY ONLY: screens captured per app (count), any forbidden-screen
+incidents, top 8 suggestions one line each, report path.

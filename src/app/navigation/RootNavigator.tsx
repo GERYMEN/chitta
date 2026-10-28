@@ -9,6 +9,7 @@ import { SmsSuggestionsScreen } from '../../features/sms-sync/screens/SmsSuggest
 import { OnboardingScreen } from '../../features/onboarding/screens/OnboardingScreen';
 import { ProfileSetupScreen } from '../../features/onboarding/screens/ProfileSetupScreen';
 import { PermissionsScreen } from '../../features/onboarding/screens/PermissionsScreen';
+import { ActivityScreen } from '../../features/activity/screens/ActivityScreen';
 import { RootStackParamList } from './routes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -47,6 +48,11 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
       <Stack.Screen
         name="SmsSuggestions"
         component={SmsSuggestionsScreen}
+        options={{ presentation: 'card' }}
+      />
+      <Stack.Screen
+        name="Activity"
+        component={ActivityScreen}
         options={{ presentation: 'card' }}
       />
     </Stack.Navigator>

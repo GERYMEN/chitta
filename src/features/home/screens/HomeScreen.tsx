@@ -196,7 +196,14 @@ export function HomeScreen() {
         })}
         </View>
       </ScrollView>
-      <ProfileSettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ProfileSettingsSheet
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onOpenActivity={() => {
+          setSettingsOpen(false);
+          navigation.navigate('Activity');
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -1,0 +1,114 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md (section R1 + "Working
+rules"), ongoing/roadmap/STATE.md, and the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute device-safety rules).
+Read docs/PROJECT.md + docs/DESIGN.md for UX/design tokens.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+PHASE R1 — Trust foundation. Code + tests + device check.
+
+Verified current state:
+- `audit_events` table exists in src/data/db/schema.ts (id, transaction_id,
+  event_type, event_at, actor, metadata_json) but NOTHING writes to it.
+  src/domain/audit/audit.types.ts declares previousHash/eventHash which the
+  table lacks — reconcile (drop from type unless you add columns in the
+  migration; no hash chain is required in R1).
+- Single store: src/features/transactions/state/transactionsStore.ts
+  (transactions + accounts + settings actions; grep to confirm).
+- Migrations: src/data/db/migrations.ts, last = 3. Add migration 4 only.
+- Pending delete: src/features/pending/screens/PendingScreen.tsx has an
+  unreachable handleDelete/onDelete path (Delete renders only for
+  non-pending in TransactionDetailContent; Pending shows only pending).
+
+USER DECISION: Pending delete = option B — remove the dead Delete path from
+PendingScreen (handler, dialog, prop wiring). Pending items keep Approve /
+Edit / Reject. If TransactionDetailContent's onDelete prop becomes optional
+for that caller, type it so; keep Transaction Detail's Delete working.
+
+TASKS
+T1 Audit domain + repository
+   - AuditEventType: detected, auto_approved, approved, edited, rejected,
+     deleted, account_created, account_updated, account_removed,
+     account_restored, settings_changed.
+   - metadata_json: small typed payloads only — e.g. {confidence,
+     threshold} for auto_approved; {fields:[...names]} for edited;
+     {key, from, to} for settings_changed (approval_mode,
+     auto_approve_threshold only — never user_name value). NEVER SMS text,
+     sender, or sanitizedPreview.
+   - migration 4: add `account_id TEXT NULL` + index on (event_at) and
+     (transaction_id). Parameterized SQL only.
+   - src/data/repositories/audit.repository.ts: insert (usable inside an
+     existing db.transaction), listRecent(limit, beforeEventAt cursor).
+T2 Write audit events from every money-changing action, in the SAME
+   db.transaction as the change where the repository allows (otherwise
+   immediately after, and document why): add/edit/approve/reject/delete
+   transaction, auto-approve in syncSms (actor 'system'), SMS detection
+   (one 'detected' per inserted pending item, actor 'system'), account
+   create/update/softDelete/restore, approval settings save. Fast-approve
+   on Home counts as 'approved'.
+T3 Activity feed (src/features/activity/): screen reachable from the Home
+   settings sheet via a row "Activity" (no new tab — PROJECT.md 4-tab cap).
+   Rows: icon + sentence ("You approved QA-Merchant ₹X", "Auto-approved …
+   at 90% match", "You removed account ••9999") + coloured impact line
+   using theme tokens + relative time; grouped by day; newest first;
+   paginated (cursor). Tap a transaction row → TransactionDetail (handle
+   deleted transaction: show "Transaction deleted", no crash). Sentence
+   building in a pure, unit-tested helper. Empty state copy.
+   Safe area + bottom inset like other screens.
+T4 Transactions filters (TransactionsScreen):
+   - All/Expenses/Income chips actually filter (today they only count).
+   - Account filter + Category filter chips → BottomSheet pickers
+     (include deleted accounts under a "Deleted" heading so their
+     transactions stay findable).
+   - Search matches merchant OR notes (case-insensitive).
+   - "Reset" clears all. Totals (Inflow/Spent/Net) reflect the filtered set
+     — state this in the UI label if it changes meaning.
+   - Filter logic = one pure predicate function, unit-tested for combos.
+T5 Pending dead-code removal (user decision B above).
+T6 Tests: audit insert per action (mock db pattern from existing
+   repository tests; assert one event per action, correct type/actor/
+   metadata, no SMS text in metadata); feed sentence helper; filter
+   predicate; migration 4 idempotent.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+DEVICE (USB serial 00015365L001524; adb install -r; Metro + adb reverse
+tcp:8081 tcp:8081). If phone absent 2 min or locked: stop device part,
+report what ran. SYNTHETIC DATA ONLY:
+ D1 Add Record expense "QA-Merchant-07" 50.00 on "QA Delete Bank 9999" →
+    approve → edit notes to "QA note" → Activity shows created/approved/
+    edited rows for QA-Merchant-07 (grep dumps for "QA-Merchant-07" ONLY).
+ D2 Transactions: Expenses chip / account filter = QA Delete Bank 9999 /
+    search "QA note" each show QA-Merchant-07; report COUNTS only for
+    other filters, never row text.
+ D3 Delete QA-Merchant-07 (confirm) → Activity shows deleted row; tapping
+    it shows "Transaction deleted", no crash.
+ D4 Pending: open a pending "QA-Merchant-05" item → buttons are Approve/
+    Edit/Reject only; press Back (do not act on it).
+ D5 Do NOT change approval settings on device (settings_changed is covered
+    by unit tests). Do NOT tap Sync SMS.
+ D6 Force-stop + relaunch → Activity persists. logcat 0 FATAL com.tracker,
+    0 "Maximum update depth", 0 ReactNativeJS errors. End: force-stop.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, run as a guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the command chain (one action
+  per command, or `|| exit 1`). If another app is in front: press HOME
+  (unless a call is active — then wait), relaunch Tracker. Never inspect
+  the other app. Locked screen = stop.
+- Activity/Transactions screens now show REAL merchants and amounts of the
+  owner: every uiautomator dump grep-filtered to one QA-… element or one
+  label; never print a full dump; never print real rows; `adb shell rm
+  /sdcard/u.xml` after; /sdcard paths only inside adb shell.
+- Never touch the owner's real accounts/transactions/settings; never
+  tracker.db / sqlite3 / run-as; no uninstall/clear-data/screenshots.
+
+OUTPUT: ongoing/roadmap/R1-trust-foundation.md (files changed, migration 4
+SQL, audit call-site map, feed + filter design, gates, D1–D6 PASS/FAIL,
+leftover synthetic data). Leak-scan before finishing. Do not commit.
+REPLY ONLY: gates yes/no; files changed count; D1–D6 PASS/FAIL; anything
+not verified and why.
