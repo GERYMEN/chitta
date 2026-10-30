@@ -1,10 +1,11 @@
 /**
  * Tiny in-memory stand-in for the op-sqlite `DB`, for repository/store tests.
  * It understands only the statement shapes the repositories emit:
- *   INSERT [OR REPLACE] INTO t (cols) VALUES (?, 'lit', ...)
+ *   INSERT [OR REPLACE|OR IGNORE] INTO t (cols) VALUES (?, 'lit', ...)
+ *     [ON CONFLICT(col) DO UPDATE SET a = excluded.a, ...]
  *   UPDATE t SET a = ?, b = NULL WHERE id = ?
- *   DELETE FROM t WHERE id = ?
- *   SELECT * FROM t [WHERE id = ?] [ORDER BY ...]
+ *   DELETE FROM t WHERE <pk col> = ?
+ *   SELECT * FROM t [WHERE <col> = ?] [ORDER BY ...]
  * Every call is logged with whether it ran inside `db.transaction`.
  */
 export interface FakeCall {
@@ -27,6 +28,7 @@ export interface FakeDb {
 
 const PRIMARY_KEY: Record<string, string[]> = {
   app_settings: ['key'],
+  merchant_rules: ['merchant_key'],
   account_suggestion_decisions: ['bank_canonical', 'account_kind', 'last_four'],
 };
 
@@ -57,19 +59,29 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
       const sql = rawSql.replace(/\s+/g, ' ').trim();
       calls.push({ sql, params, inTransaction, transactionNo });
 
-      let m = /^INSERT (?:OR REPLACE )?INTO (\w+) \(([^)]*)\) VALUES \((.*)\)$/i.exec(sql);
+      let m = /^INSERT (OR REPLACE |OR IGNORE )?INTO (\w+) \(([^)]*)\) VALUES \((.*?)\)(?: ON CONFLICT\(\w+\) DO UPDATE SET (.*))?$/i.exec(sql);
       if (m) {
-        const cols = splitTopLevel(m[2]);
-        const values = splitTopLevel(m[3]);
+        const cols = splitTopLevel(m[3]);
+        const values = splitTopLevel(m[4]);
         let p = 0;
         const row: Row = {};
         cols.forEach((col, i) => {
           const v = values[i];
           row[col] = v === '?' ? params[p++] : v === 'NULL' ? null : v.replace(/^'(.*)'$/, '$1');
         });
-        const t = table(m[1]);
+        const t = table(m[2]);
+        const key = keyFor(m[2], row);
+        const existing = t.get(key);
+        if (existing && /OR IGNORE/i.test(m[1] ?? '')) return { rows: [], rowsAffected: 0 };
+        if (existing && m[5]) {
+          for (const assignment of splitTopLevel(m[5])) {
+            const col = assignment.split('=')[0].trim();
+            existing[col] = row[col];
+          }
+          return { rows: [], rowsAffected: 1 };
+        }
         row.rowid = t.size + 1;
-        t.set(keyFor(m[1], row), row);
+        t.set(key, row);
         return { rows: [], rowsAffected: 1 };
       }
 
@@ -86,16 +98,22 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
         return { rows: [], rowsAffected: 1 };
       }
 
-      m = /^DELETE FROM (\w+) WHERE id = \?$/i.exec(sql);
+      m = /^DELETE FROM (\w+) WHERE (\w+) = \?$/i.exec(sql);
       if (m) {
-        table(m[1]).delete(String(params[0]));
+        const t = table(m[1]);
+        for (const [key, row] of Array.from(t.entries())) {
+          if (String(row[m[2]]) === String(params[0])) t.delete(key);
+        }
         return { rows: [], rowsAffected: 1 };
       }
 
-      m = /^SELECT \* FROM (\w+) WHERE id = \?$/i.exec(sql);
+      m = /^SELECT \* FROM (\w+) WHERE (\w+) = \?$/i.exec(sql);
       if (m) {
-        const row = table(m[1]).get(String(params[0]));
-        return { rows: row ? [row] : [] };
+        const col = m[2];
+        const rows = Array.from(table(m[1]).values()).filter(
+          row => String(row[col]) === String(params[0]),
+        );
+        return { rows };
       }
 
       m = /^SELECT \* FROM (\w+)(?: ORDER BY .*)?$/i.exec(sql);

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -36,10 +36,15 @@ export function ActivityScreen() {
   const navigation = useNavigation<Nav>();
   const transactions = useTransactionsStore(state => state.transactions);
   const accounts = useTransactionsStore(state => state.accounts);
+  const categories = useTransactionsStore(state => state.categories);
   const { events, loading, loadingMore, failed, reload, loadMore } = useActivityFeed();
+  // R2 T0: amounts are private. Hidden by default every time the screen is
+  // opened or comes back into focus; never persisted.
+  const [showAmounts, setShowAmounts] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
+      setShowAmounts(false);
       reload();
     }, [reload]),
   );
@@ -47,14 +52,22 @@ export function ActivityScreen() {
   const sections = useMemo(() => {
     const transactionById = new Map(transactions.map(t => [t.id, t]));
     const accountById = new Map(accounts.map(a => [a.id, a]));
-    const items = events.map(event =>
-      describeActivity(event, {
-        transaction: event.transactionId ? transactionById.get(event.transactionId) ?? null : null,
-        account: event.accountId ? accountById.get(event.accountId) ?? null : null,
-      }),
-    );
+    const categoryById = new Map(categories.map(c => [c.id, c]));
+    const items = events.map(event => {
+      const categoryId =
+        event.metadata && 'categoryId' in event.metadata ? event.metadata.categoryId : null;
+      return describeActivity(
+        event,
+        {
+          transaction: event.transactionId ? transactionById.get(event.transactionId) ?? null : null,
+          account: event.accountId ? accountById.get(event.accountId) ?? null : null,
+          category: categoryId ? categoryById.get(categoryId) ?? null : null,
+        },
+        { showAmounts },
+      );
+    });
     return groupActivityByDay(items, new Date());
-  }, [events, transactions, accounts]);
+  }, [events, transactions, accounts, categories, showAmounts]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
@@ -67,7 +80,18 @@ export function ActivityScreen() {
           <Icon name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle}>Activity</Text>
-        <View style={styles.headerSpacer} />
+        <Pressable
+          onPress={() => setShowAmounts(value => !value)}
+          style={styles.eyeButton}
+          accessibilityRole="button"
+          accessibilityLabel={showAmounts ? 'Hide amounts' : 'Show amounts'}
+          testID="activity-toggle-amounts">
+          <Icon
+            name={showAmounts ? 'eye-off-outline' : 'eye-outline'}
+            size={22}
+            color={colors.onSurface}
+          />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -164,8 +188,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.onSurface,
   },
-  headerSpacer: {
-    width: 22,
+  eyeButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -spacing.sm,
   },
   center: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,6 +9,8 @@ import { showDialog } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { RootStackParamList } from '../../../app/navigation/routes';
+import { CategoryPickerSheet } from '../../categories/components/CategoryPickerSheet';
+import { promptRememberCategory } from '../../categories/rememberCategory';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -22,6 +24,20 @@ export function TransactionDetailScreen() {
   const approve = useTransactionsStore(state => state.approve);
   const reject = useTransactionsStore(state => state.reject);
   const deleteTransaction = useTransactionsStore(state => state.deleteTransaction);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+
+  async function handleCategoryChange(categoryId: string) {
+    setCategoryPickerOpen(false);
+    if (!transaction || categoryId === transaction.categoryId) return;
+    const before = transaction;
+    await useTransactionsStore.getState().updateTransaction(before.id, { categoryId });
+    promptRememberCategory({
+      transactionId: before.id,
+      merchantName: before.merchantName,
+      previousCategoryId: before.categoryId,
+      newCategoryId: categoryId,
+    });
+  }
 
   function handleDelete(transactionId: string) {
     showDialog({
@@ -85,6 +101,7 @@ export function TransactionDetailScreen() {
           }}
           onEdit={t => navigation.navigate('EditTransaction', { transactionId: t.id })}
           onDelete={t => handleDelete(t.id)}
+          onChangeCategory={() => setCategoryPickerOpen(true)}
         />
       </ScrollView>
       <View style={styles.footer}>
@@ -102,6 +119,13 @@ export function TransactionDetailScreen() {
           onDelete={t => handleDelete(t.id)}
         />
       </View>
+      <CategoryPickerSheet
+        visible={categoryPickerOpen}
+        onClose={() => setCategoryPickerOpen(false)}
+        type={transaction.type}
+        selectedId={transaction.categoryId}
+        onSelect={handleCategoryChange}
+      />
     </SafeAreaView>
   );
 }

@@ -25,6 +25,8 @@ import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 import { RootStackParamList } from '../../../app/navigation/routes';
+import { categoryLabel, isArchivedCategory } from '../../../domain/categories/category.rules';
+import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -69,6 +71,11 @@ export function TransactionsScreen() {
 
   const selectedAccount = accounts.find(a => a.id === filters.accountId) ?? null;
   const selectedCategory = categories.find(c => c.id === filters.categoryId) ?? null;
+  const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  // Filters are for finding things, so archived categories stay filterable —
+  // listed under their own heading, like deleted accounts.
+  const activeCategoryList = useMemo(() => categories.filter(c => !isArchivedCategory(c)), [categories]);
+  const archivedCategoryList = useMemo(() => categories.filter(isArchivedCategory), [categories]);
   const accountChipLabel = selectedAccount
     ? selectedAccount.lastFour
       ? `${selectedAccount.name} ••${selectedAccount.lastFour}`
@@ -112,6 +119,11 @@ export function TransactionsScreen() {
                 ? `Showing ${filtered.length} of ${approved.length} settled`
                 : `${approved.length} Settled · All Verified`}
             </Text>
+
+            <UncategorisedCard
+              style={styles.nudge}
+              onPress={() => navigation.navigate('Uncategorised')}
+            />
 
             <Card style={styles.summaryCard}>
               <SummaryStat label="INFLOW" value={formatRupeesFromMinor(totals.inflowMinor)} tone="income" />
@@ -170,7 +182,7 @@ export function TransactionsScreen() {
               />
               <FilterChip
                 testID="filter-category"
-                label={selectedCategory ? selectedCategory.name : 'Category'}
+                label={selectedCategory ? categoryLabel(selectedCategory) : 'Category'}
                 icon="shape-outline"
                 active={filters.categoryId !== null}
                 onPress={() => setPicker('category')}
@@ -206,7 +218,7 @@ export function TransactionsScreen() {
           </View>
         )}
         renderItem={({ item }) => {
-          const visual = getCategoryVisual(item.categoryId);
+          const visual = getCategoryVisual(item.categoryId, categoryById.get(item.categoryId));
           return (
             <TransactionRow
               merchantName={item.merchantName}
@@ -268,10 +280,24 @@ export function TransactionsScreen() {
             setPicker(null);
           }}
         />
-        {categories.map(category => (
+        {activeCategoryList.map(category => (
           <PickerOption
             key={category.id}
             label={category.name}
+            selected={filters.categoryId === category.id}
+            onPress={() => {
+              setFilters({ categoryId: category.id });
+              setPicker(null);
+            }}
+          />
+        ))}
+        {archivedCategoryList.length > 0 ? (
+          <Text style={styles.sheetHeading}>Archived</Text>
+        ) : null}
+        {archivedCategoryList.map(category => (
+          <PickerOption
+            key={category.id}
+            label={categoryLabel(category)}
             selected={filters.categoryId === category.id}
             onPress={() => {
               setFilters({ categoryId: category.id });
@@ -375,6 +401,9 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.outline,
     marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  nudge: {
     marginBottom: spacing.md,
   },
   summaryCard: {

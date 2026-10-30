@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { Transaction, TransactionStatus } from '../../../domain/transactions/transaction.types';
 import { Account } from '../../../domain/accounts/account.types';
-import { Category } from '../../../domain/categories/category.types';
+import { Category, MerchantRule } from '../../../domain/categories/category.types';
+import {
+  CategoryChange,
+  invertChanges,
+  ruleApplyTargets,
+} from '../../../domain/categories/category.rules';
+import { normalizeMerchant } from '../../../domain/merchants/normalizeMerchant';
 import { canTransition } from '../../../domain/transactions/transaction.rules';
 import { activeAccounts, deletedAccounts } from '../../../domain/accounts/account.rules';
 import { runMigrations } from '../../../data/db/connection';
@@ -15,7 +21,18 @@ import {
   AccountPatch,
   CreateAccountInput,
 } from '../../../data/repositories/account.repository';
-import { categoryRepository } from '../../../data/repositories/category.repository';
+import {
+  categoryRepository,
+  CategoryPatch,
+  CreateCategoryInput,
+} from '../../../data/repositories/category.repository';
+import { merchantRuleRepository } from '../../../data/repositories/merchantRule.repository';
+import {
+  ImportSuggestionInput,
+  ImportSuggestionResult,
+  suggestionRepository,
+} from '../../../data/repositories/suggestion.repository';
+import type { AccountKey } from '../../sms-sync/normalizeAccountKey';
 import { settingsRepository } from '../../../data/repositories/settings.repository';
 import {
   ApprovalMode,
@@ -26,7 +43,11 @@ import {
   parseThreshold,
   SETTINGS_KEYS,
 } from '../../../domain/settings/approval.rules';
-import { AuditEventDraft, AuditEventInput } from '../../../domain/audit/audit.types';
+import {
+  AuditActor,
+  AuditEventDraft,
+  AuditEventInput,
+} from '../../../domain/audit/audit.types';
 import {
   changedAccountFields,
   changedTransactionFields,
@@ -45,10 +66,14 @@ export interface ProfilePatch {
 /**
  * Set by `syncSms` when its opt-in auto mode approves a fresh SMS item: the
  * audit row is then `auto_approved` by 'system' with the score + threshold.
+ * R2b: the Pending "Auto-approve (N)" button passes actor 'user' (the user
+ * tapped it; the rule picked the items).
  */
 export interface AutoApproval {
   confidence: number;
   threshold: number;
+  /** Default 'system'. */
+  actor?: AuditActor;
 }
 
 /**
@@ -59,6 +84,8 @@ interface TransactionsState {
   transactions: Transaction[];
   accounts: Account[];
   categories: Category[];
+  /** R2: normalized merchant key → category id ("Always use …"). */
+  merchantRules: Record<string, string>;
   isHydrated: boolean;
   hasOnboarded: boolean;
   userName: string;
@@ -82,6 +109,26 @@ interface TransactionsState {
   /** D10 soft delete — the account's transactions are never touched. */
   removeAccount: (id: string) => Promise<void>;
   restoreAccount: (id: string) => Promise<void>;
+  /** R2b: Add/Link a suggested account + insert its waiting SMS as pending. */
+  importSuggestion: (input: ImportSuggestionInput) => Promise<ImportSuggestionResult>;
+  /** R2b: Ignore a suggested account key (never suggested/imported again). */
+  ignoreSuggestion: (key: AccountKey) => Promise<void>;
+  /** R2: "Always use <category> for <merchant>" — audited 'rule_saved'. */
+  saveMerchantRule: (
+    merchantName: string,
+    categoryId: string,
+    transactionId?: string | null,
+  ) => Promise<void>;
+  deleteMerchantRule: (merchantKey: string) => Promise<void>;
+  /** Other pending/approved items of the same merchant a rule would change. */
+  ruleTargets: (merchantName: string, categoryId: string, excludeId: string | null) => CategoryChange[];
+  /** Apply a set of category changes in one db.transaction; returns them for Undo. */
+  applyCategoryChanges: (changes: ReadonlyArray<CategoryChange>) => Promise<CategoryChange[]>;
+  /** Undo: restores each item's exact previous category id. */
+  undoCategoryChanges: (applied: ReadonlyArray<CategoryChange>) => Promise<void>;
+  addCategory: (input: CreateCategoryInput) => Promise<Category>;
+  updateCategory: (id: string, patch: CategoryPatch) => Promise<void>;
+  archiveCategory: (id: string) => Promise<void>;
 }
 
 function transitionLocal(
@@ -98,19 +145,27 @@ function transitionLocal(
   };
 }
 
+function rulesToMap(rules: ReadonlyArray<MerchantRule>): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const rule of rules) map[rule.merchantKey] = rule.categoryId;
+  return map;
+}
+
 async function loadAll() {
-  const [transactions, accounts, categories] = await Promise.all([
+  const [transactions, accounts, categories, rules] = await Promise.all([
     transactionRepository.listAll(),
     accountRepository.listAllAccounts(),
     categoryRepository.listAll(),
+    merchantRuleRepository.listAll(),
   ]);
-  return { transactions, accounts, categories };
+  return { transactions, accounts, categories, merchantRules: rulesToMap(rules) };
 }
 
 export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   transactions: [],
   accounts: [],
   categories: [],
+  merchantRules: {},
   isHydrated: false,
   hasOnboarded: false,
   userName: '',
@@ -211,7 +266,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     const audit: AuditEventDraft = auto
       ? {
           eventType: 'auto_approved',
-          actor: 'system',
+          actor: auto.actor ?? 'system',
           metadata: {
             kind: 'auto_approved',
             confidence: auto.confidence,
@@ -334,6 +389,123 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   restoreAccount: async id => {
     await accountRepository.restore(id, [{ eventType: 'account_restored', actor: 'user' }]);
     await get().refresh();
+  },
+
+  importSuggestion: async input => {
+    const result = await suggestionRepository.importSuggestion(input);
+    set(state => ({
+      accounts: result.account ? [...state.accounts, result.account] : state.accounts,
+      transactions: [...result.transactions, ...state.transactions],
+    }));
+    return result;
+  },
+
+  ignoreSuggestion: async key => {
+    await accountRepository.ignoreSuggestion(key);
+  },
+
+  saveMerchantRule: async (merchantName, categoryId, transactionId = null) => {
+    const key = normalizeMerchant(merchantName);
+    if (key === '') return;
+    const transaction = transactionId
+      ? get().transactions.find(t => t.id === transactionId) ?? null
+      : null;
+    // Metadata is the category id only; the triggering item (if any) lets
+    // Activity name the merchant without storing merchant text in the rule event.
+    await merchantRuleRepository.upsert(key, categoryId, [
+      {
+        eventType: 'rule_saved',
+        actor: 'user',
+        metadata: { kind: 'rule_saved', categoryId },
+        transactionId: transaction?.id ?? null,
+        accountId: transaction?.accountId ?? null,
+      },
+    ]);
+    set(state => ({ merchantRules: { ...state.merchantRules, [key]: categoryId } }));
+  },
+
+  deleteMerchantRule: async merchantKey => {
+    const categoryId = get().merchantRules[merchantKey];
+    if (categoryId === undefined) return;
+    await merchantRuleRepository.delete(merchantKey, [
+      { eventType: 'rule_deleted', actor: 'user', metadata: { kind: 'rule_deleted', categoryId } },
+    ]);
+    set(state => {
+      const next = { ...state.merchantRules };
+      delete next[merchantKey];
+      return { merchantRules: next };
+    });
+  },
+
+  ruleTargets: (merchantName, categoryId, excludeId) =>
+    ruleApplyTargets(get().transactions, normalizeMerchant(merchantName), categoryId, excludeId),
+
+  applyCategoryChanges: async changes => {
+    // Re-read the live categories so Undo restores what was really there.
+    const byId = new Map(get().transactions.map(t => [t.id, t]));
+    const live: CategoryChange[] = [];
+    for (const change of changes) {
+      const current = byId.get(change.id);
+      if (!current || current.categoryId === change.toCategoryId) continue;
+      live.push({ ...change, accountId: current.accountId, fromCategoryId: current.categoryId });
+    }
+    if (live.length === 0) return [];
+    const updatedAt = await transactionRepository.setCategories(
+      live.map(c => ({ id: c.id, accountId: c.accountId, categoryId: c.toCategoryId })),
+    );
+    const target = new Map(live.map(c => [c.id, c.toCategoryId]));
+    set(state => ({
+      transactions: state.transactions.map(t =>
+        target.has(t.id) ? { ...t, categoryId: target.get(t.id) as string, updatedAt } : t,
+      ),
+    }));
+    return live;
+  },
+
+  undoCategoryChanges: async applied => {
+    await get().applyCategoryChanges(invertChanges(applied));
+  },
+
+  addCategory: async input => {
+    const created = await categoryRepository.create(input, category => [
+      {
+        eventType: 'category_created',
+        actor: 'user',
+        metadata: { kind: 'category_created', categoryId: category.id },
+      },
+    ]);
+    set(state => ({ categories: [...state.categories, created] }));
+    return created;
+  },
+
+  updateCategory: async (id, patch) => {
+    const existing = get().categories.find(c => c.id === id);
+    if (!existing) return;
+    const fields = (['name', 'icon', 'color'] as const).filter(
+      field => patch[field] !== undefined && patch[field] !== existing[field],
+    );
+    if (fields.length === 0) return;
+    const updated = await categoryRepository.update(id, patch, [
+      {
+        eventType: 'category_updated',
+        actor: 'user',
+        metadata: { kind: 'category_updated', categoryId: id, fields: [...fields] },
+      },
+    ]);
+    set(state => ({ categories: state.categories.map(c => (c.id === id ? updated : c)) }));
+  },
+
+  archiveCategory: async id => {
+    const existing = get().categories.find(c => c.id === id);
+    if (!existing || existing.archivedAt !== null) return;
+    const archived = await categoryRepository.archive(id, [
+      {
+        eventType: 'category_archived',
+        actor: 'user',
+        metadata: { kind: 'category_archived', categoryId: id },
+      },
+    ]);
+    set(state => ({ categories: state.categories.map(c => (c.id === id ? archived : c)) }));
   },
 }));
 

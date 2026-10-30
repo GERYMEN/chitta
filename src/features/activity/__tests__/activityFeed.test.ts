@@ -1,12 +1,18 @@
 import {
   accountShortLabel,
+  ActivityContext,
   dayHeading,
-  describeActivity,
+  describeActivity as describeRaw,
   formatRelativeTime,
   groupActivityByDay,
+  MASKED_AMOUNT,
   signedAmount,
 } from '../activityFeed';
 import { AuditFeedEvent } from '../../../domain/audit/audit.types';
+
+/** The R1 sentence tests below run with amounts revealed (eye icon on). */
+const describeActivity = (e: AuditFeedEvent, context: ActivityContext = {}) =>
+  describeRaw(e, context, { showAmounts: true });
 
 function event(partial: Partial<AuditFeedEvent>): AuditFeedEvent {
   return {
@@ -228,5 +234,92 @@ describe('groupActivityByDay', () => {
 
   it('empty in, empty out', () => {
     expect(groupActivityByDay([])).toEqual([]);
+  });
+});
+
+describe('R2 T0 amount privacy', () => {
+  const deletedApproved = event({
+    eventType: 'deleted',
+    metadata: {
+      kind: 'deleted',
+      merchantName: 'QA-Merchant-07',
+      amountMinor: 5000,
+      type: 'expense',
+      status: 'approved',
+    },
+  });
+
+  it('masks amounts by default in the sentence and the impact line, keeping the merchant', () => {
+    const approved = describeRaw(event({}), { transaction: EXPENSE });
+    expect(approved.sentence).toBe(`You approved QA-Merchant-07 ${MASKED_AMOUNT}`);
+    expect(approved.impact).toEqual({ text: `Balance ${MASKED_AMOUNT}`, tone: 'expense' });
+
+    const deleted = describeRaw(deletedApproved);
+    expect(deleted.sentence).toBe(`You deleted QA-Merchant-07 ${MASKED_AMOUNT}`);
+    expect(deleted.impact?.text).toBe(`No longer in balance (was ${MASKED_AMOUNT})`);
+  });
+
+  it('showAmounts: false masks every form; no digits of the amount leak', () => {
+    const items = [
+      describeRaw(event({ eventType: 'created' }), { transaction: EXPENSE }, { showAmounts: false }),
+      describeRaw(
+        event({
+          eventType: 'auto_approved',
+          actor: 'system',
+          metadata: { kind: 'auto_approved', confidence: 90, threshold: 85 },
+        }),
+        { transaction: INCOME },
+        { showAmounts: false },
+      ),
+      describeRaw(deletedApproved, {}, { showAmounts: false }),
+      describeRaw(event({ eventType: 'rejected' }), { transaction: EXPENSE }, { showAmounts: false }),
+    ];
+    for (const item of items) {
+      const text = `${item.sentence} ${item.impact?.text ?? ''}`;
+      expect(text).not.toMatch(/50\.00|1,200|\+₹|-₹/);
+    }
+    expect(items[1].sentence).toBe(`Auto-approved QA-Payer ${MASKED_AMOUNT} at 90% match`);
+  });
+
+  it('showAmounts: true reveals the exact amounts', () => {
+    const item = describeRaw(event({}), { transaction: INCOME }, { showAmounts: true });
+    expect(item.sentence).toBe('You approved QA-Payer ₹1,200.00');
+    expect(item.impact?.text).toBe('Balance +₹1,200.00');
+  });
+});
+
+describe('R2 rule and category events', () => {
+  const FOOD = { name: 'Food & Dining', archivedAt: null };
+
+  it('rule_saved names the merchant (via the linked item) and the category', () => {
+    const item = describeRaw(
+      event({ eventType: 'rule_saved', metadata: { kind: 'rule_saved', categoryId: 'cat-food' } }),
+      { transaction: EXPENSE, category: FOOD },
+    );
+    expect(item.sentence).toBe('You set QA-Merchant-07 to always use Food & Dining');
+  });
+
+  it('category events use the looked-up name and mark archived ones', () => {
+    const archived = { name: 'QA Category', archivedAt: '2026-10-28T10:00:00.000Z' };
+    expect(
+      describeRaw(
+        event({
+          eventType: 'category_archived',
+          transactionId: null,
+          metadata: { kind: 'category_archived', categoryId: 'cat-qa' },
+        }),
+        { category: archived },
+      ).sentence,
+    ).toBe('You archived category QA Category');
+    expect(
+      describeRaw(
+        event({
+          eventType: 'category_updated',
+          transactionId: null,
+          metadata: { kind: 'category_updated', categoryId: 'cat-qa', fields: ['name', 'color'] },
+        }),
+        { category: FOOD },
+      ).impact?.text,
+    ).toBe('Changed name, colour');
   });
 });

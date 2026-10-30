@@ -74,3 +74,8 @@ export function shouldShowThresholdNote(
 ): boolean {
   return mode === 'auto' && clampThreshold(threshold) > SMS_PARSER_MAX_CONFIDENCE;
 }
+
+/** The settings note copy, shared with the Pending Auto-approve hint (R2b). */
+export function thresholdNoteText(): string {
+  return `SMS matches currently score up to ${SMS_PARSER_MAX_CONFIDENCE}%, so thresholds above ${SMS_PARSER_MAX_CONFIDENCE}% won't auto-approve anything yet.`;
+}

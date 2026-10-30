@@ -12,6 +12,7 @@ import { CreateAccountInput } from '../../../data/repositories/account.repositor
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { AccountForm } from '../components/AccountForm';
 import { AccountFormValues, findDuplicateAccount, openingBalanceInputToMinor } from '../components/accountForm.schema';
+import { addSuggestedAccount, showImportSnackbar } from '../../sms-sync/importSuggestion';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'AddAccount'>;
@@ -21,7 +22,10 @@ type Route = RouteProp<RootStackParamList, 'AddAccount'>;
  * store's `addAccount` (SQLite insert + state refresh) and navigates back to
  * the Accounts tab, where the new account and updated balance render live.
  * Supports an optional `prefill` route param (from the SMS suggestions screen)
- * so a discovered account/card arrives pre-filled instead of blank.
+ * so a discovered account/card arrives pre-filled instead of blank. With a
+ * `suggestion` param (R2b) the card's waiting SMS are inserted as pending on
+ * the new account in the same transaction; a stale session falls back to a
+ * plain add.
  */
 export function AddAccountScreen() {
   const navigation = useNavigation<Nav>();
@@ -29,6 +33,7 @@ export function AddAccountScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const prefill = route.params?.prefill;
+  const suggestion = route.params?.suggestion;
 
   async function handleSubmit(values: AccountFormValues) {
     const lastFour =
@@ -60,8 +65,16 @@ export function AddAccountScreen() {
 
     setSubmitting(true);
     try {
-      await useTransactionsStore.getState().addAccount(input);
+      // R2b: from a New Accounts Found card → the account and that card's
+      // waiting SMS land together (one db.transaction), as pending.
+      const outcome = suggestion
+        ? await addSuggestedAccount(suggestion.runId, suggestion.key, input)
+        : null;
+      if (!outcome) {
+        await useTransactionsStore.getState().addAccount(input);
+      }
       navigation.goBack();
+      if (outcome) showImportSnackbar(outcome, false);
     } finally {
       setSubmitting(false);
     }

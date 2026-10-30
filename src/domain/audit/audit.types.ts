@@ -16,7 +16,12 @@ export type AuditEventType =
   | 'account_updated'
   | 'account_removed'
   | 'account_restored'
-  | 'settings_changed';
+  | 'settings_changed'
+  | 'rule_saved'
+  | 'rule_deleted'
+  | 'category_created'
+  | 'category_updated'
+  | 'category_archived';
 
 export type AuditActor = 'system' | 'user';
 
@@ -41,7 +46,14 @@ export type AuditMetadata =
       status: TransactionStatus;
     }
   | { kind: 'account_updated'; fields: string[] }
-  | { kind: 'settings_changed'; key: AuditedSettingKey; from: string; to: string };
+  | { kind: 'settings_changed'; key: AuditedSettingKey; from: string; to: string }
+  /** R2: a merchant rule — the category id only (no merchant text). */
+  | { kind: 'rule_saved'; categoryId: string }
+  | { kind: 'rule_deleted'; categoryId: string }
+  /** R2: category management — the id only; the feed looks the name up. */
+  | { kind: 'category_created'; categoryId: string }
+  | { kind: 'category_updated'; categoryId: string; fields: string[] }
+  | { kind: 'category_archived'; categoryId: string };
 
 export interface AuditEvent {
   id: string;

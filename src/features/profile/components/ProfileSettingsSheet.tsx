@@ -13,6 +13,8 @@ export interface ProfileSettingsSheetProps {
   onClose: () => void;
   /** Opens the Activity feed (R1). Activity lives here, not in a 5th tab. */
   onOpenActivity: () => void;
+  /** Opens category management (R2). */
+  onOpenCategories: () => void;
 }
 
 /**
@@ -24,6 +26,7 @@ export function ProfileSettingsSheet({
   visible,
   onClose,
   onOpenActivity,
+  onOpenCategories,
 }: ProfileSettingsSheetProps) {
   const { userName, approvalMode, autoApproveThreshold } = useTransactionsStore(
     useShallow(state => ({
@@ -61,6 +64,21 @@ export function ProfileSettingsSheet({
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Activity</Text>
           <Text style={styles.activityCaption}>Every approval, edit and deletion</Text>
+        </View>
+        <Icon name="chevron-right" size={22} color={colors.outline} />
+      </Pressable>
+      <Pressable
+        onPress={onOpenCategories}
+        accessibilityRole="button"
+        accessibilityLabel="Categories"
+        testID="settings-categories-row"
+        style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+        <View style={styles.activityIcon}>
+          <Icon name="shape-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>Categories</Text>
+          <Text style={styles.activityCaption}>Custom categories and merchant rules</Text>
         </View>
         <Icon name="chevron-right" size={22} color={colors.outline} />
       </Pressable>

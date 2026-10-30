@@ -15,6 +15,8 @@ export function rowToCategory(row: SqlRow): Category {
     type: row.type as Category['type'],
     icon: asString(row.icon),
     isSystem: asBoolean(row.is_system),
+    archivedAt: asNullableString(row.archived_at),
+    color: asNullableString(row.color),
   };
 }
 
@@ -26,5 +28,7 @@ export function categoryToRow(category: Category): SqlWriteRow {
     type: category.type,
     icon: category.icon,
     is_system: category.isSystem ? 1 : 0,
+    archived_at: category.archivedAt,
+    color: category.color,
   };
 }

@@ -28,7 +28,8 @@ const SYSTEM_CATEGORIES = [
 /**
  * Idempotent migration + seed. Safe to call on every app start: tables use
  * `CREATE TABLE IF NOT EXISTS`, and system categories are only inserted when
- * the categories table is empty (so restarts never duplicate them).
+ * the categories table is empty (so restarts never duplicate them). The
+ * system "Uncategorised" row comes from numbered migration 5.
  */
 export async function runMigrations(): Promise<void> {
   const database = getDatabase();
@@ -37,9 +38,12 @@ export async function runMigrations(): Promise<void> {
     await database.execute(statement);
   }
 
-  await runNumberedMigrations(database);
-
+  // Seed BEFORE the numbered migrations: migration 5 inserts the
+  // Uncategorised row, and the seed only runs on an empty table — after it,
+  // a fresh install would otherwise never get the six base categories.
   await seedSystemCategories(database);
+
+  await runNumberedMigrations(database);
 }
 
 async function seedSystemCategories(database: DB): Promise<void> {

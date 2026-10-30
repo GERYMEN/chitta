@@ -1,0 +1,103 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md (section R2 + "Working
+rules"), ongoing/roadmap/STATE.md, ongoing/roadmap/R1-trust-foundation.md
+(previous phase: audit writer, Activity screen, filters — build on it),
+ongoing/roadmap/BUGS.md, and the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute device-safety rules).
+docs/PROJECT.md + docs/DESIGN.md for UX/tokens.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+R1 is committed (e73dc3c). Do NOT fix BUGS.md B1 (user: later).
+
+PHASE R2 — Activity privacy (T0) + Smart categories (T1–T6).
+
+T0 Activity amount privacy (user request): keep merchant names in Activity
+   (clear history, including deleted items). Amounts are PRIVATE by
+   default: render as "₹ ••••" on every row (sentence + impact line).
+   Header eye icon (react-native-vector-icons, already a dependency) toggles
+   show/hide for the whole list; accessibilityLabel "Show amounts" /
+   "Hide amounts", ≥48dp. Default hidden EVERY time the screen opens (not
+   persisted). Masking in the pure sentence helper via a `showAmounts`
+   flag; unit-test both modes.
+
+T1 Merchant normalization: pure `normalizeMerchant(raw)` → stable key
+   (lowercase, trim, collapse spaces, strip UPI handle suffixes like
+   "@okhdfcbank"/"@paytm", trailing ref/ids/digits, punctuation). Unit-test
+   with synthetic examples only.
+T2 Merchant rules: migration 5 — `merchant_rules(merchant_key TEXT PRIMARY
+   KEY, category_id TEXT NOT NULL REFERENCES categories(id), created_at,
+   updated_at)`. Repository get/upsert/delete. When the user changes the
+   category of an item (Edit form or detail), show a Dialog (showDialog):
+   "Always use <Category> for <merchant>?" [Just this one] [Always]. On
+   Always: upsert rule (audited: new event type 'rule_saved' with
+   {category_id} only), then offer "Apply to N other <merchant> items?"
+   — count = other items with same merchant_key in pending + approved;
+   apply in one db.transaction, audited as 'edited' per item (fields
+   ['categoryId']), with Undo (toast/snackbar 5 s, restores exact
+   previous category ids).
+T3 SMS category: rewrite resolveCategoryIdForSms: merchant rule first →
+   else system category "Uncategorised" (seeded by migration 5,
+   is_system=1, both income and expense variants or a type-neutral one —
+   choose and document). Stop defaulting to Shopping / Salary & Wages.
+   Existing rows are NOT changed by the migration (owner's data).
+T4 Uncategorised nudge: on Home (and Transactions header) a card
+   "N uncategorised — Categorise ›" when N>0 (approved + pending), opening
+   a quick-assign list: each row merchant + date + category chip picker;
+   assigning goes through the same T2 flow ("Always?").
+T5 Custom categories: migration 5 also adds categories.archived_at (and
+   is_system if missing). Category management screen from the settings
+   sheet: list system + custom, create (name, type, icon + colour from a
+   fixed theme-token set), rename, archive (never hard delete when used;
+   archived = hidden from pickers, existing items keep their label with
+   "(archived)"). System categories cannot be archived/renamed.
+   All changes audited ('category_created/updated/archived').
+T6 Tests: normalizeMerchant; rule precedence in resolveCategoryIdForSms;
+   apply-to-past + undo restores exact ids; archive keeps labels; pickers
+   exclude archived; migration 5 idempotent + seeds once; T0 masking.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+DEVICE (USB serial 00015365L001524; adb install -r; Metro + adb reverse
+tcp:8081 tcp:8081). Phone absent 2 min or locked → stop device part.
+SYNTHETIC DATA ONLY:
+ D1 Activity: amounts show "₹ ••••" on QA-Merchant-07 rows; eye → amounts
+    visible; leave + reopen → hidden again. (grep QA rows only.)
+ D2 Add Record two expenses "QA-Merchant-08" 10.00 and 20.00 on QA Delete
+    Bank 9999 (pick any category). Edit the first → change category to
+    Food (or equivalent) → "Always" → "Apply to 1 other" → second now Food
+    → Undo → second back to original; redo apply.
+ D3 Settings sheet → Categories: create "QA Category", assign it to
+    QA-Merchant-08 (one item), archive QA Category → item label shows
+    "(archived)"; Add Record picker does not list it.
+ D4 Uncategorised card: report COUNT only (it may include real items).
+    Open quick-assign list: grep only for QA rows; do not assign real
+    items.
+ D5 Sync SMS allowed ONCE: report counts only (new pending, how many
+    Uncategorised) — never print rows. No crash.
+ D6 Cleanup: delete both QA-Merchant-08 items; delete the QA-merchant-08
+    rule if a UI exists, else report it as leftover. Force-stop +
+    relaunch; logcat 0 FATAL com.tracker, 0 "Maximum update depth",
+    0 ReactNativeJS errors. End: force-stop.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Other app in front: HOME (unless a call is
+  active — then wait), relaunch Tracker; never inspect it. Locked = stop.
+- Home/Transactions/Activity/quick-assign show REAL merchants and amounts:
+  every uiautomator dump grep-filtered to one QA-… element or one label;
+  never print a full dump or real rows; `adb shell rm /sdcard/u.xml`
+  after; /sdcard only inside adb shell.
+- Never change the owner's real transactions' categories, accounts or
+  settings; never tracker.db / sqlite3 / run-as; no uninstall/clear-data/
+  screenshots.
+
+OUTPUT: ongoing/roadmap/R2-smart-categories.md (files, migration 5 SQL,
+normalizeMerchant rules, rule/apply/undo flow, category management,
+gates, D1–D6 PASS/FAIL, leftover synthetic data). Leak-scan before
+finishing. Do not commit.
+REPLY ONLY: gates yes/no; files changed count; D1–D6 PASS/FAIL; anything
+not verified and why; any decision you had to make.

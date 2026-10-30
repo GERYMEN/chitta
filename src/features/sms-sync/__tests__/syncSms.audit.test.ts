@@ -67,9 +67,11 @@ beforeEach(() => {
     transactions: [],
     accounts: [rowToAccount(ACCOUNT_ROW)],
     categories: [
-      { id: 'cat-shopping', name: 'Shopping', parentId: null, type: 'expense', icon: 'x', isSystem: true },
-      { id: 'cat-salary', name: 'Salary & Wages', parentId: null, type: 'income', icon: 'x', isSystem: true },
+      { id: 'cat-shopping', name: 'Shopping', parentId: null, type: 'expense', icon: 'x', isSystem: true, archivedAt: null, color: null },
+      { id: 'cat-salary', name: 'Salary & Wages', parentId: null, type: 'income', icon: 'x', isSystem: true, archivedAt: null, color: null },
+      { id: 'cat-uncategorised', name: 'Uncategorised', parentId: null, type: 'both', icon: 'x', isSystem: true, archivedAt: null, color: null },
     ],
+    merchantRules: {},
   });
 });
 
@@ -127,5 +129,34 @@ describe('syncSms audit', () => {
     const before = db.auditInserts().length;
     await syncSms();
     expect(db.auditInserts().length).toBe(before);
+  });
+
+  it('R2: a merchant rule files the item; everything else lands in Uncategorised', async () => {
+    const state = useTransactionsStore.getState();
+    useTransactionsStore.setState({
+      approvalMode: 'manual',
+      categories: [
+        ...state.categories,
+        { id: 'cat-food', name: 'Food & Dining', parentId: null, type: 'expense', icon: 'x', isSystem: true, archivedAt: null, color: null },
+      ],
+      merchantRules: { 'qa shop': 'cat-food' },
+    });
+    const result = await syncSms();
+
+    const rows = Array.from(db.tables.get('transactions')!.values());
+    const byType = new Map(rows.map(r => [r.type, r.category_id]));
+    expect(byType.get('expense')).toBe('cat-food');
+    expect(byType.get('income')).toBe('cat-uncategorised');
+    expect(rows.some(r => r.category_id === 'cat-shopping' || r.category_id === 'cat-salary')).toBe(false);
+    expect(result.created).toBe(2);
+    expect(result.uncategorised).toBe(1);
+  });
+
+  it('R2: with no rules, no SMS item is put into Shopping / Salary & Wages', async () => {
+    useTransactionsStore.setState({ approvalMode: 'manual', merchantRules: {} });
+    const result = await syncSms();
+    const rows = Array.from(db.tables.get('transactions')!.values());
+    expect(rows.map(r => r.category_id)).toEqual(['cat-uncategorised', 'cat-uncategorised']);
+    expect(result.uncategorised).toBe(2);
   });
 });

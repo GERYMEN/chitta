@@ -8,6 +8,7 @@ import { useTransactionsStore } from '../state/transactionsStore';
 import { TransactionPatch } from '../../../data/repositories/transaction.repository';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { TransactionForm } from '../components/TransactionForm';
+import { promptRememberCategory } from '../../categories/rememberCategory';
 import {
   amountInputToMinor,
   minorToAmountInput,
@@ -44,10 +45,19 @@ export function EditTransactionScreen() {
       note: values.note && values.note.trim() !== '' ? values.note : null,
     };
 
+    const before = transaction!;
     setSubmitting(true);
     try {
-      await useTransactionsStore.getState().updateTransaction(transaction!.id, patch);
+      await useTransactionsStore.getState().updateTransaction(before.id, patch);
       navigation.goBack();
+      // R2: a category change offers "Always use <Category> for <merchant>?"
+      // (uses the merchant as saved, in case it was edited too).
+      promptRememberCategory({
+        transactionId: before.id,
+        merchantName: values.merchantName,
+        previousCategoryId: before.categoryId,
+        newCategoryId: values.categoryId,
+      });
     } finally {
       setSubmitting(false);
     }

@@ -70,12 +70,10 @@ async function getById(id: string): Promise<Account | null> {
   return result.rows.length > 0 ? rowToAccount(result.rows[0]) : null;
 }
 
-async function create(
-  input: CreateAccountInput,
-  audit: ReadonlyArray<AuditEventDraft> = [],
-): Promise<Account> {
+/** A new Account value with id/timestamps filled (not yet persisted). */
+export function buildAccount(input: CreateAccountInput): Account {
   const now = new Date().toISOString();
-  const account: Account = {
+  return {
     ...input,
     id: generateId('acc'),
     balanceAnchorMinor: input.balanceAnchorMinor ?? null,
@@ -84,18 +82,51 @@ async function create(
     createdAt: now,
     updatedAt: now,
   };
+}
 
+/** INSERT one account + its audit rows inside the caller's `tx`. */
+export async function insertAccountTx(
+  tx: SqlExecutor,
+  account: Account,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<void> {
   const row = accountToRow(account);
   const placeholders = COLUMNS.map(() => '?').join(', ');
+  await tx.execute(
+    `INSERT INTO accounts (${COLUMNS.join(', ')}) VALUES (${placeholders})`,
+    valuesFor(row),
+  );
+  await writeAudit(tx, account.id, audit);
+}
 
+export type SuggestionDecision = 'added' | 'linked' | 'ignored' | 'deleted';
+
+/**
+ * Record an explicit "New Accounts Found" decision for a normalized key
+ * inside the caller's `tx` (one row per key; a later decision replaces it).
+ */
+export async function writeDecisionTx(
+  tx: SqlExecutor,
+  key: AccountKey,
+  decision: SuggestionDecision,
+  accountId: string | null,
+): Promise<void> {
+  await tx.execute(
+    `INSERT OR REPLACE INTO account_suggestion_decisions
+      (bank_canonical, account_kind, last_four, decision, account_id, normalizer_version, decided_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [key.bankCanonical, key.accountKind, key.lastFour, decision, accountId, key.normalizerVersion, Date.now()],
+  );
+}
+
+async function create(
+  input: CreateAccountInput,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<Account> {
+  const account = buildAccount(input);
   await getDatabase().transaction(async tx => {
-    await tx.execute(
-      `INSERT INTO accounts (${COLUMNS.join(', ')}) VALUES (${placeholders})`,
-      valuesFor(row),
-    );
-    await writeAudit(tx, account.id, audit);
+    await insertAccountTx(tx, account, audit);
   });
-
   return account;
 }
 
@@ -210,6 +241,38 @@ async function listDeletedDecisionKeys(): Promise<Set<string>> {
   );
 }
 
+export interface SuggestionDecisionRow {
+  /** `accountKeyToString` form. */
+  key: string;
+  decision: SuggestionDecision;
+  accountId: string | null;
+}
+
+/** Every suggestion decision row (small table: one row per decided key). */
+async function listSuggestionDecisions(): Promise<SuggestionDecisionRow[]> {
+  const result = await getDatabase().execute('SELECT * FROM account_suggestion_decisions');
+  return result.rows.map(row => ({
+    key: accountKeyToString({
+      bankCanonical: String(row.bank_canonical),
+      accountKind: String(row.account_kind) as AccountKey['accountKind'],
+      lastFour: row.last_four == null ? '' : String(row.last_four),
+      normalizerVersion: Number(row.normalizer_version),
+    }),
+    decision: String(row.decision) as SuggestionDecision,
+    accountId: row.account_id == null ? null : String(row.account_id),
+  }));
+}
+
+/**
+ * R2b "Ignore": record an 'ignored' decision so SMS for this key are never
+ * imported or suggested again. No money changes, so no audit row.
+ */
+async function ignoreSuggestion(key: AccountKey): Promise<void> {
+  await getDatabase().transaction(async tx => {
+    await writeDecisionTx(tx, key, 'ignored', null);
+  });
+}
+
 export const accountRepository = {
   listAll,
   listActiveAccounts,
@@ -220,4 +283,6 @@ export const accountRepository = {
   softDelete,
   restore,
   listDeletedDecisionKeys,
+  listSuggestionDecisions,
+  ignoreSuggestion,
 };

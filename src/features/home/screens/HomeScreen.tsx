@@ -25,6 +25,7 @@ import { syncSms, SmsSyncError } from '../../sms-sync/syncSms';
 import { formatSyncToast } from '../../sms-sync/syncToast';
 import { greetingFor } from '../../profile/utils/greeting';
 import { ProfileSettingsSheet } from '../../profile/components/ProfileSettingsSheet';
+import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
 
 type Nav = CompositeNavigationProp<
@@ -40,6 +41,7 @@ export function HomeScreen() {
   const pending = useTransactionsStore(useShallow(selectPending));
   const approved = useTransactionsStore(useShallow(selectApproved));
   const userName = useTransactionsStore(state => state.userName);
+  const categories = useTransactionsStore(state => state.categories);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const greeting = greetingFor(new Date(), userName);
   const avatarInitial = userName.trim().charAt(0).toUpperCase();
@@ -63,7 +65,7 @@ export function HomeScreen() {
       const result = await syncSms();
       ToastAndroid.show(formatSyncToast(result), ToastAndroid.LONG);
       if (result.suggestions.length > 0) {
-        navigation.navigate('SmsSuggestions', { suggestions: result.suggestions });
+        navigation.navigate('SmsSuggestions', { runId: result.suggestionRunId });
       }
     } catch (error) {
       if (error instanceof SmsSyncError) {
@@ -139,6 +141,8 @@ export function HomeScreen() {
         <StatTile label="EXPENSES" amountMinor={monthExpense} caption="This month" tone="expense" />
       </View>
 
+      <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
@@ -178,7 +182,10 @@ export function HomeScreen() {
         </View>
 
         {recent.map(transaction => {
-          const visual = getCategoryVisual(transaction.categoryId);
+          const visual = getCategoryVisual(
+            transaction.categoryId,
+            categories.find(c => c.id === transaction.categoryId),
+          );
           return (
             <TransactionRow
               key={transaction.id}
@@ -202,6 +209,10 @@ export function HomeScreen() {
         onOpenActivity={() => {
           setSettingsOpen(false);
           navigation.navigate('Activity');
+        }}
+        onOpenCategories={() => {
+          setSettingsOpen(false);
+          navigation.navigate('Categories');
         }}
       />
     </SafeAreaView>

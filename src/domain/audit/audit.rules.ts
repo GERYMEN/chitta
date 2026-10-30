@@ -39,6 +39,17 @@ export function sanitizeAuditMetadata(
         from: String(metadata.from),
         to: String(metadata.to),
       };
+    case 'rule_saved':
+    case 'rule_deleted':
+    case 'category_created':
+    case 'category_archived':
+      return { kind: metadata.kind, categoryId: String(metadata.categoryId) };
+    case 'category_updated':
+      return {
+        kind: 'category_updated',
+        categoryId: String(metadata.categoryId),
+        fields: metadata.fields.map(String),
+      };
     default:
       return null;
   }

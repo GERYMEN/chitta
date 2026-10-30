@@ -9,6 +9,7 @@ import { confidenceTier } from '../../../domain/transactions/transaction.rules';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
+import { categoryLabel, UNCATEGORISED_ID } from '../../../domain/categories/category.rules';
 
 export interface PendingTransactionCardProps {
   transaction: Transaction;
@@ -36,8 +37,8 @@ export function PendingTransactionCard({
 }: PendingTransactionCardProps) {
   const categories = useTransactionsStore(state => state.categories);
 
-  const visual = getCategoryVisual(transaction.categoryId);
   const category = categories.find(c => c.id === transaction.categoryId);
+  const visual = getCategoryVisual(transaction.categoryId, category);
   const tier = confidenceTier(transaction.confidenceScore);
 
   return (
@@ -56,7 +57,12 @@ export function PendingTransactionCard({
       </View>
 
       <View style={styles.chipRow}>
-        {category ? <Chip label={category.name} tone="neutral" /> : null}
+        {category ? (
+          <Chip
+            label={categoryLabel(category)}
+            tone={category.id === UNCATEGORISED_ID ? 'pending' : 'neutral'}
+          />
+        ) : null}
         <Chip
           label={tier === 'high' ? 'High confidence' : tier === 'needsReview' ? 'Needs review' : 'Uncertain'}
           tone={tier === 'high' ? 'approved' : 'pending'}

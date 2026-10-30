@@ -51,6 +51,8 @@ const category: Category = {
   type: 'expense',
   icon: 'silverware-fork-knife',
   isSystem: true,
+  archivedAt: null,
+  color: null,
 };
 
 describe('transaction mapper', () => {

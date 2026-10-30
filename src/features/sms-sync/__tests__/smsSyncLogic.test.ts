@@ -33,6 +33,8 @@ const category = (overrides: Partial<Category> = {}): Category => ({
   type: 'expense',
   icon: 'help',
   isSystem: true,
+  archivedAt: null,
+  color: null,
   ...overrides,
 });
 
@@ -145,26 +147,35 @@ describe('groupUnmatchedIntoSuggestions', () => {
   });
 });
 
-describe('resolveCategoryIdForSms', () => {
+describe('resolveCategoryIdForSms (R2: rule first, else Uncategorised)', () => {
   const categories = [
     category({ id: 'cat-shopping', name: 'Shopping', type: 'expense' }),
     category({ id: 'cat-salary', name: 'Salary & Wages', type: 'income' }),
+    category({ id: 'cat-food', name: 'Food & Dining', type: 'expense' }),
+    category({ id: 'cat-uncategorised', name: 'Uncategorised', type: 'both' }),
+    category({ id: 'cat-old', name: 'Old', type: 'expense', isSystem: false, archivedAt: '2026-10-01T00:00:00.000Z' }),
   ];
+  const rules = { 'qa merchant 08': 'cat-food', 'qa archived': 'cat-old', 'qa payer': 'cat-food' };
 
-  it('maps expense -> Shopping category', () => {
-    expect(resolveCategoryIdForSms(categories, 'expense')).toBe('cat-shopping');
+  it('never defaults to Shopping or Salary & Wages any more', () => {
+    expect(resolveCategoryIdForSms(categories, 'expense')).toBe('cat-uncategorised');
+    expect(resolveCategoryIdForSms(categories, 'income')).toBe('cat-uncategorised');
+    expect(resolveCategoryIdForSms(categories, 'expense', 'QA-Shop', rules)).toBe('cat-uncategorised');
   });
 
-  it('maps income -> Salary & Wages category', () => {
-    expect(resolveCategoryIdForSms(categories, 'income')).toBe('cat-salary');
+  it('a merchant rule wins over the Uncategorised default (normalized key)', () => {
+    expect(resolveCategoryIdForSms(categories, 'expense', 'QA-Merchant-08', rules)).toBe('cat-food');
+    expect(resolveCategoryIdForSms(categories, 'expense', '  qa merchant 08@okqabank ', rules)).toBe('cat-food');
   });
 
-  it('falls back to the first category of the matching type when the named one is absent', () => {
-    expect(resolveCategoryIdForSms([category({ id: 'cat-food', name: 'Food', type: 'expense' })], 'expense')).toBe('cat-food');
+  it('ignores a rule whose category is archived, missing or the wrong type', () => {
+    expect(resolveCategoryIdForSms(categories, 'expense', 'QA Archived', rules)).toBe('cat-uncategorised');
+    expect(resolveCategoryIdForSms(categories, 'expense', 'QA Gone', { 'qa gone': 'cat-deleted' })).toBe('cat-uncategorised');
+    expect(resolveCategoryIdForSms(categories, 'income', 'QA Payer', rules)).toBe('cat-uncategorised');
   });
 
-  it('returns null when no matching category exists', () => {
-    expect(resolveCategoryIdForSms([category({ id: 'cat-salary', name: 'Salary & Wages', type: 'income' })], 'expense')).toBeNull();
+  it('returns null only when neither a rule nor Uncategorised exists', () => {
+    expect(resolveCategoryIdForSms([category({ id: 'cat-shopping', name: 'Shopping' })], 'expense', 'X', {})).toBeNull();
   });
 });
 

@@ -1,6 +1,5 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { AccountType } from '../../domain/accounts/account.types';
-import type { SmsAccountSuggestion } from '../../features/sms-sync/smsSyncLogic';
 
 export const Routes = {
   Tabs: 'Tabs',
@@ -14,6 +13,8 @@ export const Routes = {
   AddAccount: 'AddAccount',
   SmsSuggestions: 'SmsSuggestions',
   Activity: 'Activity',
+  Categories: 'Categories',
+  Uncategorised: 'Uncategorised',
   Onboarding: 'Onboarding',
   ProfileSetup: 'ProfileSetup',
   Permissions: 'Permissions',
@@ -22,7 +23,8 @@ export const Routes = {
 export type MainTabParamList = {
   Home: undefined;
   Transactions: undefined;
-  Pending: undefined;
+  /** R2b: `accountId` filters Pending to one account (from the Add/Link snackbar). */
+  Pending: { accountId?: string; focusKey?: number } | undefined;
   Accounts: undefined;
 };
 
@@ -32,10 +34,17 @@ export type RootStackParamList = {
   AddRecord: undefined;
   EditTransaction: { transactionId: string };
   AddAccount:
-    | { prefill?: { name: string; type: AccountType; lastFour: string | null } }
+    | {
+        prefill?: { name: string; type: AccountType; lastFour: string | null };
+        /** R2b: the New Accounts Found card this form came from (ids only). */
+        suggestion?: { runId: string; key: string };
+      }
     | undefined;
-  SmsSuggestions: { suggestions: SmsAccountSuggestion[] };
+  /** R2b: only the in-memory suggestion session id — never SMS data. */
+  SmsSuggestions: { runId: string };
   Activity: undefined;
+  Categories: undefined;
+  Uncategorised: undefined;
   Onboarding: undefined;
   ProfileSetup: undefined;
   Permissions: undefined;

@@ -7,7 +7,7 @@ import { colors, radii, spacing, typography } from '../../../theme';
 import {
   AUTO_APPROVE_THRESHOLD_MAX,
   AUTO_APPROVE_THRESHOLD_MIN,
-  SMS_PARSER_MAX_CONFIDENCE,
+  thresholdNoteText,
   USER_NAME_MAX_LENGTH,
   shouldShowThresholdNote,
 } from '../../../domain/settings/approval.rules';
@@ -138,7 +138,7 @@ export function ProfileForm({
           </Text>
           {showThresholdNote ? (
             <Text testID="threshold-note" style={styles.noteText}>
-              {`SMS matches currently score up to ${SMS_PARSER_MAX_CONFIDENCE}%, so thresholds above ${SMS_PARSER_MAX_CONFIDENCE}% won't auto-approve anything yet.`}
+              {thresholdNoteText()}
             </Text>
           ) : null}
         </View>

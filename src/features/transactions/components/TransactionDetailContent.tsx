@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AmountText, Button, Card, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, spacing, typography } from '../../../theme';
@@ -12,6 +12,7 @@ import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { parseSmsReference } from '../../sms-sync/smsReference';
 import { OriginalSmsView } from './OriginalSmsView';
+import { categoryLabel } from '../../../domain/categories/category.rules';
 
 export interface TransactionDetailContentProps {
   transaction: Transaction;
@@ -27,6 +28,8 @@ export interface TransactionDetailContentProps {
   variant?: 'sheet' | 'screen';
   /** When true, the action row is omitted so the parent can render it in a fixed footer. */
   hideActions?: boolean;
+  /** R2: when passed, the Category row is tappable (opens a picker). */
+  onChangeCategory?: (transaction: Transaction) => void;
 }
 
 const TIER_LABEL: Record<ReturnType<typeof confidenceTier>, string> = {
@@ -105,14 +108,15 @@ export function TransactionDetailContent({
   onDelete,
   variant = 'screen',
   hideActions = false,
+  onChangeCategory,
 }: TransactionDetailContentProps) {
   const [transparencyOpen, setTransparencyOpen] = useState(variant === 'screen');
   const [auditOpen, setAuditOpen] = useState(false);
   const categories = useTransactionsStore(state => state.categories);
   const accounts = useTransactionsStore(state => state.accounts);
 
-  const visual = getCategoryVisual(transaction.categoryId);
   const category = categories.find(c => c.id === transaction.categoryId);
+  const visual = getCategoryVisual(transaction.categoryId, category);
   const account = accounts.find(a => a.id === transaction.accountId);
   const tier = confidenceTier(transaction.confidenceScore);
   const isPending = transaction.status === 'pending';
@@ -165,7 +169,24 @@ export function TransactionDetailContent({
           label="Type"
           value={transaction.type === 'income' ? 'Credit Income' : 'Debit Expense'}
         />
-        <DetailRow label="Category" value={category?.name ?? 'Uncategorized'} />
+        {onChangeCategory ? (
+          <Pressable
+            onPress={() => onChangeCategory(transaction)}
+            accessibilityRole="button"
+            accessibilityLabel={`Category ${categoryLabel(category)}. Change category`}
+            testID="detail-category-row"
+            style={({ pressed }) => [styles.detailRow, styles.tappableRow, pressed && styles.pressed]}>
+            <Text style={styles.detailLabel}>Category</Text>
+            <View style={styles.tappableValue}>
+              <Text style={styles.detailValue} numberOfLines={2}>
+                {categoryLabel(category)}
+              </Text>
+              <Icon name="pencil-outline" size={16} color={colors.primary} />
+            </View>
+          </Pressable>
+        ) : (
+          <DetailRow label="Category" value={categoryLabel(category)} />
+        )}
         <DetailRow
           label="Account"
           value={accountDisplayLabel(account)}
@@ -305,6 +326,19 @@ const styles = StyleSheet.create({
   detailLabel: {
     ...typography.bodyMd,
     color: colors.outline,
+  },
+  tappableRow: {
+    minHeight: 48,
+    alignItems: 'center',
+  },
+  tappableValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 1,
+  },
+  pressed: {
+    opacity: 0.6,
   },
   detailValue: {
     ...typography.bodyLg,

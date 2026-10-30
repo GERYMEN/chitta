@@ -70,30 +70,41 @@ async function writeAudit(
  * Every mutation takes the audit drafts describing it and writes the change
  * and its audit rows in ONE `db.transaction` — both land or neither does.
  */
-async function create(
-  input: CreateTransactionInput,
-  audit: ReadonlyArray<AuditEventDraft> = [],
-): Promise<Transaction> {
+/** A new Transaction value with id/timestamps filled (not yet persisted). */
+export function buildTransaction(input: CreateTransactionInput): Transaction {
   const now = new Date().toISOString();
-  const transaction: Transaction = {
+  return {
     ...input,
     id: generateId('txn'),
     bulkBatchId: input.bulkBatchId ?? null,
     createdAt: now,
     updatedAt: now,
   };
+}
 
+/** INSERT one transaction + its audit rows inside the caller's `tx`. */
+export async function insertTransactionTx(
+  tx: SqlExecutor,
+  transaction: Transaction,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<void> {
   const row = transactionToRow(transaction);
   const placeholders = COLUMNS.map(() => '?').join(', ');
+  await tx.execute(
+    `INSERT INTO transactions (${COLUMNS.join(', ')}) VALUES (${placeholders})`,
+    valuesFor(row),
+  );
+  await writeAudit(tx, transaction, audit);
+}
 
+async function create(
+  input: CreateTransactionInput,
+  audit: ReadonlyArray<AuditEventDraft> = [],
+): Promise<Transaction> {
+  const transaction = buildTransaction(input);
   await getDatabase().transaction(async tx => {
-    await tx.execute(
-      `INSERT INTO transactions (${COLUMNS.join(', ')}) VALUES (${placeholders})`,
-      valuesFor(row),
-    );
-    await writeAudit(tx, transaction, audit);
+    await insertTransactionTx(tx, transaction, audit);
   });
-
   return transaction;
 }
 
@@ -144,10 +155,40 @@ async function remove(
   });
 }
 
+/**
+ * R2 "Apply to N other items" (and its Undo): set each item's category in
+ * ONE `db.transaction`, one `edited` audit row (fields ['categoryId']) per
+ * item. All land or none do.
+ */
+async function setCategories(
+  changes: ReadonlyArray<{ id: string; accountId: string; categoryId: string }>,
+): Promise<string> {
+  const now = new Date().toISOString();
+  if (changes.length === 0) return now;
+  await getDatabase().transaction(async tx => {
+    for (const change of changes) {
+      await tx.execute('UPDATE transactions SET category_id = ?, updated_at = ? WHERE id = ?', [
+        change.categoryId,
+        now,
+        change.id,
+      ]);
+      await auditRepository.insert(tx, {
+        eventType: 'edited',
+        actor: 'user',
+        metadata: { kind: 'edited', fields: ['categoryId'] },
+        transactionId: change.id,
+        accountId: change.accountId,
+      });
+    }
+  });
+  return now;
+}
+
 export const transactionRepository = {
   listAll,
   getById,
   create,
   update,
   delete: remove,
+  setCategories,
 };

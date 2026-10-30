@@ -23,6 +23,7 @@ import {
   isDeletedAccount,
 } from '../../../domain/accounts/account.rules';
 import { useTransactionsStore } from '../state/transactionsStore';
+import { categoryLabel, pickableCategories } from '../../../domain/categories/category.rules';
 import {
   transactionFormSchema,
   TransactionFormInitialValues,
@@ -94,12 +95,11 @@ export function TransactionForm({ onSubmit, initialValues, submitting = false }:
   const occurredAt = watch('occurredAt');
   const [picker, setPicker] = useState<'date' | 'time' | null>(null);
 
+  // R2: archived categories are hidden; an item already in one keeps it.
+  const initialCategoryId = initialValues?.categoryId ?? null;
   const filteredCategories = useMemo(
-    () =>
-      categories.filter(c =>
-        type === 'expense' ? c.type === 'expense' || c.type === 'both' : c.type === 'income' || c.type === 'both',
-      ),
-    [categories, type],
+    () => pickableCategories(categories, type, { keepId: initialCategoryId }),
+    [categories, type, initialCategoryId],
   );
 
   useEffect(() => {
@@ -191,7 +191,10 @@ export function TransactionForm({ onSubmit, initialValues, submitting = false }:
           <View style={styles.wrapRow}>
             {filteredCategories.map(category => (
               <Pressable key={category.id} onPress={() => field.onChange(category.id)}>
-                <Chip label={category.name} tone={field.value === category.id ? 'active' : 'neutral'} />
+                <Chip
+                  label={categoryLabel(category)}
+                  tone={field.value === category.id ? 'active' : 'neutral'}
+                />
               </Pressable>
             ))}
           </View>

@@ -1,4 +1,3 @@
-import { CreateTransactionInput } from '../../data/repositories/transaction.repository';
 import { useTransactionsStore } from '../transactions/state/transactionsStore';
 import { readInbox } from '../../native/android/sms/smsReader';
 import {
@@ -8,22 +7,52 @@ import {
 import { parseSmsMessage } from './smsParser';
 import { shouldAutoApprove } from '../../domain/settings/approval.rules';
 import {
+  buildSmsTransactionInput,
   filterNewCandidates,
-  groupUnmatchedIntoSuggestions,
   partitionCandidates,
   resolveCategoryIdForSms,
   SmsAccountSuggestion,
+  SuggestionDecisions,
 } from './smsSyncLogic';
-import { accountRepository } from '../../data/repositories/account.repository';
+import {
+  accountRepository,
+  SuggestionDecisionRow,
+} from '../../data/repositories/account.repository';
 import { activeAccounts } from '../../domain/accounts/account.rules';
+import { UNCATEGORISED_ID } from '../../domain/categories/category.rules';
+import { groupUnmatchedCandidates } from './suggestionGroups';
+import { useSuggestionSession } from './suggestionSession';
 
 export interface SmsSyncResult {
   scanned: number;
   created: number;
+  /** New items from THIS sync that landed in "Uncategorised" (no rule). */
+  uncategorised: number;
   skipped: number;
   /** New SMS transactions from THIS sync approved by the opt-in auto mode. */
   autoApproved: number;
   suggestions: SmsAccountSuggestion[];
+  /**
+   * R2b: id of this run's in-memory suggestion session (the groups with
+   * their waiting candidates). Nav params carry only this id.
+   */
+  suggestionRunId: string;
+}
+
+/** R2b: 'added'/'linked' rows route a key to an account; 'ignored' drops it. */
+export function toSuggestionDecisions(
+  rows: ReadonlyArray<SuggestionDecisionRow>,
+): SuggestionDecisions {
+  const routes = new Map<string, string>();
+  const ignored = new Set<string>();
+  for (const row of rows) {
+    if ((row.decision === 'added' || row.decision === 'linked') && row.accountId) {
+      routes.set(row.key, row.accountId);
+    } else if (row.decision === 'ignored') {
+      ignored.add(row.key);
+    }
+  }
+  return { routes, ignored };
 }
 
 export type SmsSyncErrorCode =
@@ -42,7 +71,6 @@ export class SmsSyncError extends Error {
   }
 }
 
-const PARSER_VERSION = 'sms-heuristic-v1';
 const INBOX_LIMIT = 200;
 
 /**
@@ -110,44 +138,37 @@ export async function syncSms(): Promise<SmsSyncResult> {
   // D10: SMS owned by a soft-deleted account (exact type+lastFour match, or
   // a 'deleted' decision for its normalized key) are dropped — not imported,
   // not suggested. Active accounts are matched first and always win.
+  // R2b: explicit Add/Link decisions route a key to its account; Ignore drops it.
   const deletedDecisionKeys = await accountRepository.listDeletedDecisionKeys();
+  const decisions = toSuggestionDecisions(await accountRepository.listSuggestionDecisions());
   const { matched, unmatched } = partitionCandidates(
     fresh,
     store.accounts,
     deletedDecisionKeys,
+    decisions,
   );
 
   // Snapshot the policy once so a settings change mid-sync can't mix modes.
   const { approvalMode, autoApproveThreshold } = store;
 
   let created = 0;
+  let uncategorised = 0;
   let autoApproved = 0;
   for (const { parsed, accountId } of matched) {
-    const categoryId = resolveCategoryIdForSms(store.categories, parsed.type);
+    // R2: merchant rule first, else the system "Uncategorised" bucket.
+    const categoryId = resolveCategoryIdForSms(
+      store.categories,
+      parsed.type,
+      parsed.merchantName,
+      store.merchantRules,
+    );
     if (categoryId == null) continue;
 
-    const input: CreateTransactionInput = {
-      type: parsed.type,
-      status: 'pending',
-      amountMinor: parsed.amountMinor,
-      currency: 'INR',
-      merchantName: parsed.merchantName,
-      categoryId,
-      accountId,
-      paymentMethod: 'other',
-      occurredAt: parsed.occurredAt,
-      detectedAt: new Date().toISOString(),
-      approvedAt: null,
-      note: null,
-      sourceType: 'sms',
-      sourceReferenceHash: parsed.sourceReferenceHash,
-      sanitizedPreview: parsed.sanitizedPreview,
-      confidenceScore: parsed.confidenceScore,
-      parserVersion: PARSER_VERSION,
-    };
+    const input = buildSmsTransactionInput(parsed, accountId, categoryId, new Date().toISOString());
 
     const createdTransaction = await useTransactionsStore.getState().addTransaction(input);
     created++;
+    if (categoryId === UNCATEGORISED_ID) uncategorised++;
 
     if (
       shouldAutoApprove(approvalMode, autoApproveThreshold, createdTransaction.confidenceScore)
@@ -163,7 +184,19 @@ export async function syncSms(): Promise<SmsSyncResult> {
     }
   }
 
-  const suggestions = groupUnmatchedIntoSuggestions(unmatched);
+  // R2b: keep each suggestion's waiting candidates in the in-memory session
+  // (not nav params, not the DB) so New Accounts Found can show them.
+  const groups = groupUnmatchedCandidates(unmatched);
+  const suggestionRunId = useSuggestionSession.getState().start(groups);
+  const suggestions = groups.map(group => ({ ...group.suggestion }));
   const scanned = messages.length;
-  return { scanned, created, skipped: scanned - created, autoApproved, suggestions };
+  return {
+    scanned,
+    created,
+    uncategorised,
+    skipped: scanned - created,
+    autoApproved,
+    suggestions,
+    suggestionRunId,
+  };
 }

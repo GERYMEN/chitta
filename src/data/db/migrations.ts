@@ -47,6 +47,27 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'CREATE INDEX IF NOT EXISTS ix_audit_transaction ON audit_events(transaction_id)',
     ],
   },
+  {
+    // R2 smart categories: merchant → category rules, archivable custom
+    // categories with a theme colour key, and the type-neutral system
+    // "Uncategorised" bucket. `categories.is_system` already exists in the
+    // base CREATE TABLE on every install, so it is not re-added. Existing
+    // transactions are NOT touched (owner's data) — only new SMS items land
+    // in Uncategorised. INSERT OR IGNORE keeps the seed single even if the
+    // id already exists.
+    version: 5,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS merchant_rules (
+    merchant_key TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL REFERENCES categories(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+      'ALTER TABLE categories ADD COLUMN archived_at TEXT',
+      'ALTER TABLE categories ADD COLUMN color TEXT',
+      "INSERT OR IGNORE INTO categories (id, name, parent_id, type, icon, is_system) VALUES ('cat-uncategorised', 'Uncategorised', NULL, 'both', 'help-circle-outline', 1)",
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

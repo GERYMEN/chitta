@@ -1,0 +1,127 @@
+GROUND FACTS: read ongoing/roadmap/STATE.md, ongoing/roadmap/R2-smart-categories.md
+(previous phase — uncommitted in the working tree; build on it, do not
+revert it), ongoing/roadmap/BUGS.md, the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute device-safety + privacy
+rules), docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+PHASE R2b — "New accounts found" clarity + Pending refresh/auto-approve.
+
+USER PROBLEM (verbatim intent): after Sync SMS finds new accounts, the user
+can't tell which transactions are waiting or which account they belong to.
+They want to see, under each newly found account, "N transactions waiting"
+and the transactions themselves including the SMS description. On the
+Pending screen they want a Refresh button, and — when Auto-approve is
+enabled — an "Auto-approve" button that approves eligible items.
+
+Verified current state (grep to confirm):
+- src/features/sms-sync/syncSms.ts: partitionCandidates → unmatched
+  candidates are only grouped by groupUnmatchedIntoSuggestions into
+  {bankName, accountKind, lastFour, messageCount}; the transactions
+  themselves are NOT stored anywhere. Sync navigates to
+  src/features/sms-sync/screens/SmsSuggestionsScreen.tsx ("New Accounts
+  Found") with the suggestion list.
+- ParsedSmsTransaction has sanitizedPreview (allowed to store/show) — raw
+  SMS body never stored. OriginalSmsView live-reads by id on demand
+  (check how it gets the SMS id; reuse if candidates can carry it).
+- account_suggestion_candidates table exists (counts only).
+
+PRIVACY RULES (unchanged, absolute): never store raw SMS body/sender;
+sanitizedPreview is the only stored SMS text; live original text only in
+component state.
+
+TASKS
+T1 Sync result keeps unmatched candidates grouped per suggestion key
+   (in memory / a module-level session cache keyed by the sync run — NOT
+   nav params, which must stay small/serializable; NOT the DB until the
+   user decides). Re-running Sync rebuilds it (dedup by
+   sourceReferenceHash is unchanged).
+T2 New Accounts Found screen redesign, one card per suggested account:
+   - Title = proposed account name, e.g. "HDFC Bank ••1234",
+     "SBI Credit Card ••5368", "Unknown bank (no last 4)"; kind chip.
+   - "N transactions waiting" + date range + total in/out (amounts
+     respect showPaise rules).
+   - Expand/collapse ("Show transactions") → list of that account's
+     waiting items: date, type arrow, amount, merchant, and the SMS
+     description = sanitizedPreview (2 lines, tap to expand). If an SMS
+     id is available, a "View original SMS" link reusing OriginalSmsView
+     (live read, never stored).
+   - Actions per card: "Add account" (editable name prefilled, opening
+     balance optional — reuse AddAccount form/validation and duplicate
+     guard), "Link to existing" if an active account of same kind exists
+     without lastFour (optional — document if skipped), "Ignore" (existing
+     decision logic).
+   - On Add/Link: insert that card's waiting items immediately as PENDING
+     transactions on the new/linked account in one db.transaction (dedup
+     by sourceReferenceHash; category via R2 merchant rule else
+     Uncategorised; auto-approve rule applies exactly as in syncSms),
+     audited ('account_created' + 'detected' per item). Then show a
+     Snackbar "N transactions added to Pending — View" → Pending screen
+     filtered/scrolled to that account.
+   - Summary line at top: "3 new accounts · 27 transactions waiting".
+T3 Pending screen:
+   - Group pending items by account: section header "<Account name
+     ••last4> · N pending" (deleted accounts labelled per existing helper).
+   - Header "Refresh" icon button (≥48dp, accessibilityLabel "Refresh")
+     reloads pending from the DB; also pull-to-refresh on the list. (It
+     does NOT run Sync SMS — Sync stays on Home.)
+   - When approval_mode = auto: an "Auto-approve (N)" button where N =
+     pending items with confidence ≥ threshold (use the existing
+     shouldAutoApprove rule — single source of truth). Tap → confirm
+     Dialog "Approve N transactions at or above T% confidence?" →
+     approve via store (canTransition), audited 'auto_approved' with
+     actor 'user' and {confidence, threshold}. N=0 → button disabled with
+     hint (e.g. "No items at or above T%"; if T > parser max show the R2
+     threshold note wording). Mode manual → button hidden.
+   - Pending count badge/state refresh after actions.
+T4 Tests: grouping of candidates per suggestion; proposed account name
+   helper; insert-on-add (dedup, category, auto-approve, audit) with mock
+   db; Pending grouping helper; eligible-count helper vs shouldAutoApprove;
+   button visibility by mode.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+DEVICE (USB serial 00015365L001524; adb install -r; Metro + adb reverse
+tcp:8081 tcp:8081 — re-run adb reverse after any USB reset). Phone absent
+2 min or locked → stop device part.
+New Accounts Found shows the owner's REAL SMS data. Rules:
+ D1 Tap Sync SMS once. Report COUNTS only: number of suggestion cards,
+    total waiting. Labels allowed: bank name / kind / last-4 (the only
+    allowed real-data exception). NEVER print previews, merchants or
+    amounts — grep dumps for the "transactions waiting" / title labels
+    only.
+ D2 Expand one card → report the row COUNT matches its "N waiting";
+    never print row text. Collapse. Do NOT tap Add / Link / Ignore on any
+    real suggestion (that changes the owner's data) — press Back.
+ D3 Pending: section headers exist (report count of sections + whether
+    QA-Merchant-05 items sit under their account header — QA rows may be
+    printed). Refresh button + pull-to-refresh work (no crash).
+ D4 Owner's approval mode is OFF → verify the Auto-approve button is
+    HIDDEN. Do NOT change the owner's settings; the ON path is unit-test
+    only.
+ D5 Force-stop + relaunch; logcat 0 FATAL com.tracker, 0 "Maximum update
+    depth", 0 ReactNativeJS errors. End: force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Other app in front: HOME (unless a call is
+  active — then wait), relaunch Tracker; never inspect it. Locked = stop.
+- Every uiautomator dump grep-filtered to one label/QA element; never print
+  a full dump, real previews, merchants, amounts or senders; `adb shell rm
+  /sdcard/u.xml` after; /sdcard only inside adb shell.
+- Never add/link/ignore real suggestions, never change real transactions,
+  accounts or settings; never tracker.db / sqlite3 / run-as; no
+  uninstall/clear-data/screenshots.
+
+OUTPUT: ongoing/roadmap/R2b-new-accounts-pending.md (files, data flow
+sync → suggestion cache → add → pending, UI description, gates, D1–D5
+PASS/FAIL, what is unit-test only). Leak-scan before finishing. Do not
+commit.
+REPLY ONLY: gates yes/no; files changed count; D1–D5 PASS/FAIL; not
+verified and why; decisions you made.

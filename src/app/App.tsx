@@ -4,7 +4,7 @@ import { AppProviders } from './providers/AppProviders';
 import { RootNavigator } from './navigation/RootNavigator';
 import { useTransactionsStore } from '../features/transactions/state/transactionsStore';
 import { colors } from '../theme';
-import { DialogHost } from '../shared/ui';
+import { DialogHost, SnackbarHost } from '../shared/ui';
 
 export function App() {
   const isHydrated = useTransactionsStore(state => state.isHydrated);
@@ -25,6 +25,7 @@ export function App() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       )}
+      <SnackbarHost />
       <DialogHost />
     </AppProviders>
   );

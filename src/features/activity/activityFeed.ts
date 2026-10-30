@@ -1,6 +1,8 @@
 import { AuditFeedEvent } from '../../domain/audit/audit.types';
 import { Transaction, TransactionType } from '../../domain/transactions/transaction.types';
 import { Account } from '../../domain/accounts/account.types';
+import { Category } from '../../domain/categories/category.types';
+import { categoryLabel } from '../../domain/categories/category.rules';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
 
 /**
@@ -26,7 +28,19 @@ export interface ActivityContext {
   /** Live transaction, if it still exists. */
   transaction?: Pick<Transaction, 'merchantName' | 'amountMinor' | 'type'> | null;
   account?: Pick<Account, 'name' | 'lastFour'> | null;
+  /** R2: the category a rule/category event refers to (looked up by id). */
+  category?: Pick<Category, 'name' | 'archivedAt'> | null;
 }
+
+export interface ActivityOptions {
+  /**
+   * R2 T0: amounts are private by default. When false (the default) every
+   * amount in the sentence and the impact line renders as MASKED_AMOUNT.
+   */
+  showAmounts?: boolean;
+}
+
+export const MASKED_AMOUNT = '₹ ••••';
 
 const ICON: Record<AuditFeedEvent['eventType'], string> = {
   detected: 'message-text-outline',
@@ -41,6 +55,11 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   account_removed: 'bank-remove',
   account_restored: 'backup-restore',
   settings_changed: 'tune-variant',
+  rule_saved: 'bookmark-check-outline',
+  rule_deleted: 'bookmark-remove-outline',
+  category_created: 'tag-plus-outline',
+  category_updated: 'tag-outline',
+  category_archived: 'archive-outline',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -57,6 +76,8 @@ const FIELD_LABEL: Record<string, string> = {
   openingBalanceMinor: 'opening balance',
   balanceAnchorMinor: 'balance',
   balanceAnchorAt: 'balance date',
+  icon: 'icon',
+  color: 'colour',
 };
 
 interface Subject {
@@ -65,8 +86,13 @@ interface Subject {
   type: TransactionType;
 }
 
-function amountLabel(amountMinor: number): string {
-  return formatRupeesFromMinor(amountMinor, { showPaise: true });
+function amountLabel(amountMinor: number, show: boolean): string {
+  return show ? formatRupeesFromMinor(amountMinor, { showPaise: true }) : MASKED_AMOUNT;
+}
+
+/** Signed amount, or the mask (no sign either — the amount stays private). */
+function flowAmount(amountMinor: number, type: TransactionType, show: boolean): string {
+  return show ? signedAmount(amountMinor, type) : MASKED_AMOUNT;
 }
 
 /** "-₹50.00" for an expense, "+₹50.00" for income (DESIGN.md flow notation). */
@@ -86,10 +112,10 @@ function fieldList(fields: ReadonlyArray<string>): string {
   return labels.length > 0 ? `Changed ${labels.join(', ')}` : 'No visible changes';
 }
 
-function balanceImpact(subject: Subject | null): ActivityItem['impact'] {
+function balanceImpact(subject: Subject | null, show: boolean): ActivityItem['impact'] {
   if (!subject) return null;
   return {
-    text: `Balance ${signedAmount(subject.amountMinor, subject.type)}`,
+    text: `Balance ${flowAmount(subject.amountMinor, subject.type, show)}`,
     tone: subject.type === 'income' ? 'income' : 'expense',
   };
 }
@@ -101,17 +127,23 @@ function subjectFor(event: AuditFeedEvent, context: ActivityContext): Subject | 
   return null;
 }
 
-/** "QA-Merchant-07 ₹50.00", or "a transaction" when nothing is known. */
-function subjectText(subject: Subject | null): string {
-  return subject ? `${subject.merchantName} ${amountLabel(subject.amountMinor)}` : 'a transaction';
+/** "QA-Merchant-07 ₹50.00" (or "QA-Merchant-07 ₹ ••••"), or "a transaction". */
+function subjectText(subject: Subject | null, show: boolean): string {
+  return subject
+    ? `${subject.merchantName} ${amountLabel(subject.amountMinor, show)}`
+    : 'a transaction';
 }
 
 export function describeActivity(
   event: AuditFeedEvent,
   context: ActivityContext = {},
+  options: ActivityOptions = {},
 ): ActivityItem {
+  const show = options.showAmounts ?? false;
   const subject = subjectFor(event, context);
-  const what = subjectText(subject);
+  const what = subjectText(subject, show);
+  const merchant = subject ? subject.merchantName : null;
+  const categoryName = context.category ? categoryLabel(context.category) : 'a category';
   const accountLabel = accountShortLabel(context.account);
   let sentence: string;
   let impact: ActivityItem['impact'] = null;
@@ -135,13 +167,17 @@ export function describeActivity(
         event.metadata?.kind === 'auto_approved'
           ? ` at ${Math.round(event.metadata.confidence)}% match`
           : '';
-      sentence = `Auto-approved ${what}${confidence}`;
-      impact = balanceImpact(subject);
+      // R2b: the Pending "Auto-approve (N)" button audits actor 'user'.
+      sentence =
+        event.actor === 'user'
+          ? `You auto-approved ${what}${confidence}`
+          : `Auto-approved ${what}${confidence}`;
+      impact = balanceImpact(subject, show);
       break;
     }
     case 'approved':
       sentence = `You approved ${what}`;
-      impact = balanceImpact(subject);
+      impact = balanceImpact(subject, show);
       break;
     case 'rejected':
       sentence = `You rejected ${what}`;
@@ -160,7 +196,7 @@ export function describeActivity(
       impact =
         snapshot?.status === 'approved'
           ? {
-              text: `No longer in balance (was ${signedAmount(snapshot.amountMinor, snapshot.type)})`,
+              text: `No longer in balance (was ${flowAmount(snapshot.amountMinor, snapshot.type, show)})`,
               tone: 'negative',
             }
           : { text: 'Removed from records', tone: 'negative' };
@@ -187,6 +223,31 @@ export function describeActivity(
       break;
     case 'settings_changed':
       ({ sentence, impact } = describeSettingsChange(event));
+      break;
+    case 'rule_saved':
+      sentence = merchant
+        ? `You set ${merchant} to always use ${categoryName}`
+        : `You saved a merchant rule for ${categoryName}`;
+      impact = { text: 'Applies to future SMS items', tone: 'neutral' };
+      break;
+    case 'rule_deleted':
+      sentence = `You removed a merchant rule for ${categoryName}`;
+      impact = { text: 'Future SMS items go to Uncategorised', tone: 'neutral' };
+      break;
+    case 'category_created':
+      sentence = `You created category ${categoryName}`;
+      impact = { text: 'New category', tone: 'neutral' };
+      break;
+    case 'category_updated':
+      sentence = `You updated category ${categoryName}`;
+      impact = {
+        text: fieldList(event.metadata?.kind === 'category_updated' ? event.metadata.fields : []),
+        tone: 'neutral',
+      };
+      break;
+    case 'category_archived':
+      sentence = `You archived category ${context.category?.name ?? 'a category'}`;
+      impact = { text: 'Hidden from pickers · items keep their label', tone: 'neutral' };
       break;
     default:
       sentence = 'Something changed';

@@ -4,6 +4,12 @@ import { TransactionType } from '../../domain/transactions/transaction.types';
 import { ParsedSmsTransaction } from './smsParser';
 import { activeAccounts, deletedAccounts } from '../../domain/accounts/account.rules';
 import { accountKeyToString, ACCOUNT_KEY_NORMALIZER_VERSION } from './normalizeAccountKey';
+import { normalizeMerchant } from '../../domain/merchants/normalizeMerchant';
+import { categoryFitsType, UNCATEGORISED_ID } from '../../domain/categories/category.rules';
+import type { CreateTransactionInput } from '../../data/repositories/transaction.repository';
+
+/** Parser version stamped on every SMS-derived transaction. */
+export const SMS_PARSER_VERSION = 'sms-heuristic-v1';
 
 /**
  * Pure, dependency-free helpers for SMS sync so the account/category fallback
@@ -42,22 +48,31 @@ export function resolveAccountIdForSms(
 }
 
 /**
- * Resolve a generic category for a parsed SMS. v1 has no reliable category
- * signal, so: expense -> the "Shopping" system category, income -> the
- * "Salary & Wages" system category. Falls back to the first category of the
- * matching type if the named category is missing.
+ * Resolve the category for a parsed SMS (R2):
+ *  1. a merchant rule for the normalized merchant key wins, if its category
+ *     still exists, is not archived and fits the transaction type;
+ *  2. otherwise the system "Uncategorised" bucket (type-neutral).
+ * There is no "Shopping" / "Salary & Wages" default any more — an unmatched
+ * item is visibly uncategorised, never silently filed. Returns null only if
+ * neither exists (callers skip the item).
  */
 export function resolveCategoryIdForSms(
-  categories: Category[],
+  categories: ReadonlyArray<Category>,
   type: TransactionType,
+  merchantName: string = '',
+  rules: Readonly<Record<string, string>> = {},
 ): string | null {
-  const targetName = type === 'expense' ? 'Shopping' : 'Salary & Wages';
+  const key = normalizeMerchant(merchantName);
+  const ruleCategoryId = key !== '' ? rules[key] : undefined;
+  if (ruleCategoryId !== undefined) {
+    const ruled = categories.find(category => category.id === ruleCategoryId);
+    if (ruled && ruled.archivedAt === null && categoryFitsType(ruled.type, type)) {
+      return ruled.id;
+    }
+  }
 
-  const byName = categories.find(category => category.name === targetName);
-  if (byName) return byName.id;
-
-  const byType = categories.find(category => category.type === type);
-  return byType ? byType.id : null;
+  const uncategorised = categories.find(category => category.id === UNCATEGORISED_ID);
+  return uncategorised ? uncategorised.id : null;
 }
 
 /**
@@ -72,9 +87,19 @@ export function filterNewCandidates(
 }
 
 /**
- * Group candidates with no account match by the signature
- * `${accountKind}:${bankName}:${lastFour ?? 'unknown'}` and produce one
- * suggestion per group, sorted by `messageCount` descending.
+ * Grouping signature of a suggested account:
+ * `${accountKind}:${bankName}:${lastFour ?? 'unknown'}`. Used for the
+ * "New Accounts Found" cards, their session cache and their React keys.
+ */
+export function suggestionKeyFor(
+  candidate: Pick<SmsAccountSuggestion, 'accountKind' | 'bankName' | 'lastFour'>,
+): string {
+  return `${candidate.accountKind}:${candidate.bankName}:${candidate.lastFour ?? 'unknown'}`;
+}
+
+/**
+ * Group candidates with no account match by `suggestionKeyFor` and produce
+ * one suggestion per group, sorted by `messageCount` descending.
  */
 export function groupUnmatchedIntoSuggestions(
   unmatched: ParsedSmsTransaction[],
@@ -82,7 +107,7 @@ export function groupUnmatchedIntoSuggestions(
   const byKey = new Map<string, SmsAccountSuggestion>();
 
   for (const candidate of unmatched) {
-    const key = `${candidate.accountKind}:${candidate.bankName}:${candidate.lastFour ?? 'unknown'}`;
+    const key = suggestionKeyFor(candidate);
     const existing = byKey.get(key);
     if (existing) {
       existing.messageCount += 1;
@@ -118,32 +143,59 @@ export function isOwnedByDeletedAccount(
   candidate: SmsDeletedMatch,
 ): boolean {
   if (resolveAccountIdForSms(deleted, candidate) != null) return true;
-  const key = accountKeyToString({
+  return deletedDecisionKeys.has(decisionKeyFor(candidate));
+}
+
+/**
+ * R2b: explicit "New Accounts Found" decisions, by `accountKeyToString` key.
+ * `routes` maps an 'added'/'linked' key to the account the user chose;
+ * `ignored` keys are never imported or suggested again.
+ */
+export interface SuggestionDecisions {
+  routes: ReadonlyMap<string, string>;
+  ignored: ReadonlySet<string>;
+}
+
+export const NO_SUGGESTION_DECISIONS: SuggestionDecisions = {
+  routes: new Map(),
+  ignored: new Set(),
+};
+
+/** The normalized decision key (`accountKeyToString`) of a parsed SMS. */
+export function decisionKeyFor(
+  candidate: Pick<ParsedSmsTransaction, 'bankCanonical' | 'accountKind' | 'lastFour'>,
+): string {
+  return accountKeyToString({
     bankCanonical: candidate.bankCanonical,
     accountKind: candidate.accountKind,
     lastFour: candidate.lastFour ?? '',
     normalizerVersion: ACCOUNT_KEY_NORMALIZER_VERSION,
   });
-  return deletedDecisionKeys.has(key);
 }
 
 export interface PartitionedCandidates {
   matched: Array<{ parsed: ParsedSmsTransaction; accountId: string }>;
-  /** Owned by a soft-deleted account — counted into skipped. */
+  /** Owned by a soft-deleted account or an ignored key — counted into skipped. */
   dropped: ParsedSmsTransaction[];
   /** No account at all — grouped into "New Accounts Found" suggestions. */
   unmatched: ParsedSmsTransaction[];
 }
 
 /**
- * Split fresh candidates into: matched to an ACTIVE account, dropped because a
- * soft-deleted account owns them, or unmatched. `accounts` may contain both
- * active and deleted accounts; the split is done here.
+ * Split fresh candidates, in this order:
+ *  1. exact match (type + lastFour) to an ACTIVE account — unchanged rule,
+ *     always wins;
+ *  2. an 'added'/'linked' decision for its key → that account if active,
+ *     dropped if that account is soft-deleted;
+ *  3. owned by a soft-deleted account (D10) or an 'ignored' key → dropped;
+ *  4. otherwise unmatched (suggested).
+ * `accounts` may contain both active and deleted accounts.
  */
 export function partitionCandidates(
   candidates: ParsedSmsTransaction[],
   accounts: Account[],
   deletedDecisionKeys: ReadonlySet<string>,
+  decisions: SuggestionDecisions = NO_SUGGESTION_DECISIONS,
 ): PartitionedCandidates {
   const active = activeAccounts(accounts);
   const deleted = deletedAccounts(accounts);
@@ -153,11 +205,66 @@ export function partitionCandidates(
     const accountId = resolveAccountIdForSms(active, parsed);
     if (accountId != null) {
       result.matched.push({ parsed, accountId });
-    } else if (isOwnedByDeletedAccount(deleted, deletedDecisionKeys, parsed)) {
+      continue;
+    }
+    const key = decisionKeyFor(parsed);
+    const routedId = decisions.routes.get(key);
+    if (routedId !== undefined) {
+      if (active.some(account => account.id === routedId)) {
+        result.matched.push({ parsed, accountId: routedId });
+        continue;
+      }
+      if (deleted.some(account => account.id === routedId)) {
+        result.dropped.push(parsed);
+        continue;
+      }
+    }
+    if (
+      decisions.ignored.has(key) ||
+      isOwnedByDeletedAccount(deleted, deletedDecisionKeys, parsed)
+    ) {
       result.dropped.push(parsed);
     } else {
       result.unmatched.push(parsed);
     }
   }
   return result;
+}
+
+/**
+ * The pending transaction an SMS candidate becomes, minus its account (sync
+ * and R2b "Add account" share this, so both paths insert identical rows).
+ */
+export function buildSmsPendingRow(
+  parsed: ParsedSmsTransaction,
+  categoryId: string,
+  detectedAt: string,
+): Omit<CreateTransactionInput, 'accountId'> {
+  return {
+    type: parsed.type,
+    status: 'pending',
+    amountMinor: parsed.amountMinor,
+    currency: 'INR',
+    merchantName: parsed.merchantName,
+    categoryId,
+    paymentMethod: 'other',
+    occurredAt: parsed.occurredAt,
+    detectedAt,
+    approvedAt: null,
+    note: null,
+    sourceType: 'sms',
+    sourceReferenceHash: parsed.sourceReferenceHash,
+    sanitizedPreview: parsed.sanitizedPreview,
+    confidenceScore: parsed.confidenceScore,
+    parserVersion: SMS_PARSER_VERSION,
+  };
+}
+
+export function buildSmsTransactionInput(
+  parsed: ParsedSmsTransaction,
+  accountId: string,
+  categoryId: string,
+  detectedAt: string,
+): CreateTransactionInput {
+  return { ...buildSmsPendingRow(parsed, categoryId, detectedAt), accountId };
 }
