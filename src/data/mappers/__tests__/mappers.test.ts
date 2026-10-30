@@ -25,6 +25,9 @@ const transaction: Transaction = {
   confidenceScore: 98,
   parserVersion: 'on-device-sms-v2.4',
   bulkBatchId: null,
+  transferAccountId: null,
+  linkedTransactionId: null,
+  linkKind: null,
   createdAt: '2026-10-01T19:32:05.000Z',
   updatedAt: '2026-10-01T19:32:05.000Z',
 };
@@ -70,6 +73,44 @@ describe('transaction mapper', () => {
   it('round-trips a bulkBatchId through row form', () => {
     const batched = { ...transaction, bulkBatchId: 'batch-2026-10-01' };
     expect(rowToTransaction(transactionToRow(batched))).toEqual(batched);
+  });
+
+  it('R3a: round-trips a transfer and a transfer twin', () => {
+    const transfer: Transaction = {
+      ...transaction,
+      id: 'txn-tr',
+      type: 'transfer',
+      status: 'approved',
+      categoryId: 'cat-transfer',
+      transferAccountId: 'acc-2',
+    };
+    const twin: Transaction = {
+      ...transaction,
+      id: 'txn-twin',
+      type: 'income',
+      status: 'rejected',
+      linkedTransactionId: 'txn-tr',
+      linkKind: 'transfer_twin',
+    };
+    expect(transactionToRow(transfer)).toMatchObject({
+      type: 'transfer',
+      transfer_account_id: 'acc-2',
+      linked_transaction_id: null,
+      link_kind: null,
+    });
+    expect(rowToTransaction(transactionToRow(transfer))).toEqual(transfer);
+    expect(rowToTransaction(transactionToRow(twin))).toEqual(twin);
+  });
+
+  it('R3a: an old row without the new columns maps them to null', () => {
+    const row = transactionToRow(transaction);
+    delete row.transfer_account_id;
+    delete row.linked_transaction_id;
+    delete row.link_kind;
+    const mapped = rowToTransaction(row);
+    expect(mapped.transferAccountId).toBeNull();
+    expect(mapped.linkedTransactionId).toBeNull();
+    expect(mapped.linkKind).toBeNull();
   });
 
   it('maps an absent bulk_batch_id back to null', () => {

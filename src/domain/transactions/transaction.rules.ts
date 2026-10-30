@@ -43,3 +43,40 @@ const VALID_TRANSITIONS: Record<TransactionStatus, ReadonlySet<TransactionStatus
 export function canTransition(from: TransactionStatus, to: TransactionStatus): boolean {
   return VALID_TRANSITIONS[from].has(to);
 }
+
+type IncomeExpenseSubject = Pick<Transaction, 'type'> &
+  Partial<Pick<Transaction, 'linkKind'>>;
+
+/**
+ * R3a — the SINGLE rule every income/expense total goes through (Home
+ * income/expense, Transactions Inflow/Spent/Net + day nets, the
+ * Uncategorised count, Activity impact lines, any per-category sum).
+ * Transfers between own accounts and the kept SMS twin of a confirmed
+ * transfer never count. Status is NOT checked here — callers pass the rows
+ * they total (e.g. approved only).
+ */
+export function countsTowardIncomeExpense(transaction: IncomeExpenseSubject): boolean {
+  if (transaction.type !== 'income' && transaction.type !== 'expense') return false;
+  return transaction.linkKind !== 'transfer_twin';
+}
+
+export interface IncomeExpenseTotals {
+  incomeMinor: number;
+  expenseMinor: number;
+  /** income − expense. */
+  netMinor: number;
+}
+
+/** Sum income and expense over rows that count (see countsTowardIncomeExpense). */
+export function incomeExpenseTotals(
+  transactions: ReadonlyArray<IncomeExpenseSubject & Pick<Transaction, 'amountMinor'>>,
+): IncomeExpenseTotals {
+  let incomeMinor = 0;
+  let expenseMinor = 0;
+  for (const t of transactions) {
+    if (!countsTowardIncomeExpense(t)) continue;
+    if (t.type === 'income') incomeMinor += t.amountMinor;
+    else expenseMinor += t.amountMinor;
+  }
+  return { incomeMinor, expenseMinor, netMinor: incomeMinor - expenseMinor };
+}

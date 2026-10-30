@@ -11,7 +11,12 @@ import { selectActiveAccounts, useTransactionsStore } from '../state/transaction
 import { CreateTransactionInput } from '../../../data/repositories/transaction.repository';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { TransactionForm } from '../components/TransactionForm';
-import { amountInputToMinor, TransactionFormValues } from '../components/transactionForm.schema';
+import { TransferForm } from '../components/TransferForm';
+import {
+  amountInputToMinor,
+  TransactionFormValues,
+  TransferFormValues,
+} from '../components/transactionForm.schema';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -19,12 +24,33 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  * Manual transaction entry (docs/PROJECT.md §23). Creates a `pending`
  * transaction through the same Detect → Review → Approve → Record flow as
  * SMS-detected entries — never approved directly.
+ *
+ * R3a: the Type row's third tab "Transfer" swaps in the transfer form. A
+ * transfer is the owner moving their own money (not a detection), so it is
+ * recorded approved and never counts as income or expense.
  */
 export function AddRecordScreen() {
   const navigation = useNavigation<Nav>();
   // D10: only active accounts count for the "add an account first" guard.
   const accounts = useTransactionsStore(useShallow(selectActiveAccounts));
   const [submitting, setSubmitting] = useState(false);
+  const [mode, setMode] = useState<'expense' | 'income' | 'transfer'>('expense');
+
+  async function handleTransferSubmit(values: TransferFormValues) {
+    setSubmitting(true);
+    try {
+      await useTransactionsStore.getState().addTransfer({
+        fromAccountId: values.fromAccountId,
+        toAccountId: values.toAccountId,
+        amountMinor: amountInputToMinor(values.amount),
+        occurredAt: values.occurredAt,
+        note: values.note && values.note.trim() !== '' ? values.note.trim() : null,
+      });
+      navigation.navigate('Tabs', { screen: 'Transactions' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleSubmit(values: TransactionFormValues) {
     const now = new Date().toISOString();
@@ -80,8 +106,20 @@ export function AddRecordScreen() {
             style={styles.emptyButton}
           />
         </View>
+      ) : mode === 'transfer' ? (
+        <TransferForm
+          onSubmit={handleTransferSubmit}
+          submitting={submitting}
+          onChooseType={setMode}
+        />
       ) : (
-        <TransactionForm onSubmit={handleSubmit} submitting={submitting} />
+        <TransactionForm
+          key={mode}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          initialValues={{ type: mode }}
+          onChooseTransfer={() => setMode('transfer')}
+        />
       )}
     </SafeAreaView>
   );

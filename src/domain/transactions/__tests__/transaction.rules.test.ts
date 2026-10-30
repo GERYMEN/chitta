@@ -3,6 +3,8 @@ import {
   canFastApprove,
   canTransition,
   confidenceTier,
+  countsTowardIncomeExpense,
+  incomeExpenseTotals,
 } from '../transaction.rules';
 
 describe('confidenceTier', () => {
@@ -48,5 +50,26 @@ describe('canTransition', () => {
   it('never allows a transition out of a terminal state', () => {
     expect(canTransition('approved', 'pending')).toBe(false);
     expect(canTransition('rejected', 'approved')).toBe(false);
+  });
+});
+
+describe('R3a countsTowardIncomeExpense / incomeExpenseTotals', () => {
+  it('income and expense count; transfers and transfer twins never do', () => {
+    expect(countsTowardIncomeExpense({ type: 'income' })).toBe(true);
+    expect(countsTowardIncomeExpense({ type: 'expense', linkKind: null })).toBe(true);
+    expect(countsTowardIncomeExpense({ type: 'transfer' })).toBe(false);
+    expect(countsTowardIncomeExpense({ type: 'income', linkKind: 'transfer_twin' })).toBe(false);
+  });
+
+  it('totals skip transfers and twins', () => {
+    expect(
+      incomeExpenseTotals([
+        { type: 'income', amountMinor: 100000 },
+        { type: 'expense', amountMinor: 25000 },
+        { type: 'transfer', amountMinor: 50000 },
+        { type: 'income', amountMinor: 50000, linkKind: 'transfer_twin' },
+      ]),
+    ).toEqual({ incomeMinor: 100000, expenseMinor: 25000, netMinor: 75000 });
+    expect(incomeExpenseTotals([])).toEqual({ incomeMinor: 0, expenseMinor: 0, netMinor: 0 });
   });
 });

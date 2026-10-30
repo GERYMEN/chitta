@@ -1,6 +1,9 @@
 import { Transaction } from '../../../domain/transactions/transaction.types';
+import { incomeExpenseTotals } from '../../../domain/transactions/transaction.rules';
+import { touchesAccount } from '../../../domain/transfers/transfer.rules';
 
-export type TypeFilter = 'all' | 'expense' | 'income';
+/** R3a adds 'transfer' (the "Transfers" chip). */
+export type TypeFilter = 'all' | 'expense' | 'income' | 'transfer';
 
 export interface TransactionFilters {
   type: TypeFilter;
@@ -19,7 +22,8 @@ export const DEFAULT_TRANSACTION_FILTERS: TransactionFilters = {
   query: '',
 };
 
-type Filterable = Pick<Transaction, 'type' | 'accountId' | 'categoryId' | 'merchantName' | 'note'>;
+type Filterable = Pick<Transaction, 'type' | 'accountId' | 'categoryId' | 'merchantName' | 'note'> &
+  Partial<Pick<Transaction, 'transferAccountId' | 'linkKind'>>;
 
 /** The single predicate every Transactions-list filter goes through. */
 export function matchesTransactionFilters(
@@ -27,7 +31,8 @@ export function matchesTransactionFilters(
   filters: TransactionFilters,
 ): boolean {
   if (filters.type !== 'all' && transaction.type !== filters.type) return false;
-  if (filters.accountId !== null && transaction.accountId !== filters.accountId) return false;
+  // R3a: a transfer matches an account filter on EITHER side (out on A, in on B).
+  if (filters.accountId !== null && !touchesAccount(transaction, filters.accountId)) return false;
   if (filters.categoryId !== null && transaction.categoryId !== filters.categoryId) return false;
 
   const needle = filters.query.trim().toLowerCase();
@@ -66,7 +71,8 @@ export function typeCounts(
   const base = filterTransactions(transactions, { ...filters, type: 'all' });
   const expense = base.filter(t => t.type === 'expense').length;
   const income = base.filter(t => t.type === 'income').length;
-  return { all: base.length, expense, income };
+  const transfer = base.filter(t => t.type === 'transfer').length;
+  return { all: base.length, expense, income, transfer };
 }
 
 export interface FilteredTotals {
@@ -75,14 +81,19 @@ export interface FilteredTotals {
   netMinor: number;
 }
 
+/**
+ * Inflow / Spent / Net of a (filtered) list. R3a: goes through the single
+ * income/expense rule — transfers and transfer twins never count.
+ */
 export function totalsFor(
-  transactions: ReadonlyArray<Pick<Transaction, 'type' | 'amountMinor'>>,
+  transactions: ReadonlyArray<
+    Pick<Transaction, 'type' | 'amountMinor'> & Partial<Pick<Transaction, 'linkKind'>>
+  >,
 ): FilteredTotals {
-  let inflowMinor = 0;
-  let spentMinor = 0;
-  for (const t of transactions) {
-    if (t.type === 'income') inflowMinor += t.amountMinor;
-    else spentMinor += t.amountMinor;
-  }
-  return { inflowMinor, spentMinor, netMinor: inflowMinor - spentMinor };
+  const totals = incomeExpenseTotals(transactions);
+  return {
+    inflowMinor: totals.incomeMinor,
+    spentMinor: totals.expenseMinor,
+    netMinor: totals.netMinor,
+  };
 }

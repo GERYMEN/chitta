@@ -5,12 +5,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TransactionDetailActions, TransactionDetailContent } from '../components/TransactionDetailContent';
 import { Icon } from '../../../shared/icons';
-import { showDialog } from '../../../shared/ui';
+import { showDialog, showSnackbar } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { CategoryPickerSheet } from '../../categories/components/CategoryPickerSheet';
 import { promptRememberCategory } from '../../categories/rememberCategory';
+import { TransferAccountPickerSheet } from '../../transfers/components/TransferAccountPickerSheet';
+import { findTransferTwin } from '../../../domain/transfers/transfer.rules';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -25,6 +27,36 @@ export function TransactionDetailScreen() {
   const reject = useTransactionsStore(state => state.reject);
   const deleteTransaction = useTransactionsStore(state => state.deleteTransaction);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [transferPickerOpen, setTransferPickerOpen] = useState(false);
+
+  // R3a: "Mark as transfer" — expense: pick "to"; income: pick "from".
+  async function handleMarkAsTransfer(otherAccountId: string) {
+    setTransferPickerOpen(false);
+    if (!transaction) return;
+    const ok = await useTransactionsStore.getState().markAsTransfer(transaction.id, otherAccountId);
+    showSnackbar({ message: ok ? 'Marked as a transfer' : 'Could not mark as a transfer' });
+  }
+
+  // R3a: "Undo transfer" — both rows of the SMS pair go back exactly as they were.
+  function handleUndoTransfer(transferId: string) {
+    showDialog({
+      title: 'Undo transfer?',
+      message:
+        'Both SMS items go back exactly as they were before you confirmed the transfer (status, type and category).',
+      icon: 'undo-variant',
+      actions: [
+        { label: 'Cancel', variant: 'ghost' },
+        {
+          label: 'Undo transfer',
+          variant: 'primary',
+          onPress: async () => {
+            const ok = await useTransactionsStore.getState().undoTransfer(transferId);
+            showSnackbar({ message: ok ? 'Transfer undone' : 'Could not undo this transfer' });
+          },
+        },
+      ],
+    });
+  }
 
   async function handleCategoryChange(categoryId: string) {
     setCategoryPickerOpen(false);
@@ -40,9 +72,15 @@ export function TransactionDetailScreen() {
   }
 
   function handleDelete(transactionId: string) {
+    const state = useTransactionsStore.getState();
+    const current = state.transactions.find(t => t.id === transactionId);
+    const paired =
+      current?.type === 'transfer' && findTransferTwin(state.transactions, transactionId) !== null;
     showDialog({
-      title: 'Delete transaction?',
-      message: 'This will permanently remove the record.',
+      title: current?.type === 'transfer' ? 'Delete transfer?' : 'Delete transaction?',
+      message: paired
+        ? 'This permanently removes the transfer and moves both balances back. The SMS credit it was paired with stays hidden — use Undo transfer instead to get both SMS items back.'
+        : 'This will permanently remove the record.',
       icon: 'trash-can-outline',
       actions: [
         { label: 'Cancel', variant: 'ghost' },
@@ -102,6 +140,7 @@ export function TransactionDetailScreen() {
           onEdit={t => navigation.navigate('EditTransaction', { transactionId: t.id })}
           onDelete={t => handleDelete(t.id)}
           onChangeCategory={() => setCategoryPickerOpen(true)}
+          onOpenTransfer={id => navigation.push('TransactionDetail', { transactionId: id })}
         />
       </ScrollView>
       <View style={styles.footer}>
@@ -117,8 +156,17 @@ export function TransactionDetailScreen() {
           }}
           onEdit={t => navigation.navigate('EditTransaction', { transactionId: t.id })}
           onDelete={t => handleDelete(t.id)}
+          onMarkAsTransfer={() => setTransferPickerOpen(true)}
+          onUndoTransfer={t => handleUndoTransfer(t.id)}
         />
       </View>
+      <TransferAccountPickerSheet
+        visible={transferPickerOpen}
+        onClose={() => setTransferPickerOpen(false)}
+        excludeAccountId={transaction.accountId}
+        direction={transaction.type === 'income' ? 'from' : 'to'}
+        onSelect={handleMarkAsTransfer}
+      />
       <CategoryPickerSheet
         visible={categoryPickerOpen}
         onClose={() => setCategoryPickerOpen(false)}

@@ -20,7 +20,12 @@ import {
 import { calculateBalance } from '../../../domain/accounts/account.rules';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
-import { canFastApprove } from '../../../domain/transactions/transaction.rules';
+import {
+  canFastApprove,
+  incomeExpenseTotals,
+} from '../../../domain/transactions/transaction.rules';
+import { PossibleTransfersCard } from '../../transfers/components/PossibleTransfersCard';
+import { transferRowSubtitle } from '../../transfers/transferLabels';
 import { syncSms, SmsSyncError } from '../../sms-sync/syncSms';
 import { formatSyncToast } from '../../sms-sync/syncToast';
 import { greetingFor } from '../../profile/utils/greeting';
@@ -37,6 +42,7 @@ export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const transactions = useTransactionsStore(state => state.transactions);
   const accounts = useTransactionsStore(useShallow(selectActiveAccounts));
+  const allAccounts = useTransactionsStore(state => state.accounts);
   const approve = useTransactionsStore(state => state.approve);
   const pending = useTransactionsStore(useShallow(selectPending));
   const approved = useTransactionsStore(useShallow(selectApproved));
@@ -50,12 +56,8 @@ export function HomeScreen() {
     .filter(account => account.type !== 'credit_card')
     .reduce((sum, account) => sum + calculateBalance(account, transactions, account.id), 0);
 
-  const monthIncome = approved
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amountMinor, 0);
-  const monthExpense = approved
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amountMinor, 0);
+  // R3a: one income/expense rule for every total — transfers never count.
+  const { incomeMinor: monthIncome, expenseMinor: monthExpense } = incomeExpenseTotals(approved);
 
   const fastApprovablePending = pending.filter(t => canFastApprove(t.confidenceScore)).slice(0, 2);
   const recent = approved.slice(0, 4);
@@ -143,6 +145,8 @@ export function HomeScreen() {
 
       <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
 
+      <PossibleTransfersCard onPress={() => navigation.navigate('Pending')} />
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
@@ -190,7 +194,11 @@ export function HomeScreen() {
             <TransactionRow
               key={transaction.id}
               merchantName={transaction.merchantName}
-              subtitle={formatTransactionTimestamp(transaction.occurredAt)}
+              subtitle={
+                transaction.type === 'transfer'
+                  ? transferRowSubtitle(transaction, allAccounts)
+                  : formatTransactionTimestamp(transaction.occurredAt)
+              }
               amountMinor={transaction.amountMinor}
               type={transaction.type}
               status={transaction.status}

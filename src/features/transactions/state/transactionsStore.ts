@@ -9,6 +9,16 @@ import {
 } from '../../../domain/categories/category.rules';
 import { normalizeMerchant } from '../../../domain/merchants/normalizeMerchant';
 import { canTransition } from '../../../domain/transactions/transaction.rules';
+import {
+  confirmTransferPair as buildPairConfirmation,
+  findTransferTwin,
+  MANUAL_TRANSFER_TITLE,
+  markAsTransferPatch,
+  TransferDismissal,
+  undoTransferPair,
+} from '../../../domain/transfers/transfer.rules';
+import { TRANSFER_CATEGORY_ID } from '../../../domain/categories/category.rules';
+import { transferRepository } from '../../../data/repositories/transfer.repository';
 import { activeAccounts, deletedAccounts } from '../../../domain/accounts/account.rules';
 import { runMigrations } from '../../../data/db/connection';
 import {
@@ -56,6 +66,15 @@ import {
   DEFAULT_TRANSACTION_FILTERS,
   TransactionFilters,
 } from '../filters/transactionFilters';
+
+/** R3a: Add Record → Transfer / Edit transfer form values (paise, ISO date). */
+export interface TransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amountMinor: number;
+  occurredAt: string;
+  note: string | null;
+}
 
 export interface ProfilePatch {
   userName?: string;
@@ -129,6 +148,20 @@ interface TransactionsState {
   addCategory: (input: CreateCategoryInput) => Promise<Category>;
   updateCategory: (id: string, patch: CategoryPatch) => Promise<void>;
   archiveCategory: (id: string) => Promise<void>;
+  /** R3a: "Not a transfer" decisions (pairs never suggested again). */
+  transferDismissals: TransferDismissal[];
+  /** R3a: Add Record → Transfer. Created approved (see addTransfer), audited 'created'. */
+  addTransfer: (input: TransferInput) => Promise<Transaction>;
+  /** R3a: Edit transfer — audited 'edited' with the changed field names. */
+  updateTransfer: (id: string, input: TransferInput) => Promise<void>;
+  /** R3a: approved income/expense → transfer (audited 'edited'). False when not allowed. */
+  markAsTransfer: (id: string, otherAccountId: string) => Promise<boolean>;
+  /** R3a: "It's a transfer" on a suggested pair. False when no longer a valid pair. */
+  confirmTransferPair: (debitId: string, creditId: string) => Promise<boolean>;
+  /** R3a: "Not a transfer". */
+  dismissTransferPair: (debitId: string, creditId: string) => Promise<void>;
+  /** R3a: "Undo transfer" on a paired transfer — restores both rows exactly. */
+  undoTransfer: (transferId: string) => Promise<boolean>;
 }
 
 function transitionLocal(
@@ -152,13 +185,20 @@ function rulesToMap(rules: ReadonlyArray<MerchantRule>): Record<string, string> 
 }
 
 async function loadAll() {
-  const [transactions, accounts, categories, rules] = await Promise.all([
+  const [transactions, accounts, categories, rules, transferDismissals] = await Promise.all([
     transactionRepository.listAll(),
     accountRepository.listAllAccounts(),
     categoryRepository.listAll(),
     merchantRuleRepository.listAll(),
+    transferRepository.listDismissals(),
   ]);
-  return { transactions, accounts, categories, merchantRules: rulesToMap(rules) };
+  return {
+    transactions,
+    accounts,
+    categories,
+    merchantRules: rulesToMap(rules),
+    transferDismissals,
+  };
 }
 
 export const useTransactionsStore = create<TransactionsState>((set, get) => ({
@@ -166,6 +206,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   accounts: [],
   categories: [],
   merchantRules: {},
+  transferDismissals: [],
   isHydrated: false,
   hasOnboarded: false,
   userName: '',
@@ -318,6 +359,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
             amountMinor: current.amountMinor,
             type: current.type,
             status: current.status,
+            transferAccountId: current.transferAccountId ?? null,
           },
         },
       ],
@@ -506,6 +548,104 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       },
     ]);
     set(state => ({ categories: state.categories.map(c => (c.id === id ? archived : c)) }));
+  },
+
+  addTransfer: async input => {
+    // A transfer is the user moving their own money — not a detection to
+    // review — so it is recorded approved (it never counts as income or
+    // expense; it only moves balances). Audited 'created' by the user.
+    const now = new Date().toISOString();
+    const created = await transactionRepository.create(
+      {
+        type: 'transfer',
+        status: 'approved',
+        amountMinor: input.amountMinor,
+        currency: 'INR',
+        merchantName: MANUAL_TRANSFER_TITLE,
+        categoryId: TRANSFER_CATEGORY_ID,
+        accountId: input.fromAccountId,
+        transferAccountId: input.toAccountId,
+        paymentMethod: 'bank',
+        occurredAt: input.occurredAt,
+        detectedAt: now,
+        approvedAt: now,
+        note: input.note,
+        sourceType: 'manual',
+        sourceReferenceHash: null,
+        sanitizedPreview: null,
+        confidenceScore: null,
+        parserVersion: null,
+      },
+      [{ eventType: 'created', actor: 'user' }],
+    );
+    set(state => ({ transactions: [created, ...state.transactions] }));
+    return created;
+  },
+
+  updateTransfer: async (id, input) => {
+    const existing = get().transactions.find(t => t.id === id);
+    if (!existing || existing.type !== 'transfer') return;
+    await get().updateTransaction(id, {
+      accountId: input.fromAccountId,
+      transferAccountId: input.toAccountId,
+      amountMinor: input.amountMinor,
+      occurredAt: input.occurredAt,
+      note: input.note,
+    });
+  },
+
+  markAsTransfer: async (id, otherAccountId) => {
+    const existing = get().transactions.find(t => t.id === id);
+    if (!existing) return false;
+    const patch = markAsTransferPatch(existing, otherAccountId);
+    if (!patch) return false;
+    // Audited 'edited' with the field names that really changed
+    // (type, transferAccountId, plus categoryId / accountId when they move).
+    await get().updateTransaction(id, patch);
+    return true;
+  },
+
+  confirmTransferPair: async (debitId, creditId) => {
+    const byId = new Map(get().transactions.map(t => [t.id, t]));
+    const debit = byId.get(debitId);
+    const credit = byId.get(creditId);
+    if (!debit || !credit) return false;
+    const confirmation = buildPairConfirmation(debit, credit, new Date().toISOString());
+    if (!confirmation) return false;
+    await transferRepository.confirmPair(
+      confirmation.debit,
+      confirmation.credit,
+      confirmation.previous,
+    );
+    set(state => ({
+      transactions: state.transactions.map(t =>
+        t.id === debitId ? confirmation.debit : t.id === creditId ? confirmation.credit : t,
+      ),
+    }));
+    return true;
+  },
+
+  dismissTransferPair: async (debitId, creditId) => {
+    const dismissal = await transferRepository.dismissPair(debitId, creditId);
+    set(state => ({ transferDismissals: [...state.transferDismissals, dismissal] }));
+  },
+
+  undoTransfer: async transferId => {
+    const transactions = get().transactions;
+    const debit = transactions.find(t => t.id === transferId);
+    const twin = findTransferTwin(transactions, transferId);
+    if (!debit || !twin) return false;
+    const pairing = await transferRepository.latestPairing(transferId);
+    if (!pairing || pairing.credit_id !== twin.id) return false;
+    const restored = undoTransferPair(debit, twin, pairing.previous, new Date().toISOString());
+    if (!restored) return false;
+    await transferRepository.undoPair(restored.debit, restored.credit);
+    set(state => ({
+      transactions: state.transactions.map(t =>
+        t.id === restored.debit.id ? restored.debit : t.id === restored.credit.id ? restored.credit : t,
+      ),
+    }));
+    return true;
   },
 }));
 

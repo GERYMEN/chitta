@@ -22,6 +22,7 @@ import {
   isLiabilityAccount,
 } from '../../../domain/accounts/account.rules';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
+import { touchesAccount } from '../../../domain/transfers/transfer.rules';
 import { removeAccountMessage } from '../components/removeAccountMessage';
 import { Account, AccountType } from '../../../domain/accounts/account.types';
 import {
@@ -62,7 +63,8 @@ export function AccountsScreen() {
   const [deletedOpen, setDeletedOpen] = useState(false);
 
   function transactionCountFor(accountId: string): number {
-    return transactions.filter(t => t.accountId === accountId).length;
+    // R3a: a transfer belongs to both of its accounts.
+    return transactions.filter(t => touchesAccount(t, accountId)).length;
   }
 
   function confirmRemove(account: Account) {

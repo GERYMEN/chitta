@@ -46,6 +46,12 @@ const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
     iconColor: colors.primary,
     backgroundColor: colors.primaryContainer + '33',
   },
+  // R3a: transfers — swap arrows on the neutral secondary tokens.
+  'cat-transfer': {
+    icon: 'swap-horizontal',
+    iconColor: colors.secondary,
+    backgroundColor: colors.secondaryContainer,
+  },
   'cat-uncategorised': {
     icon: 'help-circle-outline',
     iconColor: transactionStateColors.pending.fg,

@@ -14,6 +14,7 @@ interface FakeState {
   db: FakeDb;
   appliedVersions: Set<number>;
   executed: string[];
+  withParams: Array<{ sql: string; params: unknown[] | undefined }>;
 }
 
 function makeFakeDb(
@@ -22,10 +23,12 @@ function makeFakeDb(
   const { failUniqueIndex = false, emptyCategories = false } = options;
   const appliedVersions = new Set<number>();
   const executed: string[] = [];
+  const withParams: Array<{ sql: string; params: unknown[] | undefined }> = [];
 
   const tx: FakeTx = {
     execute: jest.fn(async (sql: string, params?: unknown[]) => {
       executed.push(sql);
+      withParams.push({ sql, params });
       if (failUniqueIndex && /CREATE UNIQUE INDEX/.test(sql)) {
         throw new Error('UNIQUE constraint failed: transactions.source_reference_hash');
       }
@@ -50,7 +53,7 @@ function makeFakeDb(
     transaction: jest.fn(async (fn: (t: FakeTx) => Promise<void>) => fn(tx)),
   };
 
-  return { db, appliedVersions, executed };
+  return { db, appliedVersions, executed, withParams };
 }
 
 describe('runMigrations versioning', () => {
@@ -74,8 +77,9 @@ describe('runMigrations versioning', () => {
     for (const sql of alters) alterCounts.set(sql, (alterCounts.get(sql) ?? 0) + 1);
 
     // 4 from migration 1 + audit_events.account_id from migration 4 +
-    // categories.archived_at / color from migration 5.
-    expect(alterCounts.size).toBe(7);
+    // categories.archived_at / color from migration 5 + 3 transactions
+    // columns from migration 6.
+    expect(alterCounts.size).toBe(10);
     for (const count of alterCounts.values()) {
       expect(count).toBe(1);
     }
@@ -167,7 +171,7 @@ describe('runMigrations versioning', () => {
     expect(appliedVersions.has(5)).toBe(true);
   });
 
-  it('migration 5 never touches existing transactions and is the last migration', () => {
+  it('migration 5 never touches existing transactions', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m5 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 5);
     const joined = m5.statements.join('\n');
@@ -176,7 +180,47 @@ describe('runMigrations versioning', () => {
     expect(m5.statements[0]).toMatch(
       /merchant_key TEXT PRIMARY KEY,\s+category_id TEXT NOT NULL REFERENCES categories\(id\),\s+created_at TEXT NOT NULL,\s+updated_at TEXT NOT NULL/,
     );
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(5);
+  });
+
+  it('R3a: runs migration 6 exactly once and seeds cat-transfer once, parameterized (idempotent)', async () => {
+    const { db, appliedVersions, executed, withParams } = makeFakeDb();
+
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+
+    const { runMigrations } = require('../connection');
+
+    await runMigrations();
+    await runMigrations();
+    await runMigrations();
+
+    for (const column of ['transfer_account_id', 'linked_transaction_id', 'link_kind']) {
+      expect(
+        executed.filter(sql => sql === `ALTER TABLE transactions ADD COLUMN ${column} TEXT`),
+      ).toHaveLength(1);
+    }
+    expect(
+      executed.filter(sql => /CREATE TABLE IF NOT EXISTS transfer_pair_dismissals/.test(sql)),
+    ).toHaveLength(1);
+    const seeds = withParams.filter(c => Array.isArray(c.params) && c.params[0] === 'cat-transfer');
+    expect(seeds).toHaveLength(1);
+    expect(seeds[0].sql).toMatch(/^INSERT OR IGNORE INTO categories \(id, name, parent_id, type, icon, is_system\) VALUES \(\?, \?, NULL, \?, \?, 1\)$/);
+    expect(seeds[0].params).toEqual(['cat-transfer', 'Transfer', 'both', 'swap-horizontal']);
+    expect(appliedVersions.has(6)).toBe(true);
+  });
+
+  it('R3a: migration 6 never rewrites existing rows, interpolates no values, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m6 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 6);
+    const sqls: string[] = m6.statements.map((st: string | { sql: string }) =>
+      typeof st === 'string' ? st : st.sql,
+    );
+    const joined = sqls.join('\n');
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b/);
+    expect(joined).not.toContain("'cat-transfer'");
+    expect(joined).toMatch(/PRIMARY KEY \(debit_id, credit_id\)/);
+    expect(joined).toMatch(/debit_id TEXT NOT NULL,\s+credit_id TEXT NOT NULL,\s+dismissed_at TEXT NOT NULL/);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(6);
   });
 
   it('a fresh install seeds the six base categories BEFORE migration 5 adds Uncategorised', async () => {

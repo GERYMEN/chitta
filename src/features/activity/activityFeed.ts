@@ -28,6 +28,11 @@ export interface ActivityContext {
   /** Live transaction, if it still exists. */
   transaction?: Pick<Transaction, 'merchantName' | 'amountMinor' | 'type'> | null;
   account?: Pick<Account, 'name' | 'lastFour'> | null;
+  /**
+   * R3a: for a transfer subject — `account` is the "from" account and this
+   * the "to" account (looked up by the screen from the row / snapshot).
+   */
+  transferAccount?: Pick<Account, 'name' | 'lastFour'> | null;
   /** R2: the category a rule/category event refers to (looked up by id). */
   category?: Pick<Category, 'name' | 'archivedAt'> | null;
 }
@@ -60,6 +65,8 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   category_created: 'tag-plus-outline',
   category_updated: 'tag-outline',
   category_archived: 'archive-outline',
+  transfer_paired: 'swap-horizontal',
+  transfer_unpaired: 'undo-variant',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -71,6 +78,7 @@ const FIELD_LABEL: Record<string, string> = {
   paymentMethod: 'payment method',
   occurredAt: 'date',
   note: 'notes',
+  transferAccountId: 'to account',
   name: 'name',
   lastFour: 'last four digits',
   openingBalanceMinor: 'opening balance',
@@ -95,12 +103,36 @@ function flowAmount(amountMinor: number, type: TransactionType, show: boolean): 
   return show ? signedAmount(amountMinor, type) : MASKED_AMOUNT;
 }
 
-/** "-₹50.00" for an expense, "+₹50.00" for income (DESIGN.md flow notation). */
+/**
+ * "-₹50.00" for an expense, "+₹50.00" for income (DESIGN.md flow notation).
+ * R3a: a transfer has no sign (it is neither in nor out of your money).
+ */
 export function signedAmount(amountMinor: number, type: TransactionType): string {
+  if (type === 'transfer') return formatRupeesFromMinor(amountMinor, { showPaise: true });
   return type === 'income'
     ? formatRupeesFromMinor(amountMinor, { showPaise: true, showPositiveSign: true })
     : formatRupeesFromMinor(-amountMinor, { showPaise: true });
 }
+
+/** R3a: "QA Wallet 8888" / "HDFC ••1234" — a transfer side in a sentence. */
+export function transferSideLabel(
+  account: Pick<Account, 'name' | 'lastFour'> | null | undefined,
+): string {
+  if (!account) return 'an account';
+  return account.lastFour ? `${account.name} ••${account.lastFour}` : account.name;
+}
+
+/** R3a: "You moved ₹ •••• from A to B" (masked unless amounts are shown). */
+export function movedSentence(
+  amountMinor: number,
+  from: Pick<Account, 'name' | 'lastFour'> | null | undefined,
+  to: Pick<Account, 'name' | 'lastFour'> | null | undefined,
+  show: boolean,
+): string {
+  return `You moved ${amountLabel(amountMinor, show)} from ${transferSideLabel(from)} to ${transferSideLabel(to)}`;
+}
+
+const TRANSFER_NOTE = 'not income or expense';
 
 export function accountShortLabel(account: Pick<Account, 'name' | 'lastFour'> | null | undefined): string {
   if (!account) return 'an account';
@@ -114,6 +146,9 @@ function fieldList(fields: ReadonlyArray<string>): string {
 
 function balanceImpact(subject: Subject | null, show: boolean): ActivityItem['impact'] {
   if (!subject) return null;
+  if (subject.type === 'transfer') {
+    return { text: `Moved between your accounts · ${TRANSFER_NOTE}`, tone: 'neutral' };
+  }
   return {
     text: `Balance ${flowAmount(subject.amountMinor, subject.type, show)}`,
     tone: subject.type === 'income' ? 'income' : 'expense',
@@ -145,13 +180,32 @@ export function describeActivity(
   const merchant = subject ? subject.merchantName : null;
   const categoryName = context.category ? categoryLabel(context.category) : 'a category';
   const accountLabel = accountShortLabel(context.account);
+  const isTransfer = subject?.type === 'transfer';
+  const moved = subject
+    ? movedSentence(subject.amountMinor, context.account, context.transferAccount, show)
+    : 'You moved money between your accounts';
   let sentence: string;
   let impact: ActivityItem['impact'] = null;
 
   switch (event.eventType) {
     case 'created':
+      if (isTransfer) {
+        sentence = moved;
+        impact = { text: `Between your accounts · ${TRANSFER_NOTE}`, tone: 'neutral' };
+        break;
+      }
       sentence = `You added ${what}`;
       impact = { text: 'Waiting for approval', tone: 'pending' };
+      break;
+    case 'transfer_paired':
+      sentence = moved;
+      impact = { text: `Confirmed as a transfer · ${TRANSFER_NOTE}`, tone: 'neutral' };
+      break;
+    case 'transfer_unpaired':
+      sentence = subject
+        ? `You undid a transfer of ${amountLabel(subject.amountMinor, show)}`
+        : 'You undid a transfer';
+      impact = { text: 'Both items restored as they were', tone: 'neutral' };
       break;
     case 'detected': {
       sentence = `Detected ${what} from SMS`;
@@ -183,18 +237,25 @@ export function describeActivity(
       sentence = `You rejected ${what}`;
       impact = { text: 'Not counted in balance', tone: 'neutral' };
       break;
-    case 'edited':
+    case 'edited': {
+      const fields = event.metadata?.kind === 'edited' ? event.metadata.fields : [];
+      if (isTransfer && fields.includes('type') && fields.includes('transferAccountId')) {
+        // R3a "Mark as transfer" converted an income/expense.
+        sentence = moved;
+        impact = { text: `Marked as a transfer · ${TRANSFER_NOTE}`, tone: 'neutral' };
+        break;
+      }
       sentence = `You edited ${subject ? subject.merchantName : 'a transaction'}`;
-      impact = {
-        text: fieldList(event.metadata?.kind === 'edited' ? event.metadata.fields : []),
-        tone: 'neutral',
-      };
+      impact = { text: fieldList(fields), tone: 'neutral' };
       break;
+    }
     case 'deleted': {
       sentence = `You deleted ${what}`;
       const snapshot = event.metadata?.kind === 'deleted' ? event.metadata : event.deletedSnapshot;
       impact =
-        snapshot?.status === 'approved'
+        snapshot?.status === 'approved' && snapshot.type === 'transfer'
+          ? { text: 'Balances moved back', tone: 'negative' }
+          : snapshot?.status === 'approved'
           ? {
               text: `No longer in balance (was ${flowAmount(snapshot.amountMinor, snapshot.type, show)})`,
               tone: 'negative',

@@ -11,6 +11,7 @@ export type CreateTransactionInput = Omit<
 > &
   Partial<Pick<Transaction, 'bulkBatchId'>>;
 
+
 export type TransactionPatch = Partial<Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>>;
 
 const COLUMNS = [
@@ -33,6 +34,9 @@ const COLUMNS = [
   'confidence_score',
   'parser_version',
   'bulk_batch_id',
+  'transfer_account_id',
+  'linked_transaction_id',
+  'link_kind',
   'created_at',
   'updated_at',
 ] as const;
@@ -77,6 +81,9 @@ export function buildTransaction(input: CreateTransactionInput): Transaction {
     ...input,
     id: generateId('txn'),
     bulkBatchId: input.bulkBatchId ?? null,
+    transferAccountId: input.transferAccountId ?? null,
+    linkedTransactionId: input.linkedTransactionId ?? null,
+    linkKind: input.linkKind ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -124,18 +131,22 @@ async function update(
     updatedAt: new Date().toISOString(),
   };
 
-  const row = transactionToRow(updated);
-  const assignments = COLUMNS.map(column => `${column} = ?`).join(', ');
-
   await getDatabase().transaction(async tx => {
-    await tx.execute(`UPDATE transactions SET ${assignments} WHERE id = ?`, [
-      ...valuesFor(row),
-      id,
-    ]);
+    await updateTransactionTx(tx, updated);
     await writeAudit(tx, updated, audit);
   });
 
   return updated;
+}
+
+/** Overwrite every column of one existing row inside the caller's `tx`. */
+export async function updateTransactionTx(tx: SqlExecutor, transaction: Transaction): Promise<void> {
+  const row = transactionToRow(transaction);
+  const assignments = COLUMNS.map(column => `${column} = ?`).join(', ');
+  await tx.execute(`UPDATE transactions SET ${assignments} WHERE id = ?`, [
+    ...valuesFor(row),
+    transaction.id,
+  ]);
 }
 
 /**

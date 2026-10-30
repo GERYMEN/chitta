@@ -29,15 +29,19 @@ export function AmountText({
   const magnitude = Math.abs(amountMinor);
   const signedMinor = type === 'income' ? magnitude : -magnitude;
 
-  const text = signed
-    ? formatRupeesFromMinor(signedMinor, { showPaise, showPositiveSign: true })
-    : formatRupeesFromMinor(magnitude, { showPaise });
+  // R3a: a transfer is neither money in nor out — no +/−, neutral ink.
+  const text =
+    signed && type !== 'transfer'
+      ? formatRupeesFromMinor(signedMinor, { showPaise, showPositiveSign: true })
+      : formatRupeesFromMinor(magnitude, { showPaise });
+  const color =
+    type === 'income' ? colors.primary : type === 'transfer' ? colors.secondary : colors.onSurface;
 
   return (
     <Text
       style={[
         typography[variant],
-        { color: type === 'income' ? colors.primary : colors.onSurface },
+        { color },
         styles.tabular,
         style,
       ]}>

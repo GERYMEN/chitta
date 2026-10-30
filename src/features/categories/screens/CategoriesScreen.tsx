@@ -6,7 +6,11 @@ import { Button, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
-import { canModifyCategory, categoryLabel } from '../../../domain/categories/category.rules';
+import {
+  canModifyCategory,
+  categoryLabel,
+  visibleCategories,
+} from '../../../domain/categories/category.rules';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { CategoryFormSheet, CategoryFormValues } from '../components/CategoryFormSheet';
@@ -28,7 +32,8 @@ export function CategoriesScreen() {
   const [form, setForm] = useState<{ editing: Category | null } | null>(null);
 
   const { custom, system, archived } = useMemo(() => {
-    const sorted = [...categories].sort((a, b) => a.name.localeCompare(b.name));
+    // R3a: the hidden system "Transfer" category is not listed.
+    const sorted = visibleCategories(categories).sort((a, b) => a.name.localeCompare(b.name));
     return {
       custom: sorted.filter(c => !c.isSystem && c.archivedAt === null),
       system: sorted.filter(c => c.isSystem),

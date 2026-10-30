@@ -1,6 +1,12 @@
 import { Account, AccountType } from '../../domain/accounts/account.types';
 import { Category } from '../../domain/categories/category.types';
-import { TransactionType } from '../../domain/transactions/transaction.types';
+import { Transaction, TransactionType } from '../../domain/transactions/transaction.types';
+import { ApprovalMode, shouldAutoApprove } from '../../domain/settings/approval.rules';
+import {
+  findTransferPairs,
+  pairedTransactionIds,
+  TransferDismissal,
+} from '../../domain/transfers/transfer.rules';
 import { ParsedSmsTransaction } from './smsParser';
 import { activeAccounts, deletedAccounts } from '../../domain/accounts/account.rules';
 import { accountKeyToString, ACCOUNT_KEY_NORMALIZER_VERSION } from './normalizeAccountKey';
@@ -267,4 +273,37 @@ export function buildSmsTransactionInput(
   detectedAt: string,
 ): CreateTransactionInput {
   return { ...buildSmsPendingRow(parsed, categoryId, detectedAt), accountId };
+}
+
+export interface PostSyncApproval {
+  /** New items the opt-in auto rule approves. */
+  approve: Transaction[];
+  /** New items the auto rule WOULD approve but that form a possible transfer pair. */
+  heldForTransfer: Transaction[];
+}
+
+/**
+ * R3a T4: run AFTER all new pending items of a sync are inserted. Any new item
+ * that forms a possible transfer pair (with another new item or an existing
+ * pending/approved row) is NOT auto-approved — it stays pending so the user
+ * decides "It's a transfer" / "Not a transfer" first. Every other new item
+ * follows the unchanged single auto-approve rule (`shouldAutoApprove`).
+ */
+export function autoApproveAfterSync(
+  created: ReadonlyArray<Transaction>,
+  allTransactions: ReadonlyArray<Transaction>,
+  accounts: ReadonlyArray<Pick<Account, 'id' | 'deletedAt'>>,
+  dismissals: ReadonlyArray<Pick<TransferDismissal, 'debitId' | 'creditId'>>,
+  mode: ApprovalMode,
+  threshold: number,
+): PostSyncApproval {
+  const eligible = created.filter(
+    t => t.status === 'pending' && shouldAutoApprove(mode, threshold, t.confidenceScore),
+  );
+  if (eligible.length === 0) return { approve: [], heldForTransfer: [] };
+  const paired = pairedTransactionIds(findTransferPairs(allTransactions, accounts, dismissals));
+  return {
+    approve: eligible.filter(t => !paired.has(t.id)),
+    heldForTransfer: eligible.filter(t => paired.has(t.id)),
+  };
 }

@@ -20,6 +20,8 @@ first, then categories, then insights built on correct data, then extras.
   old migrations. Money stays integer paise. Raw SMS never stored.
 - New native dependency or new Android permission = ask user first.
 - After each phase passes: user reviews, then commit + push (gerymen).
+- From R3a on: one branch per phase (`phase/<id>-<name>`), each created
+  from the previous phase's branch, not from main (user, 2026-10-30).
 
 ## Overview
 

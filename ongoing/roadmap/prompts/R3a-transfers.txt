@@ -1,0 +1,153 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md (section R3 + "Working
+rules"), ongoing/roadmap/STATE.md, ongoing/roadmap/R2b-new-accounts-pending.md
+and ongoing/roadmap/R2-smart-categories.md (previous phases, committed
+f658ae8 — build on them), ongoing/roadmap/BUGS.md (do NOT fix B1), the
+decisions log of ongoing/realtime-persistence/STATE.md (absolute
+device-safety + privacy rules), docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+
+PHASE R3a — Transfers between the owner's own accounts.
+Goal: money moved between own accounts (bank → wallet, bank → card bill)
+changes both balances but never counts as income or expense.
+
+Verified current state (grep to confirm):
+- src/domain/transactions/transaction.types.ts: TransactionType =
+  'income' | 'expense'. transactions.type is TEXT NOT NULL (no CHECK);
+  category_id is TEXT NOT NULL.
+- src/domain/accounts/account.rules.ts calculateBalance: income adds,
+  everything else subtracts, per accountId. isLiabilityAccount
+  (credit_card). Home excludes credit_card from some totals
+  (HomeScreen.tsx ~line 50) — read how card balances/"owed" are shown.
+- Migrations last = 5. Add migration 6 only.
+
+TASKS
+T1 Data — migration 6 (parameterized, idempotent):
+   - transactions.transfer_account_id TEXT NULL (the "to" account; the
+     row's account_id is the "from" account).
+   - transactions.linked_transaction_id TEXT NULL and link_kind TEXT NULL
+     (values in R3a: 'transfer_twin'; R3b will add 'refund'/'duplicate' —
+     add them now in the TS union but do not build R3b).
+   - Seed system category 'cat-transfer' (is_system=1, type-neutral,
+     hidden from every category picker, excluded from Uncategorised).
+   - Table transfer_pair_dismissals(debit_id, credit_id, dismissed_at,
+     PRIMARY KEY(debit_id, credit_id)) for "Not a transfer".
+   Never rewrite existing rows.
+T2 Domain (pure, unit-tested, single source of truth):
+   - TransactionType adds 'transfer'.
+   - One helper (e.g. countsTowardIncomeExpense(t)) used by EVERY total:
+     Home income/expense/net, Transactions Inflow/Spent/Net, Uncategorised
+     count, Activity impact line, and any per-category sums. Transfers
+     and 'transfer_twin' rows never count.
+   - calculateBalance: transfer subtracts on account_id, adds on
+     transfer_account_id. Verify credit-card sign convention with tests:
+     bank → credit card transfer (bill payment) must REDUCE the amount
+     owed on the card and reduce the bank balance. Total net worth shown
+     on Home is unchanged by any transfer between two non-card accounts.
+   - Pairing (pure): findTransferPairs(transactions, accounts, dismissals,
+     windowHours = 24). Pair = one expense on own account A + one income
+     of the EXACT same amount on own account B (A ≠ B, both active),
+     |occurredAt diff| ≤ window, both status pending or approved, neither
+     already a transfer/linked/rejected, pair not dismissed. Each row in
+     at most one pair (closest in time wins; tie → earliest). Unit-test
+     edge cases: window boundary, same account, amount off by 1 paisa,
+     three-way ambiguity, dismissed pair, rejected row.
+T3 Confirming a pair (one db.transaction, audited):
+   - Debit row becomes type 'transfer', transfer_account_id = B,
+     category 'cat-transfer', status approved.
+   - Credit row stays in the DB (keeps its sourceReferenceHash so re-sync
+     never recreates it) with status 'rejected', link_kind
+     'transfer_twin', linked_transaction_id = debit id. It must NOT
+     appear in Pending, Transactions lists, totals or balances; its
+     detail (if reached from Activity) says "Part of a transfer" with a
+     link to the transfer.
+   - Store the previous type/status/category of both rows (audit
+     metadata or columns — choose, document) so "Undo transfer" on the
+     transfer detail restores both rows EXACTLY (audited).
+   - "Not a transfer" → insert dismissal; suggestion disappears.
+   - Audit: new event types 'transfer_paired' {debit_id, credit_id},
+     'transfer_unpaired' {…}, metadata never SMS text.
+T4 SMS sync: after inserting new pending items, any new item that forms
+   a pair is NOT auto-approved (stays pending so the user decides);
+   document. Dedup by sourceReferenceHash unchanged.
+T5 UI:
+   - Pending screen: a section "Looks like a transfer" above the account
+     groups — card per pair: "₹X from <A> to <B>" + both dates,
+     [It's a transfer] [Not a transfer]. Home: small card "N possible
+     transfers — Review ›" when N>0 (pairs that include approved rows
+     also show; opening goes to the same review list).
+   - Add Record: third tab "Transfer": From account, To account (active,
+     must differ — zod refine), amount, date, notes. No category picker.
+     Audited 'created'.
+   - Edit transfer: same fields. Transaction detail for any approved
+     income/expense: action "Mark as transfer" → pick the other account
+     (expense: pick "to"; income: pick "from") → converts the row
+     (audited 'edited' fields ['type','transferAccountId']); detail of a
+     transfer shows "From A → To B" and, if it was paired, "Undo transfer".
+   - Lists: transfer row icon (swap arrows), neutral colour token, amount
+     without +/−; shown under both accounts (out on A, in on B) in any
+     per-account view. Transactions type chips add "Transfers"; account
+     filter matches either side.
+   - Activity sentence: "You moved ₹•••• from A to B" (respects R2
+     masking).
+T6 Tests: migration 6 idempotent + seeds cat-transfer once; balance math
+   both sides incl. credit card; totals exclude transfers + twins;
+   pairing edge cases (T2); confirm/undo restores exact rows; dismissal;
+   sync skips auto-approve for paired items; zod from≠to; picker excludes
+   cat-transfer; audit events + no SMS text in metadata.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+DEVICE (USB serial 00015365L001524; adb install -r; Metro + adb reverse
+tcp:8081 tcp:8081 — re-run adb reverse after any USB reset). Phone absent
+2 min or locked → stop device part. SYNTHETIC DATA ONLY. Do NOT tap Sync
+SMS. Real totals must never be printed: to compare a real value
+before/after, capture it into a shell variable and print only SAME or
+DIFFERENT.
+ D1 Create account "QA Wallet 8888" (cash) if missing. Record
+    QA Delete Bank 9999 and QA Wallet 8888 balances (QA labels/values may
+    be printed). Capture Home income, expense and total balance labels
+    into variables (not printed).
+ D2 Add Record → Transfer 500.00 from QA Delete Bank 9999 to QA Wallet
+    8888, notes "QA transfer". Bank balance −500, wallet +500; Home
+    income/expense/total balance = SAME.
+ D3 Add Record expense "QA-Merchant-09" 100.00 on QA Delete Bank 9999 →
+    detail → Mark as transfer → to QA Wallet 8888. Balances move
+    (bank unchanged vs after the expense, wallet +100); Home income/
+    expense = SAME as D1.
+ D4 Transactions: "Transfers" chip shows the 2 QA transfers (grep QA
+    rows only; report count of other rows only). Activity shows "You
+    moved ₹ ••••" rows for QA (grep QA only).
+ D5 Pending "Looks like a transfer" section and Home "possible
+    transfers" card: report COUNT only (real data). Do NOT tap It's a
+    transfer / Not a transfer on real items.
+ D6 Cleanup: delete both QA transfers; leave QA Wallet 8888 (report as
+    leftover) unless removing it is trivial via Accounts → remove (it is
+    synthetic — allowed). Force-stop + relaunch; logcat 0 FATAL
+    com.tracker, 0 "Maximum update depth", 0 ReactNativeJS errors. End:
+    force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Other app in front: HOME (unless a call is
+  active — then wait), relaunch Tracker; never inspect it. Locked = stop.
+- Every uiautomator dump grep-filtered to one QA element or one label;
+  never print a full dump, real merchants, amounts, previews or senders;
+  `adb shell rm /sdcard/u.xml` after; /sdcard only inside adb shell.
+- Never change the owner's real transactions, accounts or settings; never
+  pair/dismiss real items; never tracker.db / sqlite3 / run-as; no
+  uninstall/clear-data/screenshots.
+
+OUTPUT: ongoing/roadmap/R3a-transfers.md (files, migration 6 SQL, data
+model of a transfer + twin, pairing rules, totals helper call-site map,
+UI description, gates, D1–D6 PASS/FAIL, leftover synthetic data, what is
+unit-test only). Leak-scan before finishing (pattern given by the orchestrator; never
+write it into a repo file).
+Do not commit.
+REPLY ONLY: gates yes/no; files changed count; D1–D6 PASS/FAIL; not
+verified and why; decisions you made.

@@ -323,3 +323,83 @@ describe('R2 rule and category events', () => {
     ).toBe('Changed name, colour');
   });
 });
+
+describe('R3a transfer sentences', () => {
+  const TRANSFER = { merchantName: 'Transfer', amountMinor: 50000, type: 'transfer' as const };
+  const BANK = { name: 'QA Delete Bank', lastFour: '9999' };
+  const WALLET = { name: 'QA Wallet 8888', lastFour: null };
+
+  it('a created transfer reads "You moved ₹ •••• from A to B" (masked by default)', () => {
+    const item = describeRaw(event({ eventType: 'created' }), {
+      transaction: TRANSFER,
+      account: BANK,
+      transferAccount: WALLET,
+    });
+    expect(item.sentence).toBe(`You moved ${MASKED_AMOUNT} from QA Delete Bank ••9999 to QA Wallet 8888`);
+    expect(item.impact).toEqual({ text: 'Between your accounts · not income or expense', tone: 'neutral' });
+  });
+
+  it('revealed amount has no sign', () => {
+    const item = describeActivity(event({ eventType: 'created' }), {
+      transaction: TRANSFER,
+      account: BANK,
+      transferAccount: WALLET,
+    });
+    expect(item.sentence).toBe('You moved ₹500.00 from QA Delete Bank ••9999 to QA Wallet 8888');
+    expect(signedAmount(50000, 'transfer')).toBe('₹500.00');
+  });
+
+  it('mark as transfer (edited type + transferAccountId) and a confirmed pair also read "You moved"', () => {
+    const marked = describeRaw(
+      event({ eventType: 'edited', metadata: { kind: 'edited', fields: ['type', 'categoryId', 'transferAccountId'] } }),
+      { transaction: { ...TRANSFER, merchantName: 'QA-Merchant-09', amountMinor: 10000 }, account: BANK, transferAccount: WALLET },
+    );
+    expect(marked.sentence).toBe(`You moved ${MASKED_AMOUNT} from QA Delete Bank ••9999 to QA Wallet 8888`);
+    expect(marked.impact?.text).toBe('Marked as a transfer · not income or expense');
+
+    const paired = describeRaw(
+      event({
+        eventType: 'transfer_paired',
+        metadata: {
+          kind: 'transfer_paired',
+          debit_id: 'd1',
+          credit_id: 'c1',
+          previous: {
+            debit: { type: 'expense', status: 'pending', categoryId: 'cat-x', approvedAt: null, transferAccountId: null, linkedTransactionId: null, linkKind: null },
+            credit: { type: 'income', status: 'pending', categoryId: 'cat-x', approvedAt: null, transferAccountId: null, linkedTransactionId: null, linkKind: null },
+          },
+        },
+      }),
+      { transaction: TRANSFER, account: BANK, transferAccount: WALLET },
+    );
+    expect(paired.sentence).toContain('You moved ₹ ••••');
+    expect(paired.icon).toBe('swap-horizontal');
+  });
+
+  it('undo and a plain edit of a transfer', () => {
+    const undone = describeRaw(
+      event({ eventType: 'transfer_unpaired', metadata: { kind: 'transfer_unpaired', debit_id: 'd1', credit_id: 'c1' } }),
+      { transaction: { ...TRANSFER, type: 'expense' as const } },
+    );
+    expect(undone.sentence).toBe(`You undid a transfer of ${MASKED_AMOUNT}`);
+    expect(undone.impact?.tone).toBe('neutral');
+
+    const edited = describeActivity(
+      event({ eventType: 'edited', metadata: { kind: 'edited', fields: ['amountMinor'] } }),
+      { transaction: TRANSFER },
+    );
+    expect(edited.sentence).toBe('You edited Transfer');
+  });
+
+  it('approving / deleting a transfer never shows an income or expense impact', () => {
+    const approved = describeActivity(event({ eventType: 'approved' }), { transaction: TRANSFER });
+    expect(approved.impact).toEqual({ text: 'Moved between your accounts · not income or expense', tone: 'neutral' });
+    const deleted = describeActivity(
+      event({
+        eventType: 'deleted',
+        metadata: { kind: 'deleted', merchantName: 'Transfer', amountMinor: 50000, type: 'transfer', status: 'approved', transferAccountId: 'acc-w' },
+      }),
+    );
+    expect(deleted.impact).toEqual({ text: 'Balances moved back', tone: 'negative' });
+  });
+});

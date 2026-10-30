@@ -1,6 +1,7 @@
 import { Transaction } from '../transactions/transaction.types';
 import { Account } from '../accounts/account.types';
 import { AuditMetadata } from './audit.types';
+import { TransferRowSnapshot } from '../transfers/transfer.rules';
 
 /**
  * Rebuild a metadata payload from whitelisted fields only, so an object
@@ -31,6 +32,9 @@ export function sanitizeAuditMetadata(
         amountMinor: Number(metadata.amountMinor),
         type: metadata.type,
         status: metadata.status,
+        ...(metadata.transferAccountId != null
+          ? { transferAccountId: String(metadata.transferAccountId) }
+          : {}),
       };
     case 'settings_changed':
       return {
@@ -50,9 +54,39 @@ export function sanitizeAuditMetadata(
         categoryId: String(metadata.categoryId),
         fields: metadata.fields.map(String),
       };
+    case 'transfer_paired':
+      return {
+        kind: 'transfer_paired',
+        debit_id: String(metadata.debit_id),
+        credit_id: String(metadata.credit_id),
+        previous: {
+          debit: sanitizeRowSnapshot(metadata.previous.debit),
+          credit: sanitizeRowSnapshot(metadata.previous.credit),
+        },
+      };
+    case 'transfer_unpaired':
+      return {
+        kind: 'transfer_unpaired',
+        debit_id: String(metadata.debit_id),
+        credit_id: String(metadata.credit_id),
+      };
     default:
       return null;
   }
+}
+
+/** Whitelist the enum/id/timestamp fields of a transfer row snapshot. */
+function sanitizeRowSnapshot(snapshot: TransferRowSnapshot): TransferRowSnapshot {
+  return {
+    type: snapshot.type,
+    status: snapshot.status,
+    categoryId: String(snapshot.categoryId),
+    approvedAt: snapshot.approvedAt == null ? null : String(snapshot.approvedAt),
+    transferAccountId: snapshot.transferAccountId == null ? null : String(snapshot.transferAccountId),
+    linkedTransactionId:
+      snapshot.linkedTransactionId == null ? null : String(snapshot.linkedTransactionId),
+    linkKind: snapshot.linkKind ?? null,
+  };
 }
 
 function finiteOrNull(value: number | null): number | null {
@@ -69,6 +103,7 @@ const EDITABLE_TRANSACTION_FIELDS = [
   'paymentMethod',
   'occurredAt',
   'note',
+  'transferAccountId',
 ] as const;
 
 /** Names (never values) of the editable fields a patch actually changes. */
@@ -77,7 +112,8 @@ export function changedTransactionFields(
   patch: Partial<Transaction>,
 ): string[] {
   return EDITABLE_TRANSACTION_FIELDS.filter(
-    field => field in patch && patch[field] !== undefined && patch[field] !== before[field],
+    field =>
+      field in patch && patch[field] !== undefined && patch[field] !== (before[field] ?? null),
   );
 }
 

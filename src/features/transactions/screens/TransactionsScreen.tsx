@@ -25,7 +25,13 @@ import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 import { RootStackParamList } from '../../../app/navigation/routes';
-import { categoryLabel, isArchivedCategory } from '../../../domain/categories/category.rules';
+import {
+  categoryLabel,
+  isArchivedCategory,
+  visibleCategories,
+} from '../../../domain/categories/category.rules';
+import { incomeExpenseTotals } from '../../../domain/transactions/transaction.rules';
+import { transferRowSubtitle } from '../../transfers/transferLabels';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -74,8 +80,15 @@ export function TransactionsScreen() {
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   // Filters are for finding things, so archived categories stay filterable —
   // listed under their own heading, like deleted accounts.
-  const activeCategoryList = useMemo(() => categories.filter(c => !isArchivedCategory(c)), [categories]);
-  const archivedCategoryList = useMemo(() => categories.filter(isArchivedCategory), [categories]);
+  // R3a: the hidden system "Transfer" category is never offered (use the Transfers chip).
+  const activeCategoryList = useMemo(
+    () => visibleCategories(categories).filter(c => !isArchivedCategory(c)),
+    [categories],
+  );
+  const archivedCategoryList = useMemo(
+    () => visibleCategories(categories).filter(isArchivedCategory),
+    [categories],
+  );
   const accountChipLabel = selectedAccount
     ? selectedAccount.lastFour
       ? `${selectedAccount.name} ••${selectedAccount.lastFour}`
@@ -98,7 +111,8 @@ export function TransactionsScreen() {
       .sort((a, b) => new Date(b[1][0].occurredAt).getTime() - new Date(a[1][0].occurredAt).getTime())
       .map(([, data]) => ({
         title: dayLabel(data[0].occurredAt, NOW),
-        netMinor: data.reduce((sum, t) => sum + (t.type === 'income' ? t.amountMinor : -t.amountMinor), 0),
+        // R3a: transfers never move a day's net (single income/expense rule).
+        netMinor: incomeExpenseTotals(data).netMinor,
         data,
       }));
   }, [filtered]);
@@ -174,6 +188,12 @@ export function TransactionsScreen() {
                 onPress={() => chooseType('income')}
               />
               <FilterChip
+                testID="filter-transfer"
+                label={`Transfers ${counts.transfer}`}
+                active={filters.type === 'transfer'}
+                onPress={() => chooseType('transfer')}
+              />
+              <FilterChip
                 testID="filter-account"
                 label={accountChipLabel}
                 icon="bank-outline"
@@ -222,7 +242,11 @@ export function TransactionsScreen() {
           return (
             <TransactionRow
               merchantName={item.merchantName}
-              subtitle={formatTransactionTimestamp(item.occurredAt)}
+              subtitle={
+                item.type === 'transfer'
+                  ? transferRowSubtitle(item, accounts, filters.accountId)
+                  : formatTransactionTimestamp(item.occurredAt)
+              }
               amountMinor={item.amountMinor}
               type={item.type}
               status={item.status}

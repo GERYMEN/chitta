@@ -8,11 +8,13 @@ import { useTransactionsStore } from '../state/transactionsStore';
 import { TransactionPatch } from '../../../data/repositories/transaction.repository';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { TransactionForm } from '../components/TransactionForm';
+import { TransferForm } from '../components/TransferForm';
 import { promptRememberCategory } from '../../categories/rememberCategory';
 import {
   amountInputToMinor,
   minorToAmountInput,
   TransactionFormValues,
+  TransferFormValues,
 } from '../components/transactionForm.schema';
 
 type EditRoute = RouteProp<RootStackParamList, 'EditTransaction'>;
@@ -31,6 +33,23 @@ export function EditTransactionScreen() {
         <Text style={styles.missingText}>Transaction not found.</Text>
       </View>
     );
+  }
+
+  // R3a: a transfer edits From / To / amount / date / notes (no category).
+  async function handleTransferSubmit(values: TransferFormValues) {
+    setSubmitting(true);
+    try {
+      await useTransactionsStore.getState().updateTransfer(transaction!.id, {
+        fromAccountId: values.fromAccountId,
+        toAccountId: values.toAccountId,
+        amountMinor: amountInputToMinor(values.amount),
+        occurredAt: values.occurredAt,
+        note: values.note && values.note.trim() !== '' ? values.note.trim() : null,
+      });
+      navigation.goBack();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleSubmit(values: TransactionFormValues) {
@@ -67,24 +86,40 @@ export function EditTransactionScreen() {
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
-        <Text style={styles.headerTitle}>Edit Transaction</Text>
+        <Text style={styles.headerTitle}>
+          {transaction.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction'}
+        </Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <TransactionForm
-        onSubmit={handleSubmit}
-        submitting={submitting}
-        initialValues={{
-          type: transaction.type,
-          amount: minorToAmountInput(transaction.amountMinor),
-          merchantName: transaction.merchantName,
-          categoryId: transaction.categoryId,
-          accountId: transaction.accountId,
-          paymentMethod: transaction.paymentMethod,
-          occurredAt: transaction.occurredAt,
-          note: transaction.note ?? '',
-        }}
-      />
+      {transaction.type === 'transfer' ? (
+        <TransferForm
+          onSubmit={handleTransferSubmit}
+          submitting={submitting}
+          initialValues={{
+            fromAccountId: transaction.accountId,
+            toAccountId: transaction.transferAccountId ?? '',
+            amount: minorToAmountInput(transaction.amountMinor),
+            occurredAt: transaction.occurredAt,
+            note: transaction.note ?? '',
+          }}
+        />
+      ) : (
+        <TransactionForm
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          initialValues={{
+            type: transaction.type === 'income' ? 'income' : 'expense',
+            amount: minorToAmountInput(transaction.amountMinor),
+            merchantName: transaction.merchantName,
+            categoryId: transaction.categoryId,
+            accountId: transaction.accountId,
+            paymentMethod: transaction.paymentMethod,
+            occurredAt: transaction.occurredAt,
+            note: transaction.note ?? '',
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

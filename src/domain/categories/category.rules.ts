@@ -1,6 +1,7 @@
 import { Category, CategoryKind } from './category.types';
 import { Transaction, TransactionType } from '../transactions/transaction.types';
 import { normalizeMerchant } from '../merchants/normalizeMerchant';
+import { countsTowardIncomeExpense } from '../transactions/transaction.rules';
 
 /**
  * System "Uncategorised" bucket (R2), seeded by migration 5. Type-neutral
@@ -8,6 +9,23 @@ import { normalizeMerchant } from '../merchants/normalizeMerchant';
  * the rules only ever have to look for a single id.
  */
 export const UNCATEGORISED_ID = 'cat-uncategorised';
+
+/**
+ * R3a system "Transfer" category (migration 6), type-neutral. Every transfer
+ * row uses it. It is hidden from EVERY category picker / filter / the
+ * Categories management list, and never counts as Uncategorised.
+ */
+export const TRANSFER_CATEGORY_ID = 'cat-transfer';
+
+/** Hidden system categories never offered in any picker or list. */
+export function isHiddenCategory(category: Pick<Category, 'id'>): boolean {
+  return category.id === TRANSFER_CATEGORY_ID;
+}
+
+/** Every category a user can see in pickers/filters/management (drops hidden system rows). */
+export function visibleCategories<T extends Pick<Category, 'id'>>(categories: ReadonlyArray<T>): T[] {
+  return categories.filter(category => !isHiddenCategory(category));
+}
 
 /** Colour keys a custom category may use — each maps to theme tokens (categoryVisuals.ts). */
 export const CATEGORY_COLOR_KEYS = ['green', 'lime', 'amber', 'slate', 'grey', 'red'] as const;
@@ -61,6 +79,7 @@ export function pickableCategories(
 ): Category[] {
   const { keepId = null, includeUncategorised = true } = options;
   return categories.filter(category => {
+    if (isHiddenCategory(category)) return false;
     if (!categoryFitsType(category.type, type)) return false;
     if (category.id === keepId) return true;
     if (isArchivedCategory(category)) return false;
@@ -91,12 +110,19 @@ export function validateCategoryName(
   return null;
 }
 
-/** Items waiting in the Uncategorised bucket (pending + approved). */
-export function uncategorisedItems<T extends Pick<Transaction, 'categoryId' | 'status'>>(
-  transactions: ReadonlyArray<T>,
-): T[] {
+/**
+ * Items waiting in the Uncategorised bucket (pending + approved). R3a:
+ * transfers and transfer twins are never Uncategorised.
+ */
+export function uncategorisedItems<
+  T extends Pick<Transaction, 'categoryId' | 'status'> &
+    Partial<Pick<Transaction, 'type' | 'linkKind'>>,
+>(transactions: ReadonlyArray<T>): T[] {
   return transactions.filter(
-    t => t.categoryId === UNCATEGORISED_ID && (t.status === 'pending' || t.status === 'approved'),
+    t =>
+      t.categoryId === UNCATEGORISED_ID &&
+      (t.status === 'pending' || t.status === 'approved') &&
+      (t.type === undefined || countsTowardIncomeExpense({ type: t.type, linkKind: t.linkKind })),
   );
 }
 
@@ -114,7 +140,8 @@ export interface CategoryChange {
  */
 export function ruleApplyTargets(
   transactions: ReadonlyArray<
-    Pick<Transaction, 'id' | 'accountId' | 'merchantName' | 'categoryId' | 'status'>
+    Pick<Transaction, 'id' | 'accountId' | 'merchantName' | 'categoryId' | 'status'> &
+      Partial<Pick<Transaction, 'type' | 'linkKind'>>
   >,
   merchantKey: string,
   categoryId: string,
@@ -126,6 +153,8 @@ export function ruleApplyTargets(
       t =>
         t.id !== excludeId &&
         (t.status === 'pending' || t.status === 'approved') &&
+        // R3a: a merchant rule never re-files a transfer or a transfer twin.
+        (t.type === undefined || countsTowardIncomeExpense({ type: t.type, linkKind: t.linkKind })) &&
         t.categoryId !== categoryId &&
         normalizeMerchant(t.merchantName) === merchantKey,
     )

@@ -3,11 +3,10 @@ import { CreateAccountInput } from '../../data/repositories/account.repository';
 import { CreateTransactionInput } from '../../data/repositories/transaction.repository';
 import { Category } from '../../domain/categories/category.types';
 import { UNCATEGORISED_ID } from '../../domain/categories/category.rules';
-import { shouldAutoApprove } from '../../domain/settings/approval.rules';
 import { Transaction } from '../../domain/transactions/transaction.types';
 import { ACCOUNT_KEY_NORMALIZER_VERSION, AccountKey } from './normalizeAccountKey';
 import { ParsedSmsTransaction } from './smsParser';
-import { buildSmsPendingRow, resolveCategoryIdForSms } from './smsSyncLogic';
+import { autoApproveAfterSync, buildSmsPendingRow, resolveCategoryIdForSms } from './smsSyncLogic';
 import { SuggestionGroup } from './suggestionGroups';
 import { getSuggestionGroup, useSuggestionSession } from './suggestionSession';
 import { showSnackbar } from '../../shared/ui/Snackbar';
@@ -95,12 +94,19 @@ async function runImport(
   });
 
   // Opt-in auto mode: exactly the Sync SMS rule and path (system actor).
-  const { approvalMode, autoApproveThreshold } = useTransactionsStore.getState();
+  // R3a: items that form a possible transfer pair stay pending.
+  const latest = useTransactionsStore.getState();
+  const { approvalMode, autoApproveThreshold } = latest;
+  const { approve: toApprove } = autoApproveAfterSync(
+    result.transactions,
+    latest.transactions,
+    latest.accounts,
+    latest.transferDismissals,
+    approvalMode,
+    autoApproveThreshold,
+  );
   let autoApproved = 0;
-  for (const transaction of result.transactions) {
-    if (!shouldAutoApprove(approvalMode, autoApproveThreshold, transaction.confidenceScore)) {
-      continue;
-    }
+  for (const transaction of toApprove) {
     await useTransactionsStore.getState().approve(transaction.id, {
       confidence: transaction.confidenceScore ?? 0,
       threshold: autoApproveThreshold,

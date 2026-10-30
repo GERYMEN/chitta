@@ -29,6 +29,9 @@ export function rowToTransaction(row: SqlRow): Transaction {
     confidenceScore: asNullableNumber(row.confidence_score),
     parserVersion: asNullableString(row.parser_version),
     bulkBatchId: asNullableString(row.bulk_batch_id),
+    transferAccountId: asNullableString(row.transfer_account_id),
+    linkedTransactionId: asNullableString(row.linked_transaction_id),
+    linkKind: asNullableString(row.link_kind) as Transaction['linkKind'],
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -55,6 +58,9 @@ export function transactionToRow(transaction: Transaction): SqlWriteRow {
     confidence_score: transaction.confidenceScore,
     parser_version: transaction.parserVersion,
     bulk_batch_id: transaction.bulkBatchId ?? null,
+    transfer_account_id: transaction.transferAccountId ?? null,
+    linked_transaction_id: transaction.linkedTransactionId ?? null,
+    link_kind: transaction.linkKind ?? null,
     created_at: transaction.createdAt,
     updated_at: transaction.updatedAt,
   };

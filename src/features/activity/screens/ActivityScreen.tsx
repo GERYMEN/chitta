@@ -56,11 +56,24 @@ export function ActivityScreen() {
     const items = events.map(event => {
       const categoryId =
         event.metadata && 'categoryId' in event.metadata ? event.metadata.categoryId : null;
+      const transaction = event.transactionId
+        ? transactionById.get(event.transactionId) ?? null
+        : null;
+      // R3a: a transfer names both sides — "from" is the row's account (live
+      // row first, else the event's), "to" its transfer account.
+      const snapshot =
+        event.metadata?.kind === 'deleted' ? event.metadata : event.deletedSnapshot;
+      const fromId = transaction?.type === 'transfer' ? transaction.accountId : event.accountId;
+      const toId =
+        transaction?.type === 'transfer'
+          ? transaction.transferAccountId ?? null
+          : snapshot?.transferAccountId ?? null;
       return describeActivity(
         event,
         {
-          transaction: event.transactionId ? transactionById.get(event.transactionId) ?? null : null,
-          account: event.accountId ? accountById.get(event.accountId) ?? null : null,
+          transaction,
+          account: fromId ? accountById.get(fromId) ?? null : null,
+          transferAccount: toId ? accountById.get(toId) ?? null : null,
           category: categoryId ? categoryById.get(categoryId) ?? null : null,
         },
         { showAmounts },

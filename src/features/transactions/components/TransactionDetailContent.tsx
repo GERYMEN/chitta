@@ -13,6 +13,8 @@ import { useTransactionsStore } from '../../transactions/state/transactionsStore
 import { parseSmsReference } from '../../sms-sync/smsReference';
 import { OriginalSmsView } from './OriginalSmsView';
 import { categoryLabel } from '../../../domain/categories/category.rules';
+import { findTransferTwin, isPairCandidate } from '../../../domain/transfers/transfer.rules';
+import { transferRouteLabel } from '../../transfers/transferLabels';
 
 export interface TransactionDetailContentProps {
   transaction: Transaction;
@@ -30,6 +32,13 @@ export interface TransactionDetailContentProps {
   hideActions?: boolean;
   /** R2: when passed, the Category row is tappable (opens a picker). */
   onChangeCategory?: (transaction: Transaction) => void;
+  /** R3a: a transfer twin's "View transfer" link. */
+  onOpenTransfer?: (transferId: string) => void;
+}
+
+/** R3a: the kept SMS credit half of a confirmed transfer pair. */
+export function isTransferTwin(transaction: Pick<Transaction, 'linkKind'>): boolean {
+  return transaction.linkKind === 'transfer_twin';
 }
 
 const TIER_LABEL: Record<ReturnType<typeof confidenceTier>, string> = {
@@ -52,6 +61,10 @@ export interface TransactionDetailActionsProps {
   onEdit: (transaction: Transaction) => void;
   onReject: (transaction: Transaction) => void;
   onDelete?: (transaction: Transaction) => void;
+  /** R3a: approved income/expense → "Mark as transfer". */
+  onMarkAsTransfer?: (transaction: Transaction) => void;
+  /** R3a: a transfer confirmed from an SMS pair → "Undo transfer". */
+  onUndoTransfer?: (transaction: Transaction) => void;
 }
 
 /**
@@ -65,11 +78,38 @@ export function TransactionDetailActions({
   onEdit,
   onReject,
   onDelete,
+  onMarkAsTransfer,
+  onUndoTransfer,
 }: TransactionDetailActionsProps) {
   const isPending = transaction.status === 'pending';
+  const transactions = useTransactionsStore(state => state.transactions);
+  // The twin is reached only from Activity; it has no actions of its own.
+  if (isTransferTwin(transaction)) return null;
+  const isPaired =
+    transaction.type === 'transfer' && findTransferTwin(transactions, transaction.id) !== null;
+  const canMark =
+    transaction.status === 'approved' && isPairCandidate(transaction) && onMarkAsTransfer;
 
   return (
     <View style={styles.actions}>
+      {canMark ? (
+        <Button
+          label="Mark as transfer"
+          variant="ghost"
+          onPress={() => onMarkAsTransfer(transaction)}
+          icon={<Icon name="swap-horizontal" size={18} color={colors.onSurface} />}
+          testID="detail-mark-transfer"
+        />
+      ) : null}
+      {isPaired && onUndoTransfer ? (
+        <Button
+          label="Undo transfer"
+          variant="ghost"
+          onPress={() => onUndoTransfer(transaction)}
+          icon={<Icon name="undo-variant" size={18} color={colors.onSurface} />}
+          testID="detail-undo-transfer"
+        />
+      ) : null}
       {isPending ? (
         <>
           <Button
@@ -109,6 +149,7 @@ export function TransactionDetailContent({
   variant = 'screen',
   hideActions = false,
   onChangeCategory,
+  onOpenTransfer,
 }: TransactionDetailContentProps) {
   const [transparencyOpen, setTransparencyOpen] = useState(variant === 'screen');
   const [auditOpen, setAuditOpen] = useState(false);
@@ -124,14 +165,43 @@ export function TransactionDetailContent({
     transaction.confidenceScore !== null ? Math.round(transaction.confidenceScore) : null;
   const smsReference =
     transaction.sourceType === 'sms' ? parseSmsReference(transaction.sourceReferenceHash) : null;
+  const isTransfer = transaction.type === 'transfer';
+  const twin = isTransferTwin(transaction);
+  const toAccount = isTransfer
+    ? accounts.find(a => a.id === transaction.transferAccountId)
+    : undefined;
 
   return (
     <View style={styles.container}>
-      {isPending ? (
+      {twin ? (
+        <Chip label="Part of a transfer" tone="neutral" icon={<Icon name="swap-horizontal" size={14} color={colors.secondary} />} />
+      ) : isPending ? (
         <Chip label="Pending Approval" tone="pending" icon={<Icon name="clock-outline" size={14} color="#B7791F" />} />
+      ) : transaction.status === 'rejected' ? (
+        <Chip label="Rejected" tone="rejected" icon={<Icon name="close-circle-outline" size={14} color="#6C757D" />} />
       ) : (
         <Chip label="Approved" tone="approved" icon={<Icon name="check-circle-outline" size={14} color="#00A827" />} />
       )}
+
+      {twin ? (
+        <Card style={styles.fieldsCard} testID="transfer-twin-notice">
+          <Text style={styles.cardTitle}>Part of a transfer</Text>
+          <Text style={styles.transparencyMeta}>
+            This credit was confirmed as the receiving side of a transfer between your
+            accounts. It is kept only so SMS sync never adds it again — it is not in any list,
+            total or balance.
+          </Text>
+          {transaction.linkedTransactionId && onOpenTransfer ? (
+            <Text
+              style={styles.linkText}
+              onPress={() => onOpenTransfer(transaction.linkedTransactionId as string)}
+              accessibilityRole="link"
+              testID="transfer-twin-open">
+              View transfer ›
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
 
       <View style={styles.summary}>
         <View style={[styles.avatar, { backgroundColor: visual.backgroundColor }]}>
@@ -152,14 +222,25 @@ export function TransactionDetailContent({
         />
         <View style={styles.chipRow}>
           <Chip
-            label={transaction.type === 'income' ? 'Income Inflow' : 'Expense Outflow'}
+            label={
+              isTransfer
+                ? 'Transfer · not income or expense'
+                : transaction.type === 'income'
+                ? 'Income Inflow'
+                : 'Expense Outflow'
+            }
             tone={transaction.type === 'income' ? 'approved' : 'neutral'}
           />
           {isPending ? <Chip label="Not counted in balance" tone="pending" /> : null}
         </View>
+        {isTransfer ? (
+          <Text style={styles.metaLine} testID="transfer-route">
+            {transferRouteLabel(transaction, accounts)}
+          </Text>
+        ) : null}
         <Text style={styles.metaLine}>
           {formatTransactionTimestamp(transaction.occurredAt)} · {CHANNEL_LABEL[transaction.paymentMethod]}
-          {account ? ` · ${accountDisplayLabel(account)}` : ''}
+          {account && !isTransfer ? ` · ${accountDisplayLabel(account)}` : ''}
         </Text>
       </View>
 
@@ -167,9 +248,15 @@ export function TransactionDetailContent({
         <Text style={styles.cardTitle}>Transaction Details</Text>
         <DetailRow
           label="Type"
-          value={transaction.type === 'income' ? 'Credit Income' : 'Debit Expense'}
+          value={
+            isTransfer
+              ? 'Transfer'
+              : transaction.type === 'income'
+              ? 'Credit Income'
+              : 'Debit Expense'
+          }
         />
-        {onChangeCategory ? (
+        {isTransfer ? null : onChangeCategory && !twin ? (
           <Pressable
             onPress={() => onChangeCategory(transaction)}
             accessibilityRole="button"
@@ -187,10 +274,14 @@ export function TransactionDetailContent({
         ) : (
           <DetailRow label="Category" value={categoryLabel(category)} />
         )}
-        <DetailRow
-          label="Account"
-          value={accountDisplayLabel(account)}
-        />
+        {isTransfer ? (
+          <>
+            <DetailRow label="From" value={accountDisplayLabel(account)} />
+            <DetailRow label="To" value={accountDisplayLabel(toAccount)} />
+          </>
+        ) : (
+          <DetailRow label="Account" value={accountDisplayLabel(account)} />
+        )}
         <DetailRow label="Date & Time" value={formatTransactionTimestamp(transaction.occurredAt)} />
         {transaction.note ? <DetailRow label="Personal Note" value={transaction.note} /> : null}
       </Card>

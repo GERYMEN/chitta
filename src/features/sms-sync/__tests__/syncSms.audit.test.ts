@@ -105,12 +105,14 @@ describe('syncSms audit', () => {
     expectNoSmsTextInAudit();
   });
 
-  it('auto mode: detected then auto_approved (system, confidence + threshold) per item', async () => {
+  it('auto mode: detected per item, then auto_approved (system, confidence + threshold) per item', async () => {
     useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: 90 });
     const result = await syncSms();
 
     expect(result.autoApproved).toBe(2);
-    expect(auditTypes()).toEqual(['detected', 'auto_approved', 'detected', 'auto_approved']);
+    // R3a T4: every new row is inserted first, then the auto rule runs (so a
+    // new row that forms a transfer pair can be held back).
+    expect(auditTypes()).toEqual(['detected', 'detected', 'auto_approved', 'auto_approved']);
     const autos = db.auditInserts().filter(a => a.row.event_type === 'auto_approved');
     for (const { row } of autos) {
       expect(row.actor).toBe('system');

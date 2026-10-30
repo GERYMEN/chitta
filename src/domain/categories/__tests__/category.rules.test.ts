@@ -5,8 +5,10 @@ import {
   pickableCategories,
   rememberDecision,
   ruleApplyTargets,
+  TRANSFER_CATEGORY_ID,
   UNCATEGORISED_ID,
   uncategorisedItems,
+  visibleCategories,
   validateCategoryName,
 } from '../category.rules';
 import { Category } from '../category.types';
@@ -150,5 +152,40 @@ describe('rememberDecision', () => {
   it('never asks for Uncategorised or an empty merchant', () => {
     expect(rememberDecision('qa merchant 08', UNCATEGORISED_ID, undefined)).toBe('none');
     expect(rememberDecision('', 'cat-food', undefined)).toBe('none');
+  });
+});
+
+describe('R3a: hidden system Transfer category', () => {
+  const transferCat = cat({ id: TRANSFER_CATEGORY_ID, name: 'Transfer', type: 'both', isSystem: true });
+  const food = cat({ id: 'cat-food', name: 'Food' });
+  const uncategorised = cat({ id: UNCATEGORISED_ID, name: 'Uncategorised', type: 'both', isSystem: true });
+  const all = [food, uncategorised, transferCat];
+
+  it('no picker ever offers cat-transfer (any type, even as keepId)', () => {
+    for (const type of ['expense', 'income', 'transfer'] as const) {
+      expect(pickableCategories(all, type).map(c => c.id)).not.toContain(TRANSFER_CATEGORY_ID);
+      expect(
+        pickableCategories(all, type, { keepId: TRANSFER_CATEGORY_ID }).map(c => c.id),
+      ).not.toContain(TRANSFER_CATEGORY_ID);
+    }
+    expect(visibleCategories(all).map(c => c.id)).toEqual(['cat-food', UNCATEGORISED_ID]);
+  });
+
+  it('transfers and transfer twins never count as Uncategorised', () => {
+    const items = uncategorisedItems([
+      { id: 'a', categoryId: UNCATEGORISED_ID, status: 'pending', type: 'expense' as const },
+      { id: 'b', categoryId: UNCATEGORISED_ID, status: 'approved', type: 'transfer' as const },
+      { id: 'c', categoryId: UNCATEGORISED_ID, status: 'pending', type: 'income' as const, linkKind: 'transfer_twin' as const },
+      { id: 'd', categoryId: TRANSFER_CATEGORY_ID, status: 'approved', type: 'transfer' as const },
+    ]);
+    expect(items.map(t => t.id)).toEqual(['a']);
+  });
+
+  it('a merchant rule never re-files a transfer', () => {
+    const rows = [
+      { id: 't', accountId: 'a', merchantName: 'QA-Merchant-09', categoryId: TRANSFER_CATEGORY_ID, status: 'approved' as const, type: 'transfer' as const },
+      { id: 'e', accountId: 'a', merchantName: 'QA-Merchant-09', categoryId: 'cat-x', status: 'approved' as const, type: 'expense' as const },
+    ];
+    expect(ruleApplyTargets(rows, 'qa merchant 09', 'cat-food', null).map(c => c.id)).toEqual(['e']);
   });
 });

@@ -129,3 +129,70 @@ describe('calculateBalance', () => {
     expect(calculateBalance(anchored, transactions, 'acc-1')).toBe(500000);
   });
 });
+
+describe('calculateBalance — R3a transfers', () => {
+  const zero = { openingBalanceMinor: 0, balanceAnchorMinor: null, balanceAnchorAt: null };
+  const bank = { ...zero, openingBalanceMinor: 1000000 };
+  const wallet = { ...zero, openingBalanceMinor: 20000 };
+  const t = (patch: Partial<Transaction>) => ({
+    status: 'approved' as const,
+    type: 'transfer' as const,
+    amountMinor: 50000,
+    accountId: 'acc-bank',
+    transferAccountId: 'acc-wallet',
+    occurredAt: '2026-10-05T00:00:00.000Z',
+    ...patch,
+  });
+
+  it('subtracts on the from account and adds on the to account', () => {
+    const rows = [t({})];
+    expect(calculateBalance(bank, rows, 'acc-bank')).toBe(1000000 - 50000);
+    expect(calculateBalance(wallet, rows, 'acc-wallet')).toBe(20000 + 50000);
+    expect(calculateBalance(zero, rows, 'acc-other')).toBe(0);
+  });
+
+  it('the sum of two non-card balances (Home net worth) is unchanged by a transfer', () => {
+    const before = calculateBalance(bank, [], 'acc-bank') + calculateBalance(wallet, [], 'acc-wallet');
+    const rows = [t({}), t({ amountMinor: 1234, accountId: 'acc-wallet', transferAccountId: 'acc-bank' })];
+    const after = calculateBalance(bank, rows, 'acc-bank') + calculateBalance(wallet, rows, 'acc-wallet');
+    expect(after).toBe(before);
+  });
+
+  it('bank → credit card (bill payment) reduces what is owed on the card AND the bank balance', () => {
+    const card = zero;
+    const spend = txn({ type: 'expense', amountMinor: 300000, accountId: 'acc-card' });
+    const owedBefore = -calculateBalance(card, [spend], 'acc-card');
+    expect(owedBefore).toBe(300000);
+
+    const payment = t({ amountMinor: 120000, accountId: 'acc-bank', transferAccountId: 'acc-card' });
+    const rows = [spend, payment];
+    const owedAfter = -calculateBalance(card, rows, 'acc-card');
+    expect(owedAfter).toBe(180000);
+    expect(calculateBalance(bank, rows, 'acc-bank')).toBe(1000000 - 120000);
+  });
+
+  it('pending / rejected transfers and transfers before the anchor never count', () => {
+    const anchoredWallet = {
+      openingBalanceMinor: 0,
+      balanceAnchorMinor: 70000,
+      balanceAnchorAt: '2026-10-10T00:00:00.000Z',
+    };
+    const rows = [
+      t({ status: 'pending' }),
+      t({ status: 'rejected' }),
+      t({ occurredAt: '2026-10-09T00:00:00.000Z' }),
+    ];
+    expect(calculateBalance(anchoredWallet, rows, 'acc-wallet')).toBe(70000);
+    expect(calculateBalance(bank, rows.slice(0, 2), 'acc-bank')).toBe(1000000);
+  });
+
+  it('a rejected transfer twin (income) never counts', () => {
+    const twin = txn({
+      type: 'income',
+      status: 'rejected',
+      amountMinor: 50000,
+      accountId: 'acc-wallet',
+    });
+    expect(calculateBalance(wallet, [t({}), twin], 'acc-wallet')).toBe(20000 + 50000);
+  });
+});

@@ -5,8 +5,9 @@ import {
   requestSmsPermission,
 } from '../../native/android/permissions/smsPermission';
 import { parseSmsMessage } from './smsParser';
-import { shouldAutoApprove } from '../../domain/settings/approval.rules';
+import { Transaction } from '../../domain/transactions/transaction.types';
 import {
+  autoApproveAfterSync,
   buildSmsTransactionInput,
   filterNewCandidates,
   partitionCandidates,
@@ -31,6 +32,11 @@ export interface SmsSyncResult {
   skipped: number;
   /** New SMS transactions from THIS sync approved by the opt-in auto mode. */
   autoApproved: number;
+  /**
+   * R3a: new items the auto rule would have approved but that form a
+   * possible transfer pair — left pending for the user to decide.
+   */
+  heldForTransfer: number;
   suggestions: SmsAccountSuggestion[];
   /**
    * R2b: id of this run's in-memory suggestion session (the groups with
@@ -85,7 +91,11 @@ const INBOX_LIMIT = 200;
  * (clamped to 70..100) is approved through the same `store.approve` path a
  * manual approve uses (canTransition pending -> approved). Existing pending
  * items are never retroactively approved, and manual entries never go through
- * this path.
+ * this path. R3a: auto-approval runs after ALL new rows are inserted, and a
+ * new row that forms a possible transfer pair is never auto-approved (it stays
+ * pending for "It's a transfer" / "Not a transfer"). Dedup by
+ * sourceReferenceHash is unchanged — a confirmed pair's credit twin keeps its
+ * hash, so re-sync never recreates it.
  *
  * Audit (R1): `store.addTransaction` writes one 'detected' event (actor
  * 'system', confidence only — never SMS text/sender/preview) in the same
@@ -151,9 +161,8 @@ export async function syncSms(): Promise<SmsSyncResult> {
   // Snapshot the policy once so a settings change mid-sync can't mix modes.
   const { approvalMode, autoApproveThreshold } = store;
 
-  let created = 0;
   let uncategorised = 0;
-  let autoApproved = 0;
+  const createdRows: Transaction[] = [];
   for (const { parsed, accountId } of matched) {
     // R2: merchant rule first, else the system "Uncategorised" bucket.
     const categoryId = resolveCategoryIdForSms(
@@ -166,22 +175,32 @@ export async function syncSms(): Promise<SmsSyncResult> {
 
     const input = buildSmsTransactionInput(parsed, accountId, categoryId, new Date().toISOString());
 
-    const createdTransaction = await useTransactionsStore.getState().addTransaction(input);
-    created++;
+    createdRows.push(await useTransactionsStore.getState().addTransaction(input));
     if (categoryId === UNCATEGORISED_ID) uncategorised++;
+  }
+  const created = createdRows.length;
 
-    if (
-      shouldAutoApprove(approvalMode, autoApproveThreshold, createdTransaction.confidenceScore)
-    ) {
-      await useTransactionsStore.getState().approve(createdTransaction.id, {
-        confidence: createdTransaction.confidenceScore ?? 0,
-        threshold: autoApproveThreshold,
-      });
-      const after = useTransactionsStore
-        .getState()
-        .transactions.find(t => t.id === createdTransaction.id);
-      if (after?.status === 'approved') autoApproved++;
-    }
+  // R3a T4: auto-approve only AFTER every new pending item is in, so a new
+  // item that pairs as a possible transfer stays pending for the user.
+  const latest = useTransactionsStore.getState();
+  const { approve: toApprove, heldForTransfer } = autoApproveAfterSync(
+    createdRows,
+    latest.transactions,
+    latest.accounts,
+    latest.transferDismissals,
+    approvalMode,
+    autoApproveThreshold,
+  );
+  let autoApproved = 0;
+  for (const transaction of toApprove) {
+    await useTransactionsStore.getState().approve(transaction.id, {
+      confidence: transaction.confidenceScore ?? 0,
+      threshold: autoApproveThreshold,
+    });
+    const after = useTransactionsStore
+      .getState()
+      .transactions.find(t => t.id === transaction.id);
+    if (after?.status === 'approved') autoApproved++;
   }
 
   // R2b: keep each suggestion's waiting candidates in the in-memory session
@@ -196,6 +215,7 @@ export async function syncSms(): Promise<SmsSyncResult> {
     uncategorised,
     skipped: scanned - created,
     autoApproved,
+    heldForTransfer: heldForTransfer.length,
     suggestions,
     suggestionRunId,
   };

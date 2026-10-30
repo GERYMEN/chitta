@@ -17,28 +17,42 @@ import { affectsBalance } from '../transactions/transaction.rules';
  * Credit cards track outstanding liability rather than cash-on-hand: an
  * approved expense increases what's owed, an approved payment/income
  * (e.g. a bill payment) reduces it. The arithmetic is identical — only
- * the interpretation of the sign differs at the UI layer.
+ * the interpretation of the sign differs at the UI layer (a card balance is
+ * negative while money is owed; Accounts shows |balance| as outstanding).
+ *
+ * R3a transfers: a 'transfer' row subtracts on its `accountId` (from) and
+ * adds on its `transferAccountId` (to). Bank → card (bill payment) therefore
+ * lowers the bank balance and raises the card balance toward 0 — i.e. it
+ * REDUCES what is owed. A transfer between two non-card accounts leaves the
+ * sum of both balances unchanged.
  */
 export function calculateBalance(
   account: Pick<Account, 'openingBalanceMinor' | 'balanceAnchorMinor' | 'balanceAnchorAt'>,
   transactions: ReadonlyArray<
-    Pick<Transaction, 'status' | 'type' | 'amountMinor' | 'accountId' | 'occurredAt'>
+    Pick<Transaction, 'status' | 'type' | 'amountMinor' | 'accountId' | 'occurredAt'> &
+      Partial<Pick<Transaction, 'transferAccountId'>>
   >,
   accountId: string,
 ): number {
   const anchorMinor = account.balanceAnchorMinor ?? account.openingBalanceMinor;
   const anchorAtMs = account.balanceAnchorAt ? Date.parse(account.balanceAnchorAt) : -Infinity;
 
-  return transactions
-    .filter(
-      t =>
-        t.accountId === accountId &&
-        affectsBalance(t) &&
-        Date.parse(t.occurredAt) > anchorAtMs,
-    )
-    .reduce((balance, t) => {
-      return t.type === 'income' ? balance + t.amountMinor : balance - t.amountMinor;
-    }, anchorMinor);
+  let balance = anchorMinor;
+  for (const t of transactions) {
+    if (!affectsBalance(t) || !(Date.parse(t.occurredAt) > anchorAtMs)) continue;
+    if (t.type === 'transfer') {
+      // A transfer onto the same account is a no-op (never created; guarded anyway).
+      if (t.accountId === accountId && t.transferAccountId !== accountId) {
+        balance -= t.amountMinor;
+      } else if (t.transferAccountId === accountId && t.accountId !== accountId) {
+        balance += t.amountMinor;
+      }
+      continue;
+    }
+    if (t.accountId !== accountId) continue;
+    balance = t.type === 'income' ? balance + t.amountMinor : balance - t.amountMinor;
+  }
+  return balance;
 }
 
 export function isLiabilityAccount(type: AccountType): boolean {

@@ -30,7 +30,7 @@ import {
   TransactionFormValues,
 } from './transactionForm.schema';
 
-const TYPE_OPTIONS: Array<{ value: TransactionType; label: string }> = [
+const TYPE_OPTIONS: Array<{ value: Exclude<TransactionType, 'transfer'>; label: string }> = [
   { value: 'expense', label: 'Expense' },
   { value: 'income', label: 'Income' },
 ];
@@ -47,6 +47,8 @@ export interface TransactionFormProps {
   onSubmit: (values: TransactionFormValues) => void;
   initialValues?: TransactionFormInitialValues;
   submitting?: boolean;
+  /** R3a Add Record: shows a third "Transfer" chip in the Type row. */
+  onChooseTransfer?: () => void;
 }
 
 /**
@@ -54,7 +56,12 @@ export interface TransactionFormProps {
  * Owns only validation + field state; the calling screen decides what to do
  * with the validated values.
  */
-export function TransactionForm({ onSubmit, initialValues, submitting = false }: TransactionFormProps) {
+export function TransactionForm({
+  onSubmit,
+  initialValues,
+  submitting = false,
+  onChooseTransfer,
+}: TransactionFormProps) {
   const allAccounts = useTransactionsStore(state => state.accounts);
   // D10: the picker only offers active accounts.
   const accounts = useMemo(() => activeAccounts(allAccounts), [allAccounts]);
@@ -142,6 +149,11 @@ export function TransactionForm({ onSubmit, initialValues, submitting = false }:
                 <Chip label={option.label} tone={field.value === option.value ? 'active' : 'neutral'} />
               </Pressable>
             ))}
+            {onChooseTransfer ? (
+              <Pressable onPress={onChooseTransfer} accessibilityRole="button" testID="type-transfer">
+                <Chip label="Transfer" tone="neutral" />
+              </Pressable>
+            ) : null}
           </View>
         )}
       />

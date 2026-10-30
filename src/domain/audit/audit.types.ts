@@ -1,4 +1,5 @@
 import type { TransactionStatus, TransactionType } from '../transactions/transaction.types';
+import type { TransferPairPrevious } from '../transfers/transfer.rules';
 
 /**
  * Every money-changing action writes exactly one audit event (R1).
@@ -21,7 +22,10 @@ export type AuditEventType =
   | 'rule_deleted'
   | 'category_created'
   | 'category_updated'
-  | 'category_archived';
+  | 'category_archived'
+  /** R3a: an SMS debit + credit confirmed as one transfer / that undone. */
+  | 'transfer_paired'
+  | 'transfer_unpaired';
 
 export type AuditActor = 'system' | 'user';
 
@@ -44,6 +48,8 @@ export type AuditMetadata =
       amountMinor: number;
       type: TransactionType;
       status: TransactionStatus;
+      /** R3a: the "to" account id of a deleted transfer (id only). */
+      transferAccountId?: string | null;
     }
   | { kind: 'account_updated'; fields: string[] }
   | { kind: 'settings_changed'; key: AuditedSettingKey; from: string; to: string }
@@ -53,7 +59,13 @@ export type AuditMetadata =
   /** R2: category management — the id only; the feed looks the name up. */
   | { kind: 'category_created'; categoryId: string }
   | { kind: 'category_updated'; categoryId: string; fields: string[] }
-  | { kind: 'category_archived'; categoryId: string };
+  | { kind: 'category_archived'; categoryId: string }
+  /**
+   * R3a: ids + the previous enum/id/timestamp fields of both rows (so Undo
+   * restores them exactly). Never merchant text, SMS text or amounts.
+   */
+  | { kind: 'transfer_paired'; debit_id: string; credit_id: string; previous: TransferPairPrevious }
+  | { kind: 'transfer_unpaired'; debit_id: string; credit_id: string };
 
 export interface AuditEvent {
   id: string;

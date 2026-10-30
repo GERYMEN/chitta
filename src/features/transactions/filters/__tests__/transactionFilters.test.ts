@@ -89,6 +89,7 @@ describe('typeCounts and totals', () => {
       all: 2,
       expense: 1,
       income: 1,
+      transfer: 0,
     });
   });
 
@@ -99,5 +100,49 @@ describe('typeCounts and totals', () => {
       netMinor: 95000,
     });
     expect(totalsFor([])).toEqual({ inflowMinor: 0, spentMinor: 0, netMinor: 0 });
+  });
+});
+
+describe('R3a transfers in the Transactions list', () => {
+  type TRow = {
+    id: string;
+    type: 'income' | 'expense' | 'transfer';
+    accountId: string;
+    transferAccountId?: string | null;
+    linkKind?: 'transfer_twin' | null;
+    categoryId: string;
+    merchantName: string;
+    note: string | null;
+    amountMinor: number;
+  };
+  const T_ROWS: TRow[] = [
+    ...ROWS,
+    { id: 't1', type: 'transfer', accountId: 'acc-a', transferAccountId: 'acc-w', categoryId: 'cat-transfer', merchantName: 'Transfer', note: 'QA transfer', amountMinor: 50000 },
+    { id: 't2', type: 'transfer', accountId: 'acc-w', transferAccountId: 'acc-b', categoryId: 'cat-transfer', merchantName: 'QA-Merchant-09', note: null, amountMinor: 10000 },
+  ];
+  const tIds = (filters: TransactionFilters) => filterTransactions(T_ROWS, filters).map(r => r.id);
+
+  it('the Transfers chip lists only transfers and counts them', () => {
+    expect(tIds(f({ type: 'transfer' }))).toEqual(['t1', 't2']);
+    expect(typeCounts(T_ROWS, f({}))).toEqual({ all: 6, expense: 3, income: 1, transfer: 2 });
+  });
+
+  it('an account filter matches either side of a transfer', () => {
+    expect(tIds(f({ accountId: 'acc-w' }))).toEqual(['t1', 't2']);
+    expect(tIds(f({ accountId: 'acc-a' }))).toEqual(['1', '3', 't1']);
+    expect(tIds(f({ accountId: 'acc-b' }))).toEqual(['2', 't2']);
+  });
+
+  it('totals exclude transfers and transfer twins', () => {
+    const withTwin: TRow[] = [
+      ...T_ROWS,
+      { id: 'twin', type: 'income', accountId: 'acc-w', linkKind: 'transfer_twin', categoryId: 'cat-uncategorised', merchantName: 'X', note: null, amountMinor: 50000 },
+    ];
+    expect(totalsFor(withTwin)).toEqual(totalsFor(ROWS));
+    expect(totalsFor(filterTransactions(T_ROWS, f({ type: 'transfer' })))).toEqual({
+      inflowMinor: 0,
+      spentMinor: 0,
+      netMinor: 0,
+    });
   });
 });

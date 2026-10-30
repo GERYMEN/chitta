@@ -1,4 +1,5 @@
-import { DB } from '@op-engineering/op-sqlite';
+import { DB, Scalar } from '@op-engineering/op-sqlite';
+import { TRANSFER_CATEGORY_ID } from '../../domain/categories/category.rules';
 
 /**
  * Numbered, non-idempotent migrations. Unlike the flat `SCHEMA_STATEMENTS`
@@ -7,10 +8,26 @@ import { DB } from '@op-engineering/op-sqlite';
  * throws "duplicate column name". Each entry is guarded by a
  * `schema_migrations` row and runs inside its own `db.transaction`.
  */
+/** A statement with bound parameters (values are never interpolated into SQL). */
+export interface ParameterizedStatement {
+  sql: string;
+  params: Scalar[];
+}
+
+export type MigrationStatement = string | ParameterizedStatement;
+
 export interface NumberedMigration {
   version: number;
-  statements: string[];
+  statements: MigrationStatement[];
 }
+
+/** R3a system "Transfer" category — bound as parameters by migration 6. */
+export const TRANSFER_CATEGORY_SEED = {
+  id: TRANSFER_CATEGORY_ID,
+  name: 'Transfer',
+  type: 'both',
+  icon: 'swap-horizontal',
+} as const;
 
 export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
   {
@@ -68,6 +85,39 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       "INSERT OR IGNORE INTO categories (id, name, parent_id, type, icon, is_system) VALUES ('cat-uncategorised', 'Uncategorised', NULL, 'both', 'help-circle-outline', 1)",
     ],
   },
+  {
+    // R3a transfers between own accounts. A transfer is ONE row: account_id =
+    // "from", transfer_account_id = "to". A confirmed SMS pair keeps its
+    // credit half as a rejected 'transfer_twin' linked to the transfer (for
+    // dedup by source_reference_hash). link_kind values: 'transfer_twin'
+    // (R3a); 'refund' / 'duplicate' come with R3b. Existing rows are never
+    // rewritten: all three columns start NULL. The type-neutral system
+    // "Transfer" category is seeded with bound parameters + INSERT OR IGNORE
+    // (single row even if re-run). "Not a transfer" decisions live in
+    // transfer_pair_dismissals.
+    version: 6,
+    statements: [
+      'ALTER TABLE transactions ADD COLUMN transfer_account_id TEXT',
+      'ALTER TABLE transactions ADD COLUMN linked_transaction_id TEXT',
+      'ALTER TABLE transactions ADD COLUMN link_kind TEXT',
+      {
+        sql: 'INSERT OR IGNORE INTO categories (id, name, parent_id, type, icon, is_system) VALUES (?, ?, NULL, ?, ?, 1)',
+        params: [
+          TRANSFER_CATEGORY_SEED.id,
+          TRANSFER_CATEGORY_SEED.name,
+          TRANSFER_CATEGORY_SEED.type,
+          TRANSFER_CATEGORY_SEED.icon,
+        ],
+      },
+      `CREATE TABLE IF NOT EXISTS transfer_pair_dismissals (
+    debit_id TEXT NOT NULL,
+    credit_id TEXT NOT NULL,
+    dismissed_at TEXT NOT NULL,
+    PRIMARY KEY (debit_id, credit_id)
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_tx_linked ON transactions(linked_transaction_id)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {
@@ -92,7 +142,8 @@ export async function runNumberedMigrations(database: DB): Promise<void> {
     try {
       await database.transaction(async tx => {
         for (const statement of migration.statements) {
-          await tx.execute(statement);
+          if (typeof statement === 'string') await tx.execute(statement);
+          else await tx.execute(statement.sql, statement.params);
         }
         await tx.execute(
           'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',

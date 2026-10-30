@@ -1,4 +1,16 @@
-export type TransactionType = 'income' | 'expense';
+/**
+ * R3a: 'transfer' = money moved between two of the owner's own accounts.
+ * One row: `accountId` is the "from" account, `transferAccountId` the "to"
+ * account. It changes both balances and never counts as income or expense.
+ */
+export type TransactionType = 'income' | 'expense' | 'transfer';
+
+/**
+ * R3a: what a link on a row means. 'transfer_twin' = the SMS credit half of a
+ * confirmed transfer pair (kept, rejected, for dedup). R3b adds
+ * 'refund' / 'duplicate' (declared now, not built yet).
+ */
+export type LinkKind = 'transfer_twin' | 'refund' | 'duplicate';
 
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'invalid';
 
@@ -31,6 +43,11 @@ export interface Transaction {
   confidenceScore: number | null;
   parserVersion: string | null;
   bulkBatchId: string | null;
+  /** R3a: the "to" account of a transfer (null/absent for income/expense). */
+  transferAccountId?: string | null;
+  /** R3a: the row this one is linked to (a transfer twin → its transfer). */
+  linkedTransactionId?: string | null;
+  linkKind?: LinkKind | null;
   createdAt: string;
   updatedAt: string;
 }
