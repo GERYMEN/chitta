@@ -32,6 +32,26 @@ const MONTHS_PER_PERIOD: Record<Exclude<Period, '1Y'>, number> = {
 
 const MONTHS_IN_YEAR = 12;
 
+/** R4: chip order of the period selector. */
+export const PERIODS: ReadonlyArray<Period> = ['1M', '3M', '6M', '9M', '1Y'];
+
+/**
+ * R4: the selected period starts here every session (store-only state —
+ * never persisted, never a setting, never audited).
+ */
+export const DEFAULT_PERIOD: Period = '1M';
+
+/**
+ * R4: is a row's ISO timestamp inside a period range? BOTH ends are
+ * inclusive: `from` (local midnight on the 1st, or 12 months back for 1Y)
+ * and `to` (the screen's injected "now"). An unparseable timestamp is never
+ * inside any range.
+ */
+export function isWithinRange(occurredAt: string, range: PeriodRange): boolean {
+  const at = Date.parse(occurredAt);
+  return at >= range.from.getTime() && at <= range.to.getTime();
+}
+
 export function periodRange(period: Period, now: Date, timeZone?: string): PeriodRange {
   // `timeZone` is a documented no-op placeholder (see doc comment above);
   // the `void` keeps it from tripping the unused-parameter rule.

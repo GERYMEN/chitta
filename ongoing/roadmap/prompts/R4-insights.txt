@@ -1,0 +1,123 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md (section R4 + "Working
+rules"), ongoing/roadmap/STATE.md, ongoing/roadmap/R3b-refund-duplicate.md
+and ongoing/roadmap/R3a-transfers.md (totals rules + helper call-site map —
+build on them), ongoing/roadmap/BUGS.md, the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute privacy rules),
+docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R4-insights (created from phase/R3b-refund-duplicate).
+Stay on it. Do not switch branches, do not commit.
+
+PHASE R4 — Insights: "where did my money go" for any period.
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK AT ALL (no adb
+taps, dumps, installs). The device section at the end runs later in a
+separate dispatch.
+
+Verified current state (grep to confirm):
+- src/domain/periods/period.rules.ts periodRange(period, now): 1M = 1st of
+  current month → now; 3M/6M/9M = current + previous 2/5/8 months; 1Y =
+  trailing 12 months. Used nowhere in UI yet.
+- BUG B5 (new): HomeScreen.tsx ~line 62 computes INCOME/EXPENSES tiles
+  with incomeExpenseTotals(approved) over ALL approved rows ever, while
+  the captions say "This month". Fix via T1.
+- BUG B1 (BUGS.md): TransactionsScreen uses a fixed fixture "today"
+  (1 Oct 2026). The period filter needs the real clock, so FIX B1 in this
+  phase: one injected `now` (device clock, refreshed on screen focus)
+  feeds both the date headers and the period range.
+- Totals rules (R3a/R3b): incomeExpenseTotals / countsTowardIncomeExpense
+  / spendContributionMinor are the single source of truth: only approved;
+  transfers, transfer twins and hidden duplicates never count; a linked
+  refund reduces spend in the REFUND's own date and the original's
+  category instead of counting as income.
+- Store loads all transactions into memory (transaction.repository
+  `SELECT * FROM transactions`).
+
+ORCHESTRATOR DECISION (overrides ROADMAP R4 items 2 + "Data"): do NOT
+add SQL aggregates and do NOT add a migration. The R3a/R3b netting rules
+live in pure TS; re-implementing them in SQL would create a second source
+of truth. All insights = pure, memoized functions over the in-memory
+transactions using the helpers above. Keep each aggregate a single O(n)
+pass. ix_tx_status_date already exists.
+
+TASKS
+T1 Period selector:
+   - Shared `PeriodSelector` (chips 1M 3M 6M 9M 1Y, ≥48dp, selected state
+     announced). Selected period lives in the store, session-only
+     (default 1M, NOT persisted, NOT a setting, no audit), shared by Home
+     and Transactions so both always agree.
+   - Home: INCOME/EXPENSES tiles use the selected period (fixes B5);
+     caption = period label ("This month", "Last 3 months", "Last 6
+     months", "Last 9 months", "Last 12 months"). Total balance stays
+     all-time.
+   - Transactions: the R1 pure filter predicate gains the period range;
+     list + Inflow/Spent/Net reflect it; Reset sets period back to 1M.
+   - Partial-data notice under the selector when the period starts
+     before the earliest approved transaction: "Records start <d MMM
+     yyyy> — earlier months may be incomplete." (choose the exact source
+     of "earliest" — earliest approved row is fine — and document).
+   - Small "N pending not included" hint when pending items fall in the
+     period (count only).
+T2 Pure insights domain (src/domain/insights/):
+   - spendByCategory(transactions, range) → [{categoryId, spendMinor,
+     count, share}] using spendContributionMinor; share = category spend /
+     total positive spend; a category whose refunds exceed spend keeps its
+     (negative) number but share 0; sorted desc; Uncategorised included.
+   - monthlyTrend(transactions, range) → calendar-month buckets that
+     intersect the range: {monthKey, incomeMinor, spendMinor, partial}.
+     1M shows the current month plus the previous 2 months for context
+     (document); 1Y may produce 13 buckets with partial first/last.
+   - merchantHistory(transactions, merchantKey, range) → {count,
+     spendMinor} using normalizeMerchant keys (approved, counting rows
+     only).
+T3 Charts behind a swappable interface (user decision: plain RN Views
+   now, chart library maybe later):
+   - src/components/charts/ChartBars.tsx: props {data: [{key, label,
+     value, secondaryValue?, color}], orientation 'horizontal' |
+     'vertical', formatValue, onPressBar?, accessibilityLabelFor}.
+     Rendered with plain Views + theme tokens. Screens import ONLY
+     ChartBars — never hand-built bar Views — so the renderer can be
+     swapped later without touching screens. No new dependency.
+T4 Home "Where it went" card: top 5 categories + "Other" as horizontal
+   bars with ₹ amount, count and % of spend (category colour from R2,
+   fallback token); empty state when no spend in period. "See all ›"
+   opens a new Insights screen (stack screen, NOT a new tab — 4-tab
+   cap): period selector, full category list, Trends (vertical paired
+   bars spend vs income per month, partial months marked), totals.
+   Tapping a category bar → Transactions filtered by that category +
+   current period (R1 filters).
+T5 Merchant history chip on Transaction detail (approved income/expense
+   only): "N visits · ₹X <period label>" → Transactions filtered by
+   merchant key (add a merchantKey filter to the predicate with a
+   removable chip "Merchant: <name> ✕"; search box stays as is).
+T6 Tests: period boundaries (1st-of-month midnight inclusive, to = now,
+   1Y leap day); B1 headers use injected now; Home tiles follow the
+   period (B5); predicate period + category + merchantKey combos;
+   spendByCategory vs a simple reference on a fixture that includes
+   transfers, twins, hidden duplicates, pending, a same-month refund and
+   a cross-month refund; shares; negative category; monthlyTrend buckets
+   incl. 1M context months and 1Y partial buckets; merchantHistory;
+   ChartBars renders N bars with a11y labels and onPressBar.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+OUTPUT: ongoing/roadmap/R4-insights.md (files, insights rules, ChartBars
+interface, call-site map of the period + totals helpers, B1/B5 fix
+notes, gates, decisions, list of what still needs the device pass).
+Leak-scan the report with the pattern given in the dispatch message
+(shell only — never write the pattern into any repo file). Do not commit.
+REPLY ONLY: gates yes/no; files changed count; decisions you made.
+
+--- DEVICE PASS (LATER, separate dispatch; do NOT run now) ---
+Combined with the pending R3b checks (R3b prompt D1–D6 + F2). Synthetic
+data on "QA Delete Bank 9999" only; real totals never printed (SAME/
+DIFFERENT or QA-only deltas). R4 checks: period chips switch Home tile
+captions; add QA expenses "QA-Merchant-12" 200.00 (category A) and
+"QA-Merchant-13" 50.00 (category B), approve → "Where it went" deltas for
+A/B = +200/+50; tapping A opens Transactions filtered to A (QA row
+present); merchant chip on QA-Merchant-12 shows "1 visit"; Insights
+screen opens; Trends render; B1 TODAY header correct for a QA row added
+today. Cleanup QA rows; logcat clean; install release build at the end.

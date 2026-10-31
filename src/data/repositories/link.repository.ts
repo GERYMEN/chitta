@@ -127,10 +127,26 @@ async function markDuplicate(
   });
 }
 
-/** "Not a duplicate": the restored row + 'duplicate_restored'. */
-async function restoreDuplicate(restored: Transaction, keptId: string): Promise<void> {
+/**
+ * "Not a duplicate": the restored row + 'duplicate_restored'. With `dismiss`,
+ * the pair is also dismissed in the same transaction so it is not suggested
+ * again straight away (Undo right after marking passes no dismissal).
+ */
+async function restoreDuplicate(
+  restored: Transaction,
+  keptId: string,
+  options: { dismiss?: boolean } = {},
+): Promise<DuplicateDismissal | null> {
+  const [aId, bId] = orderedPairIds(restored.id, keptId);
+  const dismissal = options.dismiss ? { aId, bId, dismissedAt: new Date().toISOString() } : null;
   await getDatabase().transaction(async tx => {
     await updateTransactionTx(tx, restored);
+    if (dismissal) {
+      await tx.execute(
+        'INSERT OR IGNORE INTO duplicate_pair_dismissals (a_id, b_id, dismissed_at) VALUES (?, ?, ?)',
+        [dismissal.aId, dismissal.bId, dismissal.dismissedAt],
+      );
+    }
     await auditRepository.insert(tx, {
       eventType: 'duplicate_restored',
       actor: 'user',
@@ -139,6 +155,7 @@ async function restoreDuplicate(restored: Transaction, keptId: string): Promise<
       metadata: { kind: 'duplicate_restored', kept_id: keptId, duplicate_id: restored.id },
     });
   });
+  return dismissal;
 }
 
 /** The newest 'duplicate_marked' payload for this hidden row + kept row (restore source). */

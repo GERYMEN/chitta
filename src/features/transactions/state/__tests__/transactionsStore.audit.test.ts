@@ -120,8 +120,9 @@ describe('store actions write exactly one audit event each, in the same db.trans
       actor: 'user',
       transaction_id: created.id,
       account_id: 'acc-qa',
-      metadata_json: null,
     });
+    // B4: the type at event time (enum only).
+    expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'created', transactionType: 'expense' });
     expectSameTransaction(call, /^INSERT INTO transactions/);
   });
 
@@ -129,7 +130,11 @@ describe('store actions write exactly one audit event each, in the same db.trans
     const created = await useTransactionsStore.getState().addTransaction(smsInput());
     const { row, call } = onlyAudit();
     expect(row).toMatchObject({ event_type: 'detected', actor: 'system', transaction_id: created.id });
-    expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'detected', confidence: 90 });
+    expect(JSON.parse(String(row.metadata_json))).toEqual({
+      kind: 'detected',
+      confidence: 90,
+      transactionType: 'expense',
+    });
     expectSameTransaction(call, /^INSERT INTO transactions/);
     expectNoSmsText();
   });
@@ -138,6 +143,7 @@ describe('store actions write exactly one audit event each, in the same db.trans
     await useTransactionsStore.getState().approve('txn-qa');
     const { row, call } = onlyAudit();
     expect(row).toMatchObject({ event_type: 'approved', actor: 'user', transaction_id: 'txn-qa' });
+    expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'approved', transactionType: 'expense' });
     expectSameTransaction(call, /^UPDATE transactions/);
   });
 
@@ -149,6 +155,7 @@ describe('store actions write exactly one audit event each, in the same db.trans
       kind: 'auto_approved',
       confidence: 90,
       threshold: 85,
+      transactionType: 'expense',
     });
     expectSameTransaction(call, /^UPDATE transactions/);
     expectNoSmsText();
@@ -175,7 +182,11 @@ describe('store actions write exactly one audit event each, in the same db.trans
     });
     const { row, call } = onlyAudit();
     expect(row).toMatchObject({ event_type: 'edited', actor: 'user', transaction_id: 'txn-qa' });
-    expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'edited', fields: ['note'] });
+    expect(JSON.parse(String(row.metadata_json))).toEqual({
+      kind: 'edited',
+      fields: ['note'],
+      transactionType: 'expense',
+    });
     expect(String(row.metadata_json)).not.toContain('QA note');
     expectSameTransaction(call, /^UPDATE transactions/);
   });

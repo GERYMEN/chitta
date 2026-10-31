@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Icon } from '../../../shared/icons';
+import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { TransactionPatch } from '../../../data/repositories/transaction.repository';
@@ -42,9 +42,9 @@ export function EditTransactionScreen() {
     return (
       <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+          <HeaderBackButton onPress={() => navigation.goBack()} />
           <Text style={styles.headerTitle}>Edit Transaction</Text>
-          <View style={styles.headerSpacer} />
+          <HeaderSpacer />
         </View>
         <View style={styles.missing}>
           <Text style={styles.missingText} testID="edit-hidden-row">
@@ -116,11 +116,11 @@ export function EditTransactionScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>
           {transaction.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction'}
         </Text>
-        <View style={styles.headerSpacer} />
+        <HeaderSpacer />
       </View>
 
       {transaction.type === 'transfer' ? (
@@ -165,16 +165,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
-  },
-  headerSpacer: {
-    width: 22,
   },
   missing: {
     flex: 1,

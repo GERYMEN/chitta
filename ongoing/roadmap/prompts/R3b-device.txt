@@ -1,0 +1,85 @@
+GROUND FACTS: read ongoing/roadmap/prompts/R3b-refund-duplicate.txt (device
+checks D1–D6, the FOLLOW-UP R3b.1 section, device-safety rules),
+ongoing/roadmap/R3b-refund-duplicate.md (what was built, incl. F1/F2), the
+decisions log of ongoing/realtime-persistence/STATE.md (absolute
+device-safety + privacy rules).
+Main project (READ ONLY for you except your report file):
+/Users/mohammedsiraj/Downloads/projects/experiment/Tracker — another agent
+is editing code there for R4. Do NOT edit, build, run jest/Metro or git
+commands that change anything in the main project.
+
+PHASE R3b DEVICE PASS — the owner says the phone is free now.
+
+BUILD (do this FIRST, before touching the phone, so the phone time is
+used for testing only):
+- Code to test = committed R3b (3164a4f) in a separate worktree:
+  W=/private/tmp/claude-501/-Users-mohammedsiraj-Downloads-projects-experiment/7a5ecb0e-0287-4dbc-b368-ead5c275af23/scratchpad/tracker-r3b
+  (node_modules already cloned in; debug.keystore identical to the
+  installed app's, so install -r keeps data).
+- cd "$W/android" && export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+  openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+  ANDROID_HOME=/opt/homebrew/share/android-commandlinetools; ./gradlew
+  assembleRelease. Release APK = bundled JS, no Metro needed.
+- Do not edit source in the worktree.
+
+INSTALL: adb -s 00015365L001524 install -r
+"$W/android/app/build/outputs/apk/release/app-release.apk". If it ever
+reports INSTALL_FAILED_UPDATE_INCOMPATIBLE: STOP and report. NEVER
+uninstall or clear data. Launch: am start -W -n com.tracker/.MainActivity.
+
+CHECKS (synthetic data on "QA Delete Bank 9999" only; manual items start
+pending — approve the QA items via Pending, touching QA rows only):
+ D1 Refund: expense "QA-Merchant-10" 300.00 + income "QA-Merchant-10"
+    100.00 on the QA bank; approve both. Capture Home income + expense
+    (variables, never printed). Income detail → Link to original expense
+    → QA-Merchant-10 is the top candidate (grep QA only) → link. Home
+    income delta −100.00, expense delta −100.00 (print deltas only); QA
+    bank balance unchanged by the link. Expense detail "Refunded ₹100.00".
+ F1 Edit guard: Edit the QA-Merchant-10 expense, set amount 50.00 →
+    inline error, cannot save; cancel without saving. Edit the linked
+    refund → changing type away from income is blocked; cancel.
+ D1b Unlink → deltas back to 0. (Leave unlinked.)
+ D2 Duplicate: two expenses "QA-Merchant-11" 50.00, same account, same
+    date/time; approve both. "Possible duplicates" (Pending and/or the
+    Home "to review" card → Review screen) shows the QA pair (grep QA).
+    Mark duplicate → expense delta −50.00 and QA bank +50.00 vs before
+    marking. Hidden row detail (via Activity or Undo snackbar) → Not a
+    duplicate → deltas back to 0.
+ D3 Real data: COUNT only of possible duplicates and the "to review"
+    card number. Never act on real items.
+ D4 Activity: QA refund/duplicate sentences present and masked
+    ("₹ ••••") — grep QA rows only.
+ F2 Uncategorised screen: report only (a) COUNT of "View original SMS"
+    links and (b) COUNT of rows. Never tap a link on a real row; never
+    print row text, previews or amounts.
+ D5 Cleanup: delete all QA-Merchant-10/11 rows (unlink first if
+    required). QA bank balance back to its starting value. Force-stop +
+    relaunch; logcat (since install) 0 FATAL com.tracker, 0 "Maximum
+    update depth", 0 ReactNativeJS errors. Leave this R3b release build
+    installed; end with force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Locked screen = stop (never enter a PIN).
+- If another app comes to the front or anything changes that you did
+  not do, the owner is using the phone: stop touching it, do not press
+  HOME over their app, do not inspect the other app; watch ONLY package
+  name + lock state for up to 10 minutes; if Tracker is not back in
+  front by then, stop and report what ran.
+- Every uiautomator dump grep-filtered to one QA element or one label;
+  never print a full dump, real merchants, amounts, previews or senders;
+  `adb shell rm /sdcard/u.xml` after; /sdcard paths only inside adb shell.
+- Real totals never printed: capture in shell variables and print only
+  SAME/DIFFERENT or QA-only deltas.
+- Never change the owner's real transactions, accounts or settings;
+  never link/mark/dismiss real items; never tracker.db / sqlite3 /
+  run-as; no uninstall/clear-data/screenshots.
+
+OUTPUT: ongoing/roadmap/R3b-device.md (build result, D1–D5 + F1 + F2
+PASS/FAIL with QA-only evidence, counts, leftover synthetic data, what
+did not run and why). Leak-scan it with the pattern given in the
+dispatch message (shell only, never written to a file). Do not commit.
+REPLY ONLY: build yes/no; each check PASS/FAIL/NOT RUN; anything
+surprising.

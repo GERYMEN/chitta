@@ -3,8 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Icon } from '../../../shared/icons';
-import { showDialog } from '../../../shared/ui';
+import { HeaderBackButton, HeaderSpacer, showDialog } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { activeAccounts } from '../../../domain/accounts/account.rules';
@@ -83,9 +82,9 @@ export function AddAccountScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Add Account</Text>
-        <View style={styles.headerSpacer} />
+        <HeaderSpacer />
       </View>
 
       <AccountForm
@@ -114,15 +113,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
-  },
-  headerSpacer: {
-    width: 22,
   },
 });

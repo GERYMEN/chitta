@@ -76,11 +76,14 @@ import {
 import {
   changedAccountFields,
   changedTransactionFields,
+  editedMetadata,
 } from '../../../domain/audit/audit.rules';
 import {
   DEFAULT_TRANSACTION_FILTERS,
   TransactionFilters,
 } from '../filters/transactionFilters';
+import { Period } from '../../../domain/periods/period.types';
+import { DEFAULT_PERIOD } from '../../../domain/periods/period.rules';
 
 /** R3a: Add Record → Transfer / Edit transfer form values (paise, ISO date). */
 export interface TransferInput {
@@ -131,7 +134,15 @@ interface TransactionsState {
   /** Transactions-list filters (R1); kept here so they survive tab switches. */
   transactionFilters: TransactionFilters;
   setTransactionFilters: (patch: Partial<TransactionFilters>) => void;
+  /** R1 Reset — R4: also puts the selected period back to 1M. */
   resetTransactionFilters: () => void;
+  /**
+   * R4: the period (1M…1Y) shared by Home, Transactions and Insights so they
+   * always agree. Session-only: starts at 1M, never persisted, not a
+   * setting, never audited (it changes no money).
+   */
+  selectedPeriod: Period;
+  setSelectedPeriod: (period: Period) => void;
   approve: (id: string, auto?: AutoApproval) => Promise<void>;
   reject: (id: string) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
@@ -187,7 +198,8 @@ interface TransactionsState {
   /** R3b: keep `keptId`, hide `duplicateId` (rejected + link_kind duplicate). */
   markDuplicate: (keptId: string, duplicateId: string) => Promise<boolean>;
   /** R3b: "Not a duplicate" on a hidden row — restores it exactly. */
-  restoreDuplicate: (duplicateId: string) => Promise<boolean>;
+  /** `dismiss` also records "Not duplicates" so the pair is not re-suggested. */
+  restoreDuplicate: (duplicateId: string, options?: { dismiss?: boolean }) => Promise<boolean>;
   /** R3b: "Not duplicates" on a suggestion. */
   dismissDuplicatePair: (aId: string, bId: string) => Promise<void>;
 }
@@ -245,11 +257,15 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   approvalMode: DEFAULT_APPROVAL_MODE,
   autoApproveThreshold: DEFAULT_AUTO_APPROVE_THRESHOLD,
   transactionFilters: DEFAULT_TRANSACTION_FILTERS,
+  selectedPeriod: DEFAULT_PERIOD,
 
   setTransactionFilters: patch =>
     set(state => ({ transactionFilters: { ...state.transactionFilters, ...patch } })),
 
-  resetTransactionFilters: () => set({ transactionFilters: DEFAULT_TRANSACTION_FILTERS }),
+  resetTransactionFilters: () =>
+    set({ transactionFilters: DEFAULT_TRANSACTION_FILTERS, selectedPeriod: DEFAULT_PERIOD }),
+
+  setSelectedPeriod: period => set({ selectedPeriod: period }),
 
   hydrate: async () => {
     await runMigrations();
@@ -344,9 +360,15 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
             kind: 'auto_approved',
             confidence: auto.confidence,
             threshold: auto.threshold,
+            transactionType: current.type,
           },
         }
-      : { eventType: 'approved', actor: 'user' };
+      : {
+          eventType: 'approved',
+          actor: 'user',
+          // B4: the type at event time (enum only).
+          metadata: { kind: 'approved', transactionType: current.type },
+        };
 
     set(state => ({
       transactions: state.transactions.map(t =>
@@ -371,7 +393,13 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     }));
 
     await transactionRepository
-      .update(id, { status: 'rejected' }, [{ eventType: 'rejected', actor: 'user' }])
+      .update(id, { status: 'rejected' }, [
+        {
+          eventType: 'rejected',
+          actor: 'user',
+          metadata: { kind: 'rejected', transactionType: current.type },
+        },
+      ])
       .catch(() => get().refresh());
   },
 
@@ -404,11 +432,19 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     // SMS rows are 'detected' by the system; Add Record rows are 'created' by the user.
     const audit: AuditEventDraft =
       input.sourceType === 'manual'
-        ? { eventType: 'created', actor: 'user' }
+        ? {
+            eventType: 'created',
+            actor: 'user',
+            metadata: { kind: 'created', transactionType: input.type },
+          }
         : {
             eventType: 'detected',
             actor: 'system',
-            metadata: { kind: 'detected', confidence: input.confidenceScore },
+            metadata: {
+              kind: 'detected',
+              confidence: input.confidenceScore,
+              transactionType: input.type,
+            },
           };
     const created = await transactionRepository.create(input, [audit]);
     set(state => ({ transactions: [created, ...state.transactions] }));
@@ -435,9 +471,11 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     }
     const fields = existing ? changedTransactionFields(existing, patch) : [];
     // A save that changes nothing is not a money change: no audit row.
+    // B4: plus the type after the edit, and from/to when the type changed
+    // (Mark as transfer records e.g. expense → transfer).
     const audit: AuditEventDraft[] =
-      fields.length > 0
-        ? [{ eventType: 'edited', actor: 'user', metadata: { kind: 'edited', fields } }]
+      existing && fields.length > 0
+        ? [{ eventType: 'edited', actor: 'user', metadata: editedMetadata(existing, patch, fields) }]
         : [];
     const updated = await transactionRepository.update(id, patch, audit);
     set(state => ({
@@ -534,14 +572,21 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     // Re-read the live categories so Undo restores what was really there.
     const byId = new Map(get().transactions.map(t => [t.id, t]));
     const live: CategoryChange[] = [];
+    const types = new Map<string, Transaction['type']>();
     for (const change of changes) {
       const current = byId.get(change.id);
       if (!current || current.categoryId === change.toCategoryId) continue;
       live.push({ ...change, accountId: current.accountId, fromCategoryId: current.categoryId });
+      types.set(change.id, current.type);
     }
     if (live.length === 0) return [];
     const updatedAt = await transactionRepository.setCategories(
-      live.map(c => ({ id: c.id, accountId: c.accountId, categoryId: c.toCategoryId })),
+      live.map(c => ({
+        id: c.id,
+        accountId: c.accountId,
+        categoryId: c.toCategoryId,
+        transactionType: types.get(c.id),
+      })),
     );
     const target = new Map(live.map(c => [c.id, c.toCategoryId]));
     set(state => ({
@@ -624,7 +669,13 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         confidenceScore: null,
         parserVersion: null,
       },
-      [{ eventType: 'created', actor: 'user' }],
+      [
+        {
+          eventType: 'created',
+          actor: 'user',
+          metadata: { kind: 'created', transactionType: 'transfer' },
+        },
+      ],
     );
     set(state => ({ transactions: [created, ...state.transactions] }));
     return created;
@@ -746,7 +797,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     return true;
   },
 
-  restoreDuplicate: async duplicateId => {
+  restoreDuplicate: async (duplicateId, options = {}) => {
     const hidden = get().transactions.find(t => t.id === duplicateId);
     if (!hidden || hidden.linkKind !== 'duplicate' || hidden.linkedTransactionId == null) {
       return false;
@@ -756,9 +807,12 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     if (!mark) return false;
     const restored = buildDuplicateRestore(hidden, mark.previous, new Date().toISOString());
     if (!restored) return false;
-    await linkRepository.restoreDuplicate(restored, keptId);
+    const dismissal = await linkRepository.restoreDuplicate(restored, keptId, options);
     set(state => ({
       transactions: state.transactions.map(t => (t.id === restored.id ? restored : t)),
+      duplicateDismissals: dismissal
+        ? [...state.duplicateDismissals, dismissal]
+        : state.duplicateDismissals,
     }));
     return true;
   },

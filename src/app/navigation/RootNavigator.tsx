@@ -13,6 +13,7 @@ import { ActivityScreen } from '../../features/activity/screens/ActivityScreen';
 import { CategoriesScreen } from '../../features/categories/screens/CategoriesScreen';
 import { UncategorisedScreen } from '../../features/categories/screens/UncategorisedScreen';
 import { ReviewScreen } from '../../features/review/screens/ReviewScreen';
+import { InsightsScreen } from '../../features/insights/screens/InsightsScreen';
 import { RootStackParamList } from './routes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -71,6 +72,11 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
       <Stack.Screen
         name="Review"
         component={ReviewScreen}
+        options={{ presentation: 'card' }}
+      />
+      <Stack.Screen
+        name="Insights"
+        component={InsightsScreen}
         options={{ presentation: 'card' }}
       />
     </Stack.Navigator>

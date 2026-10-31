@@ -132,7 +132,11 @@ describe('addTransfer (Add Record → Transfer)', () => {
     });
     const audits = db.auditInserts();
     expect(audits).toHaveLength(1);
-    expect(audits[0].row).toMatchObject({ event_type: 'created', actor: 'user', metadata_json: null });
+    expect(audits[0].row).toMatchObject({ event_type: 'created', actor: 'user' });
+    expect(JSON.parse(String(audits[0].row.metadata_json))).toEqual({
+      kind: 'created',
+      transactionType: 'transfer',
+    });
     const insert = db.calls.find(c => /^INSERT INTO transactions/.test(c.sql))!;
     expect(insert.inTransaction).toBe(true);
     expect(audits[0].call.transactionNo).toBe(insert.transactionNo);
@@ -272,6 +276,10 @@ describe('markAsTransfer / updateTransfer', () => {
     expect(JSON.parse(String(audit[0].row.metadata_json))).toEqual({
       kind: 'edited',
       fields: ['type', 'categoryId', 'transferAccountId'],
+      // B4: Mark as transfer records the type change.
+      transactionType: 'transfer',
+      fromType: 'expense',
+      toType: 'transfer',
     });
     expect(balance(BANK)).toBe(bankBefore);
     expect(balance(WALLET)).toBe(20000 + 10000);
@@ -317,6 +325,7 @@ describe('markAsTransfer / updateTransfer', () => {
     expect(JSON.parse(String(last.row.metadata_json))).toEqual({
       kind: 'edited',
       fields: ['accountId', 'transferAccountId'],
+      transactionType: 'transfer',
     });
     expect(balance(BANK)).toBe(1000000 + 50000);
   });

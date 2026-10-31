@@ -4,7 +4,9 @@ import {
   canTransition,
   confidenceTier,
   countsTowardIncomeExpense,
+  incomeContributionMinor,
   incomeExpenseTotals,
+  spendContributionMinor,
 } from '../transaction.rules';
 
 describe('confidenceTier', () => {
@@ -71,5 +73,33 @@ describe('R3a countsTowardIncomeExpense / incomeExpenseTotals', () => {
       ]),
     ).toEqual({ incomeMinor: 100000, expenseMinor: 25000, netMinor: 75000 });
     expect(incomeExpenseTotals([])).toEqual({ incomeMinor: 0, expenseMinor: 0, netMinor: 0 });
+  });
+});
+
+describe('R4 incomeContributionMinor (per-row form of incomeExpenseTotals)', () => {
+  const row = (patch: Record<string, unknown>) => ({ type: 'income' as const, amountMinor: 5000, ...patch });
+
+  it('plain income counts; refunds, transfers, twins, duplicates and expenses do not', () => {
+    expect(incomeContributionMinor(row({}))).toBe(5000);
+    expect(incomeContributionMinor(row({ linkKind: 'refund', linkedTransactionId: 'e1' }))).toBe(0);
+    expect(incomeContributionMinor(row({ linkKind: 'transfer_twin' }))).toBe(0);
+    expect(incomeContributionMinor(row({ linkKind: 'duplicate' }))).toBe(0);
+    expect(incomeContributionMinor(row({ type: 'transfer' }))).toBe(0);
+    expect(incomeContributionMinor(row({ type: 'expense' }))).toBe(0);
+  });
+
+  it('summing both per-row helpers gives incomeExpenseTotals', () => {
+    const rows = [
+      row({}),
+      row({ type: 'expense', amountMinor: 2000 }),
+      row({ amountMinor: 700, linkKind: 'refund', linkedTransactionId: 'e1' }),
+      row({ type: 'transfer', amountMinor: 9999 }),
+      row({ amountMinor: 1234, linkKind: 'duplicate' }),
+    ];
+    const income = rows.reduce((s, t) => s + incomeContributionMinor(t), 0);
+    const spend = rows.reduce((s, t) => s + spendContributionMinor(t), 0);
+    expect(incomeExpenseTotals(rows)).toEqual({ incomeMinor: income, expenseMinor: spend, netMinor: income - spend });
+    expect(income).toBe(5000);
+    expect(spend).toBe(1300);
   });
 });

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useShallow } from 'zustand/react/shallow';
 import { Icon } from '../../../shared/icons';
+import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { uncategorisedItems } from '../../../domain/categories/category.rules';
@@ -42,15 +43,9 @@ export function UncategorisedScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Back">
-          <Icon name="arrow-left" size={22} color={colors.onSurface} />
-        </Pressable>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Uncategorised</Text>
-        <View style={styles.headerSpacer} />
+        <HeaderSpacer />
       </View>
 
       <FlatList
@@ -104,7 +99,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
     minHeight: 48,
   },
@@ -112,9 +108,6 @@ const styles = StyleSheet.create({
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
-  },
-  headerSpacer: {
-    width: 22,
   },
   content: {
     paddingHorizontal: spacing.screen,

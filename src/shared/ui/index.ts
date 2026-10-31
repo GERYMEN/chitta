@@ -7,3 +7,4 @@ export * from './BottomSheet';
 export * from './Dialog';
 export * from './Slider';
 export * from './Snackbar';
+export * from './HeaderBackButton';

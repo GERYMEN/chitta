@@ -281,6 +281,7 @@ describe('addSuggestedAccount (R2b T2 insert-on-add)', () => {
         kind: 'auto_approved',
         confidence: 90,
         threshold: 90,
+        transactionType: 'expense',
       });
     }
     const statuses = useTransactionsStore

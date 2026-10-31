@@ -1,8 +1,8 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Icon } from '../../../shared/icons';
+import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { ReviewSections } from '../components/ReviewSections';
 
@@ -15,16 +15,9 @@ export function ReviewScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        {/* 48dp touch target (B2 lesson). */}
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.back}
-          accessibilityRole="button"
-          accessibilityLabel="Back">
-          <Icon name="arrow-left" size={22} color={colors.onSurface} />
-        </Pressable>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>To review</Text>
-        <View style={styles.back} />
+        <HeaderSpacer />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <ReviewSections emptyText="Nothing to review — all caught up." />
@@ -44,12 +37,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
-  },
-  back: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   headerTitle: {
     ...typography.headlineSm,

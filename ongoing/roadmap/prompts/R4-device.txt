@@ -1,0 +1,93 @@
+GROUND FACTS: read ongoing/roadmap/prompts/R3b-device.txt (R3b checks +
+device-safety rules), ongoing/roadmap/R3b-device.md (previous attempt —
+mostly not run), ongoing/roadmap/R4-insights.md (what R4 + B1–B5 fixes
+built, and its "needs device pass" list), the DEVICE PASS section at the
+end of ongoing/roadmap/prompts/R4-insights.txt, and the decisions log of
+ongoing/realtime-persistence/STATE.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker,
+branch phase/R4-insights (uncommitted R4 work = the code under test).
+Do not edit source, do not commit, do not switch branches.
+
+COMBINED DEVICE PASS: R3b + R4 + bug fixes B1–B5, on a RELEASE build.
+
+FACTS FROM THE OWNER (2026-10-31): the owner cleared Tracker's data
+themselves; "QA Delete Bank 9999" no longer exists. The owner APPROVED:
+create "QA Delete Bank 9999" (bank, last 4 9999, opening ₹1,000.00),
+run the checks on it, then REMOVE it (Accounts → remove, soft delete)
+at the end so it does not inflate their total. An unsaved QA "Add
+Account" form may still be open from the last attempt — if it is in
+front, press Back to discard it (or reuse it if it is clearly the QA
+form; only ever save synthetic QA data).
+
+STEP 0 BUILD FIRST (no phone): cd android && export JAVA_HOME=/opt/
+homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home; export
+PATH=$JAVA_HOME/bin:$PATH; export ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools; ./gradlew assembleRelease.
+
+STEP 1 WAIT FOR AN IDLE PHONE: the owner was using the phone during the
+last attempt. Touch nothing until, for 2 consecutive minutes (poll every
+~20 s, package name + lock state ONLY), the phone is unlocked and either
+the launcher or com.tracker is in front. Give up after 30 minutes and
+report. Never press HOME over another app; never inspect other apps.
+Then: adb install -r app/build/outputs/apk/release/app-release.apk (on
+INSTALL_FAILED_UPDATE_INCOMPATIBLE: STOP, never uninstall); logcat -c
+right before; am start -W -n com.tracker/.MainActivity.
+
+CHECKS (synthetic QA data only; manual items start pending — approve QA
+rows via Pending; real values never printed — shell variables, print
+SAME/DIFFERENT or QA-only deltas):
+ S  Create QA Delete Bank 9999 (approved by owner).
+ R3b: D1 refund link (QA-Merchant-10 300.00 expense + 100.00 income;
+    deltas −100/−100 on Home tiles for the current period), F1 edit
+    guard (expense amount 50.00 blocked; refund type change blocked;
+    cancel), D1b unlink (deltas 0), D2 duplicates (two QA-Merchant-11
+    50.00 same time → Possible duplicates shows QA pair → mark → expense
+    delta −50 → Not a duplicate → 0), D3 real COUNTS only, D4 Activity
+    QA sentences masked, F2 Uncategorised: COUNT of rows + COUNT of
+    "View original SMS" links only (never tap on real rows).
+ R4: period chips change Home tile captions (This month / Last 3
+    months …); QA-Merchant-12 200.00 (category A) + QA-Merchant-13 50.00
+    (category B) approved → "Where it went" A/B deltas +200/+50 (if A/B
+    are not in the top 5, check on the Insights screen); tap A →
+    Transactions filtered to A + period (QA row present); merchant chip
+    on QA-Merchant-12 detail = "1 visit …"; Insights screen opens,
+    Trends render with 1M (3 months) and 1Y (report whether month
+    labels overlap/clip — use bounds from a grep-filtered dump of the
+    label elements only); B1: today's QA rows sit under a TODAY header;
+    B5: tiles differ between 1M and 1Y only as expected (SAME/DIFFERENT
+    only); B2: report the bounds (dp) of the "Back" button on 3 stack
+    screens (≥48dp); B3: reveal amounts on Activity, wait 30 s, still
+    revealed; leave + return → masked; B4: QA-Merchant-14 expense 20.00,
+    approve, mark as transfer → needs a 2nd QA account: create "QA
+    Wallet 8888" (cash, opening 0; owner-approved pattern) → Activity's
+    original "added" row for QA-Merchant-14 still reads as an expense,
+    the mark row reads "You moved".
+ CLEANUP: delete all QA-Merchant-10..14 rows (unlink / restore first if
+    the UI requires), then remove QA Wallet 8888 and QA Delete Bank 9999
+    (soft delete). Force-stop + relaunch; logcat since install: 0 FATAL
+    com.tracker, 0 "Maximum update depth", 0 ReactNativeJS errors. Leave
+    the R4 release build installed; end with force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Locked = stop (never enter a PIN).
+- If another app comes to the front or anything changes that you did not
+  do: stop touching the phone, never press HOME over the owner's app,
+  never inspect it; watch package name + lock state only for up to 10
+  minutes, resume only after Tracker has been back in front and idle for
+  2 minutes; otherwise stop and report what ran.
+- Every uiautomator dump grep-filtered to one QA element or one label;
+  never print a full dump, real merchants, amounts, previews or senders;
+  `adb shell rm /sdcard/u.xml` after; /sdcard only inside adb shell.
+- Never change the owner's real transactions, accounts or settings;
+  never link/mark/dismiss/categorise real items; never tracker.db /
+  sqlite3 / run-as; no uninstall/clear-data/screenshots.
+
+OUTPUT: ongoing/roadmap/R4-device.md (build, each check PASS/FAIL/NOT
+RUN with QA-only evidence, counts, leftovers, what did not run and why).
+Leak-scan it with the pattern given in the dispatch message (shell only,
+never written to a file). Do not commit.
+REPLY ONLY: build yes/no; each check PASS/FAIL/NOT RUN; anything
+surprising.

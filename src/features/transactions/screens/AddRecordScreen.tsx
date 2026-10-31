@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../../shared/ui';
+import { Button, HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, spacing, typography } from '../../../theme';
 import { useShallow } from 'zustand/react/shallow';
@@ -86,9 +86,9 @@ export function AddRecordScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Add Record</Text>
-        <View style={styles.headerSpacer} />
+        <HeaderSpacer />
       </View>
 
       {accounts.length === 0 ? (
@@ -134,16 +134,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
-  },
-  headerSpacer: {
-    width: 22,
   },
   empty: {
     flex: 1,

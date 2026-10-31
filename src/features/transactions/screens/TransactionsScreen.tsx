@@ -15,6 +15,8 @@ import {
 } from '../state/transactionsStore';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import {
+  canResetFilters,
+  DEFAULT_TRANSACTION_FILTERS,
   filterTransactions,
   hasActiveFilters,
   totalsFor,
@@ -30,29 +32,20 @@ import {
   isArchivedCategory,
   visibleCategories,
 } from '../../../domain/categories/category.rules';
-import { incomeExpenseTotals, isLinkedRefund } from '../../../domain/transactions/transaction.rules';
+import { isLinkedRefund } from '../../../domain/transactions/transaction.rules';
 import { transferRowSubtitle } from '../../transfers/transferLabels';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
+import { buildDaySections } from '../daySections';
+import { PeriodSelector } from '../../insights/components/PeriodSelector';
+import { PeriodNotices } from '../../insights/components/PeriodNotices';
+import { useSelectedPeriod, usePeriodNotices } from '../../insights/hooks/usePeriod';
+import {
+  merchantFilterChipLabel,
+  PERIOD_CAPTION,
+  periodPhrase,
+} from '../../insights/insightLabels';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-function dayKey(iso: string): string {
-  const date = new Date(iso);
-  return date.toDateString();
-}
-
-/** Fixture "today" — Milestone 2 replaces this with the real device clock. */
-const NOW = new Date('2026-10-01T23:59:00.000Z');
-
-function dayLabel(iso: string, now: Date): string {
-  const date = new Date(iso);
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  if (dayKey(iso) === dayKey(now.toISOString())) return 'TODAY';
-  if (dayKey(iso) === dayKey(yesterday.toISOString())) return 'YESTERDAY';
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }).toUpperCase();
-}
 
 type Picker = 'account' | 'category' | null;
 
@@ -67,13 +60,28 @@ export function TransactionsScreen() {
   const setFilters = useTransactionsStore(state => state.setTransactionFilters);
   const resetFilters = useTransactionsStore(state => state.resetTransactionFilters);
   const [picker, setPicker] = useState<Picker>(null);
+  // R4: one injected now (device clock, refreshed on focus) feeds the period
+  // range AND the TODAY/YESTERDAY headers (fixes B1); the period is shared
+  // with Home through the store.
+  const { period, setPeriod, now, range } = useSelectedPeriod();
+  const { earliestApprovedAt, pendingCount } = usePeriodNotices(range);
 
   // One pure predicate (transactionFilters.ts) drives the list, the chip
-  // counts and the totals, so all three always agree.
-  const filtered = useMemo(() => filterTransactions(approved, filters), [approved, filters]);
-  const counts = useMemo(() => typeCounts(approved, filters), [approved, filters]);
+  // counts and the totals, so all three always agree. R4: it includes the
+  // selected period.
+  const filtered = useMemo(
+    () => filterTransactions(approved, filters, range),
+    [approved, filters, range],
+  );
+  const counts = useMemo(() => typeCounts(approved, filters, range), [approved, filters, range]);
+  const inPeriodCount = useMemo(
+    () => filterTransactions(approved, DEFAULT_TRANSACTION_FILTERS, range).length,
+    [approved, range],
+  );
   const totals = totalsFor(filtered);
   const filtering = hasActiveFilters(filters);
+  const canReset = canResetFilters(filters, period);
+  const periodCaption = PERIOD_CAPTION[period];
 
   const selectedAccount = accounts.find(a => a.id === filters.accountId) ?? null;
   const selectedCategory = categories.find(c => c.id === filters.categoryId) ?? null;
@@ -99,24 +107,8 @@ export function TransactionsScreen() {
     setFilters({ type });
   }
 
-  const sections = useMemo(() => {
-    const byDay = new Map<string, typeof filtered>();
-    for (const transaction of filtered) {
-      const key = dayKey(transaction.occurredAt);
-      const list = byDay.get(key) ?? [];
-      list.push(transaction);
-      byDay.set(key, list);
-    }
-    return Array.from(byDay.entries())
-      .sort((a, b) => new Date(b[1][0].occurredAt).getTime() - new Date(a[1][0].occurredAt).getTime())
-      .map(([, data]) => ({
-        title: dayLabel(data[0].occurredAt, NOW),
-        // R3a: transfers never move a day's net (single income/expense rule).
-        netMinor: incomeExpenseTotals(data).netMinor,
-        data,
-      }));
-  }, [filtered]);
-
+  // R3a: transfers never move a day's net (single income/expense rule).
+  const sections = useMemo(() => buildDaySections(filtered, now), [filtered, now]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -128,11 +120,20 @@ export function TransactionsScreen() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>Transactions</Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.subtitle} testID="transactions-subtitle">
               {filtering
-                ? `Showing ${filtered.length} of ${approved.length} settled`
-                : `${approved.length} Settled · All Verified`}
+                ? `Showing ${filtered.length} of ${inPeriodCount} settled · ${periodCaption}`
+                : `${inPeriodCount} Settled · ${periodCaption}`}
             </Text>
+
+            <View style={styles.periodBlock}>
+              <PeriodSelector value={period} onChange={setPeriod} />
+              <PeriodNotices
+                range={range}
+                earliestApprovedAt={earliestApprovedAt}
+                pendingCount={pendingCount}
+              />
+            </View>
 
             <UncategorisedCard
               style={styles.nudge}
@@ -169,6 +170,15 @@ export function TransactionsScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}
               keyboardShouldPersistTaps="handled">
+              {filters.merchantKey !== null ? (
+                <FilterChip
+                  testID="filter-merchant"
+                  label={merchantFilterChipLabel(filters.merchantLabel)}
+                  accessibilityLabel={`Merchant filter ${filters.merchantLabel ?? ''}. Remove`}
+                  active
+                  onPress={() => setFilters({ merchantKey: null, merchantLabel: null })}
+                />
+              ) : null}
               <FilterChip
                 testID="filter-all"
                 label={`All ${counts.all}`}
@@ -207,7 +217,7 @@ export function TransactionsScreen() {
                 active={filters.categoryId !== null}
                 onPress={() => setPicker('category')}
               />
-              {filtering ? (
+              {canReset ? (
                 <FilterChip
                   testID="filter-reset"
                   label="Reset"
@@ -224,7 +234,9 @@ export function TransactionsScreen() {
             <Text style={styles.emptyText}>
               {filtering
                 ? 'No transactions match these filters.'
-                : 'No approved transactions yet — approve items in Pending to see them here.'}
+                : approved.length === 0
+                ? 'No approved transactions yet — approve items in Pending to see them here.'
+                : `No settled transactions ${periodPhrase(period)}.`}
             </Text>
           </View>
         }
@@ -245,7 +257,7 @@ export function TransactionsScreen() {
               subtitle={
                 item.type === 'transfer'
                   ? transferRowSubtitle(item, accounts, filters.accountId)
-                  : formatTransactionTimestamp(item.occurredAt)
+                  : formatTransactionTimestamp(item.occurredAt, now)
               }
               amountMinor={item.amountMinor}
               type={item.type}
@@ -341,12 +353,14 @@ function FilterChip({
   onPress,
   icon,
   testID,
+  accessibilityLabel,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   icon?: string;
   testID?: string;
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
@@ -354,6 +368,7 @@ function FilterChip({
       hitSlop={{ top: 6, bottom: 6 }}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
+      accessibilityLabel={accessibilityLabel}
       testID={testID}>
       <Chip
         label={label}
@@ -426,6 +441,10 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.outline,
     marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  periodBlock: {
+    gap: spacing.xs,
     marginBottom: spacing.md,
   },
   nudge: {

@@ -46,9 +46,32 @@ export type AuditedSettingKey = 'approval_mode' | 'auto_approve_threshold';
  * the feed can still say what was removed once the row is gone.
  */
 export type AuditMetadata =
-  | { kind: 'detected'; confidence: number | null }
-  | { kind: 'auto_approved'; confidence: number; threshold: number }
-  | { kind: 'edited'; fields: string[] }
+  /**
+   * B4 (R4): transaction events record the row's TYPE at event time (an enum
+   * name only — never text or amounts), so Activity can describe the row as
+   * it was then. Optional: events written before R4 have no type.
+   */
+  | { kind: 'detected'; confidence: number | null; transactionType?: TransactionType }
+  | { kind: 'created'; transactionType: TransactionType }
+  | { kind: 'approved'; transactionType: TransactionType }
+  | { kind: 'rejected'; transactionType: TransactionType }
+  | {
+      kind: 'auto_approved';
+      confidence: number;
+      threshold: number;
+      transactionType?: TransactionType;
+    }
+  /**
+   * `transactionType` = the type right after the edit; `fromType`/`toType`
+   * only when the edit changed the type (e.g. Mark as transfer).
+   */
+  | {
+      kind: 'edited';
+      fields: string[];
+      transactionType?: TransactionType;
+      fromType?: TransactionType;
+      toType?: TransactionType;
+    }
   | {
       kind: 'deleted';
       merchantName: string;

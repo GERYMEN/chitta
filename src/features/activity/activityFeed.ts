@@ -40,6 +40,12 @@ export interface ActivityContext {
    * a refund, the kept row of a duplicate (looked up by the id in metadata).
    */
   linkedTransaction?: Pick<Transaction, 'merchantName'> | null;
+  /**
+   * B4: the row's type AT EVENT TIME (typesAtEventTime). When set it replaces
+   * the live row's type, so e.g. the "added" event of an expense later marked
+   * as a transfer still reads "You added …", not "You moved …".
+   */
+  typeAtEvent?: TransactionType | null;
 }
 
 export interface ActivityOptions {
@@ -165,10 +171,100 @@ function balanceImpact(subject: Subject | null, show: boolean): ActivityItem['im
 }
 
 function subjectFor(event: AuditFeedEvent, context: ActivityContext): Subject | null {
-  if (context.transaction) return context.transaction;
-  if (event.deletedSnapshot) return event.deletedSnapshot;
-  if (event.metadata?.kind === 'deleted') return event.metadata;
-  return null;
+  const base: Subject | null = context.transaction
+    ? context.transaction
+    : event.metadata?.kind === 'deleted'
+    ? event.metadata
+    : event.deletedSnapshot ?? null;
+  if (!base) return null;
+  // The deleted event's own snapshot is already "as it was"; others take the
+  // event-time type when known (B4).
+  if (event.metadata?.kind === 'deleted' || !context.typeAtEvent) return base;
+  return { merchantName: base.merchantName, amountMinor: base.amountMinor, type: context.typeAtEvent };
+}
+
+/** The type an event recorded itself (B4 metadata; none on pre-R4 events). */
+function recordedType(event: AuditFeedEvent): TransactionType | null {
+  const metadata = event.metadata;
+  if (!metadata) return null;
+  switch (metadata.kind) {
+    case 'created':
+    case 'approved':
+    case 'rejected':
+      return metadata.transactionType;
+    case 'detected':
+    case 'auto_approved':
+      return metadata.transactionType ?? null;
+    case 'edited':
+      return metadata.toType ?? metadata.transactionType ?? null;
+    case 'deleted':
+      return metadata.type;
+    default:
+      return null;
+  }
+}
+
+/**
+ * B4: the transaction type each event's row had AT EVENT TIME, by event id.
+ * `events` must be newest first (feed order). Walking back in time per row:
+ *  1. an event that recorded its type (R4 metadata) uses it;
+ *  2. otherwise the type is derived from later type-changing events: an
+ *     `edited` fromType, the `transfer_paired` previous snapshot (both rows),
+ *     a `transfer_unpaired` (the row was a transfer before the undo), or a
+ *     pre-R4 type edit (Mark as transfer: income if the account also moved,
+ *     else expense — R3a's patch; an income/expense edit flipped the other);
+ *  3. otherwise the current row's type (or its deleted snapshot's).
+ */
+export function typesAtEventTime(
+  events: ReadonlyArray<AuditFeedEvent>,
+  currentType: (transactionId: string) => TransactionType | null,
+): Map<string, TransactionType> {
+  const result = new Map<string, TransactionType>();
+  // Type of each row at the point the walk has reached (going back in time).
+  const typeNow = new Map<string, TransactionType>();
+  const known = (id: string, event: AuditFeedEvent): TransactionType | null =>
+    typeNow.get(id) ??
+    currentType(id) ??
+    event.deletedSnapshot?.type ??
+    (event.metadata?.kind === 'deleted' ? event.metadata.type : null);
+
+  for (const event of events) {
+    const id = event.transactionId;
+    const metadata = event.metadata;
+    if (metadata?.kind === 'transfer_paired') {
+      // After pairing the debit is the transfer; before, both rows had their snapshot types.
+      result.set(event.id, 'transfer');
+      typeNow.set(metadata.debit_id, metadata.previous.debit.type);
+      typeNow.set(metadata.credit_id, metadata.previous.credit.type);
+      continue;
+    }
+    if (metadata?.kind === 'transfer_unpaired') {
+      const after = known(metadata.debit_id, event);
+      if (after) result.set(event.id, after);
+      typeNow.set(metadata.debit_id, 'transfer');
+      continue;
+    }
+    if (!id) continue;
+    const at = recordedType(event) ?? known(id, event);
+    if (!at) continue;
+    result.set(event.id, at);
+    let before: TransactionType = at;
+    if (metadata?.kind === 'edited') {
+      if (metadata.fromType) before = metadata.fromType;
+      else if (!metadata.toType && metadata.fields.includes('type')) {
+        before =
+          at === 'transfer'
+            ? metadata.fields.includes('accountId')
+              ? 'income'
+              : 'expense'
+            : at === 'income'
+            ? 'expense'
+            : 'income';
+      }
+    }
+    typeNow.set(id, before);
+  }
+  return result;
 }
 
 /** "QA-Merchant-07 ₹50.00" (or "QA-Merchant-07 ₹ ••••"), or "a transaction". */

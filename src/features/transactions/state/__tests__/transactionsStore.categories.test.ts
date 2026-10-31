@@ -175,7 +175,11 @@ describe('apply to past items + undo', () => {
     expect(txNos.size).toBe(1);
     for (const { row } of applyAudits) {
       expect(row.event_type).toBe('edited');
-      expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'edited', fields: ['categoryId'] });
+      expect(JSON.parse(String(row.metadata_json))).toEqual({
+        kind: 'edited',
+        fields: ['categoryId'],
+        transactionType: 'expense',
+      });
     }
     const updates = db.calls.filter(c => /^UPDATE transactions SET category_id/.test(c.sql));
     expect(updates.every(c => c.transactionNo === applyAudits[0].call.transactionNo)).toBe(true);

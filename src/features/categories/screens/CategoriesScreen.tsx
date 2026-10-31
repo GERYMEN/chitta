@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, showDialog } from '../../../shared/ui';
+import { Button, HeaderBackButton, HeaderSpacer, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
@@ -106,15 +106,9 @@ export function CategoriesScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Back">
-          <Icon name="arrow-left" size={22} color={colors.onSurface} />
-        </Pressable>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Categories</Text>
-        <View style={styles.headerSpacer} />
+        <HeaderSpacer />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -243,7 +237,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
     minHeight: 48,
   },
@@ -251,9 +246,6 @@ const styles = StyleSheet.create({
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
-  },
-  headerSpacer: {
-    width: 22,
   },
   content: {
     padding: spacing.screen,

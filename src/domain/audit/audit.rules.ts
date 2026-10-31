@@ -1,4 +1,4 @@
-import { Transaction } from '../transactions/transaction.types';
+import { Transaction, TransactionType } from '../transactions/transaction.types';
 import { Account } from '../accounts/account.types';
 import { AuditMetadata } from './audit.types';
 import { TransferRowSnapshot } from '../transfers/transfer.rules';
@@ -14,15 +14,32 @@ export function sanitizeAuditMetadata(
   if (!metadata) return null;
   switch (metadata.kind) {
     case 'detected':
-      return { kind: 'detected', confidence: finiteOrNull(metadata.confidence) };
+      return {
+        kind: 'detected',
+        confidence: finiteOrNull(metadata.confidence),
+        ...typeField('transactionType', metadata.transactionType),
+      };
+    case 'created':
+    case 'approved':
+    case 'rejected': {
+      const type = typeOrNull(metadata.transactionType);
+      return type ? { kind: metadata.kind, transactionType: type } : null;
+    }
     case 'auto_approved':
       return {
         kind: 'auto_approved',
         confidence: Number(metadata.confidence),
         threshold: Number(metadata.threshold),
+        ...typeField('transactionType', metadata.transactionType),
       };
     case 'edited':
-      return { kind: 'edited', fields: metadata.fields.map(String) };
+      return {
+        kind: 'edited',
+        fields: metadata.fields.map(String),
+        ...typeField('transactionType', metadata.transactionType),
+        ...typeField('fromType', metadata.fromType),
+        ...typeField('toType', metadata.toType),
+      };
     case 'account_updated':
       return { kind: 'account_updated', fields: metadata.fields.map(String) };
     case 'deleted':
@@ -113,6 +130,36 @@ function sanitizeRowSnapshot(snapshot: TransferRowSnapshot): TransferRowSnapshot
     linkedTransactionId:
       snapshot.linkedTransactionId == null ? null : String(snapshot.linkedTransactionId),
     linkKind: snapshot.linkKind ?? null,
+  };
+}
+
+const TRANSACTION_TYPES: ReadonlySet<string> = new Set(['income', 'expense', 'transfer']);
+
+/** B4: only a known type enum value survives; anything else is dropped. */
+function typeOrNull(value: unknown): TransactionType | null {
+  return typeof value === 'string' && TRANSACTION_TYPES.has(value) ? (value as TransactionType) : null;
+}
+
+function typeField<K extends string>(key: K, value: unknown): Partial<Record<K, TransactionType>> {
+  const type = typeOrNull(value);
+  return type ? ({ [key]: type } as Record<K, TransactionType>) : {};
+}
+
+/**
+ * B4: audit payload of an `edited` event — changed field names, the type
+ * right after the edit, and from/to when the type itself changed.
+ */
+export function editedMetadata(
+  before: Pick<Transaction, 'type'>,
+  patch: Partial<Pick<Transaction, 'type'>>,
+  fields: string[],
+): Extract<AuditMetadata, { kind: 'edited' }> {
+  const after = patch.type ?? before.type;
+  return {
+    kind: 'edited',
+    fields,
+    transactionType: after,
+    ...(after !== before.type ? { fromType: before.type, toType: after } : {}),
   };
 }
 

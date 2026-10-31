@@ -23,6 +23,7 @@ import {
 } from '../../../domain/duplicates/duplicate.rules';
 import { refundedLabel, refundForLabel, refundRowLine } from '../../refunds/refundLabels';
 import { hiddenDuplicatesLabel } from '../../duplicates/duplicateLabels';
+import { MerchantHistoryChip } from '../../insights/components/MerchantHistoryChip';
 
 export interface TransactionDetailContentProps {
   transaction: Transaction;
@@ -44,6 +45,11 @@ export interface TransactionDetailContentProps {
   onOpenTransfer?: (transferId: string) => void;
   /** R3b: refund ↔ expense and duplicate ↔ kept-row links. */
   onOpenTransaction?: (transactionId: string) => void;
+  /**
+   * R4 (T5): "N visits · ₹X <period>" under the summary — the detail screen
+   * passes it for approved income/expense rows only; tap → merchant list.
+   */
+  merchantChip?: { label: string; onPress: () => void } | null;
 }
 
 /** R3a: the kept SMS credit half of a confirmed transfer pair. */
@@ -228,6 +234,7 @@ export function TransactionDetailContent({
   onChangeCategory,
   onOpenTransfer,
   onOpenTransaction,
+  merchantChip = null,
 }: TransactionDetailContentProps) {
   const [transparencyOpen, setTransparencyOpen] = useState(variant === 'screen');
   const [auditOpen, setAuditOpen] = useState(false);
@@ -406,6 +413,9 @@ export function TransactionDetailContent({
           {formatTransactionTimestamp(transaction.occurredAt)} · {CHANNEL_LABEL[transaction.paymentMethod]}
           {account && !isTransfer ? ` · ${accountDisplayLabel(account)}` : ''}
         </Text>
+        {merchantChip ? (
+          <MerchantHistoryChip label={merchantChip.label} onPress={merchantChip.onPress} />
+        ) : null}
       </View>
 
       <Card style={styles.fieldsCard}>

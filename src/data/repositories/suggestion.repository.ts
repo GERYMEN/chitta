@@ -65,7 +65,11 @@ async function importSuggestion(input: ImportSuggestionInput): Promise<ImportSug
         {
           eventType: 'detected',
           actor: 'system',
-          metadata: { kind: 'detected', confidence: transaction.confidenceScore },
+          metadata: {
+            kind: 'detected',
+            confidence: transaction.confidenceScore,
+            transactionType: transaction.type,
+          },
         },
       ]);
     }

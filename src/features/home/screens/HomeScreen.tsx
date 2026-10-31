@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
@@ -20,11 +20,7 @@ import {
 import { calculateBalance } from '../../../domain/accounts/account.rules';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
-import {
-  canFastApprove,
-  incomeExpenseTotals,
-  isLinkedRefund,
-} from '../../../domain/transactions/transaction.rules';
+import { canFastApprove, isLinkedRefund } from '../../../domain/transactions/transaction.rules';
 import { ReviewCard } from '../../review/components/ReviewCard';
 import { transferRowSubtitle } from '../../transfers/transferLabels';
 import { syncSms, SmsSyncError } from '../../sms-sync/syncSms';
@@ -33,6 +29,17 @@ import { greetingFor } from '../../profile/utils/greeting';
 import { ProfileSettingsSheet } from '../../profile/components/ProfileSettingsSheet';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
+import {
+  periodTotals,
+  spendByCategory,
+  topCategories,
+} from '../../../domain/insights/insights.rules';
+import { categoryFilterFor } from '../../transactions/filters/transactionFilters';
+import { PeriodSelector } from '../../insights/components/PeriodSelector';
+import { PeriodNotices } from '../../insights/components/PeriodNotices';
+import { WhereItWentCard } from '../../insights/components/WhereItWentCard';
+import { useSelectedPeriod, usePeriodNotices } from '../../insights/hooks/usePeriod';
+import { formatMonthYear, PERIOD_CAPTION } from '../../insights/insightLabels';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -53,13 +60,34 @@ export function HomeScreen() {
   const greeting = greetingFor(new Date(), userName);
   const avatarInitial = userName.trim().charAt(0).toUpperCase();
 
+  // R4: the selected period (shared with Transactions) + this screen's
+  // injected now (device clock, refreshed on focus).
+  const { period, setPeriod, now, range } = useSelectedPeriod();
+  const { earliestApprovedAt, pendingCount } = usePeriodNotices(range);
+
+  // Total balance stays all-time (balances are never period-limited).
   const totalBalanceMinor = accounts
     .filter(account => account.type !== 'credit_card')
     .reduce((sum, account) => sum + calculateBalance(account, transactions, account.id), 0);
 
-  // R3a/R3b: one income/expense rule for every total — transfers and hidden
-  // duplicates never count; a linked refund reduces spend instead of income.
-  const { incomeMinor: monthIncome, expenseMinor: monthExpense } = incomeExpenseTotals(approved);
+  // R4 (fixes B5): the tiles follow the selected period — approved rows in
+  // the range only. R3a/R3b: one income/expense rule for every total —
+  // transfers and hidden duplicates never count; a linked refund reduces
+  // spend instead of counting as income.
+  const { incomeMinor: periodIncome, expenseMinor: periodExpense } = useMemo(
+    () => periodTotals(transactions, range),
+    [transactions, range],
+  );
+  const breakdown = useMemo(
+    () => topCategories(spendByCategory(transactions, range)),
+    [transactions, range],
+  );
+  const periodCaption = PERIOD_CAPTION[period];
+
+  function openCategory(categoryId: string) {
+    useTransactionsStore.getState().setTransactionFilters(categoryFilterFor(categoryId));
+    navigation.navigate('Transactions');
+  }
 
   const fastApprovablePending = pending.filter(t => canFastApprove(t.confidenceScore)).slice(0, 2);
   const recent = approved.slice(0, 4);
@@ -129,7 +157,7 @@ export function HomeScreen() {
           </View>
           <View style={styles.greetingTextWrap}>
             <Text style={styles.greeting}>{greeting}</Text>
-            <Text style={styles.dateLine}>October 2026</Text>
+            <Text style={styles.dateLine}>{formatMonthYear(now)}</Text>
           </View>
           <Icon name="pencil-outline" size={20} color={colors.outline} />
         </Pressable>
@@ -140,9 +168,18 @@ export function HomeScreen() {
         onSyncSms={handleSyncSms}
       />
 
+      <View style={styles.periodBlock}>
+        <PeriodSelector value={period} onChange={setPeriod} />
+        <PeriodNotices
+          range={range}
+          earliestApprovedAt={earliestApprovedAt}
+          pendingCount={pendingCount}
+        />
+      </View>
+
       <View style={styles.statsRow}>
-        <StatTile label="INCOME" amountMinor={monthIncome} caption="This month" tone="income" />
-        <StatTile label="EXPENSES" amountMinor={monthExpense} caption="This month" tone="expense" />
+        <StatTile label="INCOME" amountMinor={periodIncome} caption={periodCaption} tone="income" />
+        <StatTile label="EXPENSES" amountMinor={periodExpense} caption={periodCaption} tone="expense" />
       </View>
 
       <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
@@ -179,6 +216,14 @@ export function HomeScreen() {
         ))}
       </View>
 
+      <WhereItWentCard
+        rows={breakdown}
+        categories={categories}
+        period={period}
+        onPressCategory={openCategory}
+        onSeeAll={() => navigation.navigate('Insights')}
+      />
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
@@ -199,7 +244,7 @@ export function HomeScreen() {
               subtitle={
                 transaction.type === 'transfer'
                   ? transferRowSubtitle(transaction, allAccounts)
-                  : formatTransactionTimestamp(transaction.occurredAt)
+                  : formatTransactionTimestamp(transaction.occurredAt, now)
               }
               amountMinor={transaction.amountMinor}
               type={transaction.type}
@@ -275,6 +320,10 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.outline,
     marginTop: spacing.xs,
+  },
+  periodBlock: {
+    gap: spacing.xs,
+    marginBottom: -spacing.sm,
   },
   statsRow: {
     flexDirection: 'row',

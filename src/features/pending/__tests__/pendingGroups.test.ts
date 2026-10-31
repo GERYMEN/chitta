@@ -172,6 +172,7 @@ describe("store.approve with actor 'user' (Pending Auto-approve button)", () => 
       kind: 'auto_approved',
       confidence: 90,
       threshold: 85,
+      transactionType: 'expense',
     });
     const state = useTransactionsStore.getState().transactions;
     expect(state.find(t => t.id === 'txn-auto')!.status).toBe('approved');

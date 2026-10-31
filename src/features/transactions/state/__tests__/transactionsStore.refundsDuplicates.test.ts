@@ -232,6 +232,22 @@ describe('markDuplicate / restoreDuplicate / dismissDuplicatePair', () => {
     expect(find('d2')).toMatchObject({ status: 'pending', approvedAt: null, linkKind: null });
   });
 
+  it('"Not a duplicate" (dismiss) restores AND dismisses the pair in the same transaction; Undo does not', async () => {
+    expect(await state().markDuplicate('d1', 'd2')).toBe(true);
+    expect(await state().restoreDuplicate('d2')).toBe(true);
+    expect(findDuplicatePairs(state().transactions, state().duplicateDismissals)).toHaveLength(1);
+
+    expect(await state().markDuplicate('d1', 'd2')).toBe(true);
+    expect(await state().restoreDuplicate('d2', { dismiss: true })).toBe(true);
+    expect(find('d2')).toMatchObject({ linkKind: null, linkedTransactionId: null });
+    expect(Array.from(db.tables.get('duplicate_pair_dismissals')!.values())).toEqual([
+      expect.objectContaining({ a_id: 'd1', b_id: 'd2' }),
+    ]);
+    const insert = db.calls.find(c => /duplicate_pair_dismissals/.test(c.sql))!;
+    expect(insert.inTransaction).toBe(true);
+    expect(findDuplicatePairs(state().transactions, state().duplicateDismissals)).toEqual([]);
+  });
+
   it('refuses a stale/invalid pair with no writes', async () => {
     expect(await state().markDuplicate('d1', 'd1')).toBe(false);
     expect(await state().markDuplicate('d1', 'missing')).toBe(false);

@@ -16,6 +16,7 @@ export const Routes = {
   Categories: 'Categories',
   Uncategorised: 'Uncategorised',
   Review: 'Review',
+  Insights: 'Insights',
   Onboarding: 'Onboarding',
   ProfileSetup: 'ProfileSetup',
   Permissions: 'Permissions',
@@ -48,6 +49,8 @@ export type RootStackParamList = {
   Uncategorised: undefined;
   /** R3b: possible transfers + possible duplicates (Home "N to review"). */
   Review: undefined;
+  /** R4: Home "Where it went → See all" (stack screen — the 4-tab cap stays). */
+  Insights: undefined;
   Onboarding: undefined;
   ProfileSetup: undefined;
   Permissions: undefined;

@@ -172,7 +172,13 @@ async function remove(
  * item. All land or none do.
  */
 async function setCategories(
-  changes: ReadonlyArray<{ id: string; accountId: string; categoryId: string }>,
+  changes: ReadonlyArray<{
+    id: string;
+    accountId: string;
+    categoryId: string;
+    /** B4: the row's type at event time (recorded in the audit metadata). */
+    transactionType?: Transaction['type'];
+  }>,
 ): Promise<string> {
   const now = new Date().toISOString();
   if (changes.length === 0) return now;
@@ -186,7 +192,11 @@ async function setCategories(
       await auditRepository.insert(tx, {
         eventType: 'edited',
         actor: 'user',
-        metadata: { kind: 'edited', fields: ['categoryId'] },
+        metadata: {
+          kind: 'edited',
+          fields: ['categoryId'],
+          ...(change.transactionType ? { transactionType: change.transactionType } : {}),
+        },
         transactionId: change.id,
         accountId: change.accountId,
       });

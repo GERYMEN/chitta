@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TransactionDetailActions, TransactionDetailContent } from '../components/TransactionDetailContent';
 import { Icon } from '../../../shared/icons';
-import { showDialog, showSnackbar } from '../../../shared/ui';
+import { HeaderBackButton, HeaderSpacer, showDialog, showSnackbar } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { RootStackParamList } from '../../../app/navigation/routes';
@@ -17,6 +17,15 @@ import { RefundCandidateSheet } from '../../refunds/components/RefundCandidateSh
 import { DuplicatePickerSheet } from '../../duplicates/components/DuplicatePickerSheet';
 import { REFUND_LINK_ERROR_TEXT, refundsFor } from '../../../domain/refunds/refund.rules';
 import { hiddenDuplicatesOf } from '../../../domain/duplicates/duplicate.rules';
+import { merchantHistory } from '../../../domain/insights/insights.rules';
+import { normalizeMerchant } from '../../../domain/merchants/normalizeMerchant';
+import {
+  countsTowardIncomeExpense,
+  isLinkedRefund,
+} from '../../../domain/transactions/transaction.rules';
+import { merchantFilterFor } from '../filters/transactionFilters';
+import { useSelectedPeriod } from '../../insights/hooks/usePeriod';
+import { merchantChipLabel } from '../../insights/insightLabels';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -34,6 +43,38 @@ export function TransactionDetailScreen() {
   const [transferPickerOpen, setTransferPickerOpen] = useState(false);
   const [refundPickerOpen, setRefundPickerOpen] = useState(false);
   const [duplicatePickerOpen, setDuplicatePickerOpen] = useState(false);
+  const allTransactions = useTransactionsStore(state => state.transactions);
+  const { period, range } = useSelectedPeriod();
+
+  // R4 (T5): merchant history in the selected period — approved income /
+  // expense rows only (never pending, transfers, twins or hidden duplicates).
+  const merchantKey = transaction ? normalizeMerchant(transaction.merchantName) : '';
+  const showMerchantChip =
+    transaction !== undefined &&
+    transaction.status === 'approved' &&
+    (transaction.type === 'income' || transaction.type === 'expense') &&
+    countsTowardIncomeExpense(transaction) &&
+    merchantKey !== '';
+  const history = useMemo(
+    () => (showMerchantChip ? merchantHistory(allTransactions, merchantKey, range) : null),
+    [showMerchantChip, allTransactions, merchantKey, range],
+  );
+  const merchantChip =
+    transaction && history
+      ? {
+          label: merchantChipLabel(
+            history,
+            transaction.type === 'income' && !isLinkedRefund(transaction) ? 'income' : 'spend',
+            period,
+          ),
+          onPress: () => {
+            useTransactionsStore
+              .getState()
+              .setTransactionFilters(merchantFilterFor(transaction.merchantName));
+            navigation.navigate('Tabs', { screen: 'Transactions' });
+          },
+        }
+      : null;
 
   // R3b: "Link to original expense" — the refund nets out of spend.
   async function handleLinkRefund(expenseId: string) {
@@ -72,7 +113,9 @@ export function TransactionDetailScreen() {
   }
 
   async function handleRestoreDuplicate(duplicateId: string) {
-    const ok = await useTransactionsStore.getState().restoreDuplicate(duplicateId);
+    const ok = await useTransactionsStore
+      .getState()
+      .restoreDuplicate(duplicateId, { dismiss: true });
     showSnackbar({ message: ok ? 'Restored — not a duplicate' : 'Could not restore this item' });
   }
 
@@ -165,9 +208,9 @@ export function TransactionDetailScreen() {
     return (
       <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+          <HeaderBackButton onPress={() => navigation.goBack()} />
           <Text style={styles.headerTitle}>Transaction</Text>
-          <View style={styles.headerSpacer} />
+          <HeaderSpacer />
         </View>
         <View style={styles.missing}>
           <Icon name="trash-can-outline" size={32} color={colors.outline} />
@@ -183,9 +226,9 @@ export function TransactionDetailScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Transaction</Text>
-        <View style={styles.headerSpacer} />
+        <HeaderSpacer />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <TransactionDetailContent
@@ -205,6 +248,7 @@ export function TransactionDetailScreen() {
           onChangeCategory={() => setCategoryPickerOpen(true)}
           onOpenTransfer={id => navigation.push('TransactionDetail', { transactionId: id })}
           onOpenTransaction={id => navigation.push('TransactionDetail', { transactionId: id })}
+          merchantChip={merchantChip}
         />
       </ScrollView>
       <View style={styles.footer}>
@@ -276,16 +320,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
-  },
-  headerSpacer: {
-    width: 22,
   },
   missing: {
     flex: 1,

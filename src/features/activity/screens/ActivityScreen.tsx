@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Icon } from '../../../shared/icons';
+import { HeaderBackButton } from '../../../shared/ui';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { transactionStateColors } from '../../../theme/colors';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -15,7 +16,9 @@ import {
   formatRelativeTime,
   groupActivityByDay,
   ImpactTone,
+  typesAtEventTime,
 } from '../activityFeed';
+import { useOnFocusRegained } from '../../../shared/hooks/useOnFocusRegained';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -42,9 +45,13 @@ export function ActivityScreen() {
   // opened or comes back into focus; never persisted.
   const [showAmounts, setShowAmounts] = useState(false);
 
+  // B3: re-mask ONLY on an unfocused → focused transition — never on a
+  // re-render, a store refresh, a data reload or a repeated focus event.
+  useOnFocusRegained(useCallback(() => setShowAmounts(false), []));
+
+  // Data reload on focus is separate and never touches the mask.
   useFocusEffect(
     useCallback(() => {
-      setShowAmounts(false);
       reload();
     }, [reload]),
   );
@@ -53,6 +60,8 @@ export function ActivityScreen() {
     const transactionById = new Map(transactions.map(t => [t.id, t]));
     const accountById = new Map(accounts.map(a => [a.id, a]));
     const categoryById = new Map(categories.map(c => [c.id, c]));
+    // B4: each event describes its row with the type it had at event time.
+    const eventTypes = typesAtEventTime(events, id => transactionById.get(id)?.type ?? null);
     const items = events.map(event => {
       const categoryId =
         event.metadata && 'categoryId' in event.metadata ? event.metadata.categoryId : null;
@@ -85,6 +94,7 @@ export function ActivityScreen() {
           account: fromId ? accountById.get(fromId) ?? null : null,
           transferAccount: toId ? accountById.get(toId) ?? null : null,
           category: categoryId ? categoryById.get(categoryId) ?? null : null,
+          typeAtEvent: eventTypes.get(event.id) ?? null,
         },
         { showAmounts },
       );
@@ -95,13 +105,7 @@ export function ActivityScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Back">
-          <Icon name="arrow-left" size={22} color={colors.onSurface} />
-        </Pressable>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Activity</Text>
         <Pressable
           onPress={() => setShowAmounts(value => !value)}
@@ -202,7 +206,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
+    // B2: the 48dp back button centres its arrow ~13dp in from its edge.
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
     minHeight: 48,
   },
@@ -216,7 +221,6 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: -spacing.sm,
   },
   center: {
     flex: 1,

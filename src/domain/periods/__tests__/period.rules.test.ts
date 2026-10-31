@@ -1,4 +1,4 @@
-import { periodRange } from '../period.rules';
+import { DEFAULT_PERIOD, isWithinRange, PERIODS, periodRange } from '../period.rules';
 import { Period } from '../period.types';
 
 function localDate(
@@ -161,5 +161,60 @@ describe('periodRange', () => {
         expect(range.from.getTime()).toBeLessThanOrEqual(now.getTime());
       }
     });
+  });
+});
+
+describe('R4 period membership (isWithinRange)', () => {
+  const iso = (d: Date) => d.toISOString();
+  const minusMs = (d: Date, ms: number) => new Date(d.getTime() - ms);
+
+  it('chip order and the session default', () => {
+    expect(PERIODS).toEqual(['1M', '3M', '6M', '9M', '1Y']);
+    expect(DEFAULT_PERIOD).toBe('1M');
+  });
+
+  it('1st-of-month local midnight is inside; 1 ms before is outside', () => {
+    const now = localDate(2026, 10, 20, 15, 0, 0);
+    for (const period of ['1M', '3M', '6M', '9M'] as Period[]) {
+      const range = periodRange(period, now);
+      expect(isWithinRange(iso(range.from), range)).toBe(true);
+      expect(isWithinRange(iso(minusMs(range.from, 1)), range)).toBe(false);
+    }
+  });
+
+  it('`to` is exactly now: now is inside, 1 ms later is outside', () => {
+    const now = localDate(2026, 10, 20, 15, 0, 0, 0);
+    const range = periodRange('1M', now);
+    expect(range.to.getTime()).toBe(now.getTime());
+    expect(isWithinRange(iso(now), range)).toBe(true);
+    expect(isWithinRange(iso(new Date(now.getTime() + 1)), range)).toBe(false);
+  });
+
+  it('1Y on a leap day starts 28 Feb of the previous year (inclusive)', () => {
+    const now = localDate(2028, 2, 29, 12, 0, 0);
+    const range = periodRange('1Y', now);
+    expect(isWithinRange(iso(localDate(2027, 2, 28)), range)).toBe(true);
+    expect(isWithinRange(iso(localDate(2027, 2, 27, 23, 59, 59, 999)), range)).toBe(false);
+    expect(isWithinRange(iso(localDate(2028, 2, 29, 11, 59)), range)).toBe(true);
+  });
+
+  it('1Y that reaches back into a leap February keeps its own day (29 Feb is inside)', () => {
+    const now = localDate(2029, 2, 28, 9, 0, 0);
+    const range = periodRange('1Y', now);
+    expectLocal(range.from, 2028, 2, 28);
+    expect(isWithinRange(iso(localDate(2028, 2, 29, 10)), range)).toBe(true);
+    expect(isWithinRange(iso(localDate(2028, 2, 27, 23, 59, 59, 999)), range)).toBe(false);
+  });
+
+  it('1Y from 1 March reaches back to 1 March (28 Feb is outside)', () => {
+    const now = localDate(2028, 3, 1, 8, 0, 0);
+    const range = periodRange('1Y', now);
+    expectLocal(range.from, 2027, 3, 1);
+    expect(isWithinRange(iso(localDate(2027, 2, 28, 23, 59)), range)).toBe(false);
+  });
+
+  it('an unparseable timestamp is never inside', () => {
+    const range = periodRange('1Y', localDate(2026, 10, 20));
+    expect(isWithinRange('not-a-date', range)).toBe(false);
   });
 });

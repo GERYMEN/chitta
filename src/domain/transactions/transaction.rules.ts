@@ -87,6 +87,20 @@ export function spendContributionMinor(
   return isLinkedRefund(transaction) ? -transaction.amountMinor : 0;
 }
 
+/**
+ * R4: what one row adds to INCOME (paise): income that counts and is not a
+ * linked refund → +amount, anything else → 0. Together with
+ * spendContributionMinor this is the per-row form of incomeExpenseTotals —
+ * R4's aggregates (period totals, monthly trend, merchant history) sum these
+ * two helpers, so every total follows the same rule.
+ */
+export function incomeContributionMinor(
+  transaction: IncomeExpenseSubject & Pick<Transaction, 'amountMinor'>,
+): number {
+  if (!countsTowardIncomeExpense(transaction)) return 0;
+  return transaction.type === 'income' && !isLinkedRefund(transaction) ? transaction.amountMinor : 0;
+}
+
 export interface IncomeExpenseTotals {
   incomeMinor: number;
   /** Spend: expenses minus linked refunds (R3b). */
@@ -106,9 +120,8 @@ export function incomeExpenseTotals(
   let incomeMinor = 0;
   let expenseMinor = 0;
   for (const t of transactions) {
-    if (!countsTowardIncomeExpense(t)) continue;
-    if (t.type === 'income' && !isLinkedRefund(t)) incomeMinor += t.amountMinor;
-    else expenseMinor += spendContributionMinor(t);
+    incomeMinor += incomeContributionMinor(t);
+    expenseMinor += spendContributionMinor(t);
   }
   return { incomeMinor, expenseMinor, netMinor: incomeMinor - expenseMinor };
 }

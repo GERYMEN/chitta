@@ -5,7 +5,16 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useShallow } from 'zustand/react/shallow';
 import { Icon } from '../../../shared/icons';
-import { AmountText, BottomSheet, Button, Card, Chip, showDialog } from '../../../shared/ui';
+import {
+  AmountText,
+  BottomSheet,
+  Button,
+  Card,
+  Chip,
+  HeaderBackButton,
+  HeaderSpacer,
+  showDialog,
+} from '../../../shared/ui';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { Account, AccountType } from '../../../domain/accounts/account.types';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
@@ -118,15 +127,9 @@ export function SmsSuggestionsScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.headerButton}
-          accessibilityRole="button"
-          accessibilityLabel="Back">
-          <Icon name="arrow-left" size={22} color={colors.onSurface} />
-        </Pressable>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>New Accounts Found</Text>
-        <View style={styles.headerButton} />
+        <HeaderSpacer />
       </View>
 
       <FlatList
@@ -327,12 +330,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
-  },
-  headerButton: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   headerTitle: {
     ...typography.headlineSm,
