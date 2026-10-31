@@ -37,6 +37,8 @@ export interface SmsSyncResult {
    * possible transfer pair — left pending for the user to decide.
    */
   heldForTransfer: number;
+  /** R3b: new items held from auto-approve because they form a possible duplicate pair. */
+  heldForDuplicate: number;
   suggestions: SmsAccountSuggestion[];
   /**
    * R2b: id of this run's in-memory suggestion session (the groups with
@@ -183,13 +185,14 @@ export async function syncSms(): Promise<SmsSyncResult> {
   // R3a T4: auto-approve only AFTER every new pending item is in, so a new
   // item that pairs as a possible transfer stays pending for the user.
   const latest = useTransactionsStore.getState();
-  const { approve: toApprove, heldForTransfer } = autoApproveAfterSync(
+  const { approve: toApprove, heldForTransfer, heldForDuplicate } = autoApproveAfterSync(
     createdRows,
     latest.transactions,
     latest.accounts,
     latest.transferDismissals,
     approvalMode,
     autoApproveThreshold,
+    latest.duplicateDismissals,
   );
   let autoApproved = 0;
   for (const transaction of toApprove) {
@@ -216,6 +219,7 @@ export async function syncSms(): Promise<SmsSyncResult> {
     skipped: scanned - created,
     autoApproved,
     heldForTransfer: heldForTransfer.length,
+    heldForDuplicate: heldForDuplicate.length,
     suggestions,
     suggestionRunId,
   };

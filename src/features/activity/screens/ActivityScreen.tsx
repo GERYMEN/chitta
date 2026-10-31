@@ -68,10 +68,20 @@ export function ActivityScreen() {
         transaction?.type === 'transfer'
           ? transaction.transferAccountId ?? null
           : snapshot?.transferAccountId ?? null;
+      // R3b: the other row of a refund / duplicate event (the original
+      // expense, or the kept row), looked up by the id in the metadata.
+      const metadata = event.metadata;
+      const linkedId =
+        metadata?.kind === 'refund_linked' || metadata?.kind === 'refund_unlinked'
+          ? metadata.expense_id
+          : metadata?.kind === 'duplicate_marked' || metadata?.kind === 'duplicate_restored'
+          ? metadata.kept_id
+          : null;
       return describeActivity(
         event,
         {
           transaction,
+          linkedTransaction: linkedId ? transactionById.get(linkedId) ?? null : null,
           account: fromId ? accountById.get(fromId) ?? null : null,
           transferAccount: toId ? accountById.get(toId) ?? null : null,
           category: categoryId ? categoryById.get(categoryId) ?? null : null,

@@ -118,6 +118,23 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'CREATE INDEX IF NOT EXISTS ix_tx_linked ON transactions(linked_transaction_id)',
     ],
   },
+  {
+    // R3b refunds + duplicates. Refund and duplicate links reuse migration 6's
+    // linked_transaction_id / link_kind columns ('refund' / 'duplicate'), so
+    // no transactions column is added and no existing row is rewritten.
+    // "Not duplicates" decisions: one row per unordered pair, a_id < b_id
+    // (the repository orders the ids and inserts with bound parameters).
+    version: 7,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS duplicate_pair_dismissals (
+    a_id TEXT NOT NULL,
+    b_id TEXT NOT NULL,
+    dismissed_at TEXT NOT NULL,
+    PRIMARY KEY (a_id, b_id),
+    CHECK (a_id < b_id)
+  )`,
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

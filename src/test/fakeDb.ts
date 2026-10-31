@@ -31,6 +31,7 @@ const PRIMARY_KEY: Record<string, string[]> = {
   merchant_rules: ['merchant_key'],
   account_suggestion_decisions: ['bank_canonical', 'account_kind', 'last_four'],
   transfer_pair_dismissals: ['debit_id', 'credit_id'],
+  duplicate_pair_dismissals: ['a_id', 'b_id'],
 };
 
 function keyFor(table: string, row: Row): string {

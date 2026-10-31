@@ -68,7 +68,12 @@ const ITEMS = [
     sanitizedPreview: PREVIEW_B,
     confidenceScore: 60,
   }),
-  parsed('sms-3-1700000000003', { merchantName: 'QA-Cafe', confidenceScore: 90 }),
+  // An hour later, so it is not a possible duplicate of item 1 (R3b hold).
+  parsed('sms-3-1700000000003', {
+    merchantName: 'QA-Cafe',
+    confidenceScore: 90,
+    occurredAt: '2026-10-25T11:00:00.000Z',
+  }),
 ];
 
 const EXISTING_ACCOUNT_ROW = {
@@ -245,6 +250,21 @@ describe('addSuggestedAccount (R2b T2 insert-on-add)', () => {
     expect(
       inserts('transactions').map(c => c.params).flat(),
     ).not.toContain('sms-1-1700000000001');
+  });
+
+  it('R3b: auto mode holds new items that form a possible duplicate pair', async () => {
+    const twins = [
+      ITEMS[0],
+      ITEMS[1],
+      parsed('sms-3-1700000000003', { merchantName: 'QA-Cafe', confidenceScore: 90 }), // same time + amount as item 1
+    ];
+    const twinRun = useSuggestionSession.getState().start(groupUnmatchedCandidates(twins));
+    useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: 90 });
+    const outcome = await addSuggestedAccount(twinRun, KEY, ACCOUNT_INPUT);
+
+    expect(outcome!.created).toBe(3);
+    expect(outcome!.autoApproved).toBe(0);
+    expect(useTransactionsStore.getState().transactions.every(t => t.status === 'pending')).toBe(true);
   });
 
   it('auto mode: the Sync SMS rule approves only items ≥ threshold (system actor)', async () => {

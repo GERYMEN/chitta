@@ -15,6 +15,7 @@ export const Routes = {
   Activity: 'Activity',
   Categories: 'Categories',
   Uncategorised: 'Uncategorised',
+  Review: 'Review',
   Onboarding: 'Onboarding',
   ProfileSetup: 'ProfileSetup',
   Permissions: 'Permissions',
@@ -45,6 +46,8 @@ export type RootStackParamList = {
   Activity: undefined;
   Categories: undefined;
   Uncategorised: undefined;
+  /** R3b: possible transfers + possible duplicates (Home "N to review"). */
+  Review: undefined;
   Onboarding: undefined;
   ProfileSetup: undefined;
   Permissions: undefined;

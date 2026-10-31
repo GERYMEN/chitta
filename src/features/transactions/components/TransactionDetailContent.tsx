@@ -15,6 +15,14 @@ import { OriginalSmsView } from './OriginalSmsView';
 import { categoryLabel } from '../../../domain/categories/category.rules';
 import { findTransferTwin, isPairCandidate } from '../../../domain/transfers/transfer.rules';
 import { transferRouteLabel } from '../../transfers/transferLabels';
+import { isLinkedRefund } from '../../../domain/transactions/transaction.rules';
+import { canLinkAsRefund, refundsFor } from '../../../domain/refunds/refund.rules';
+import {
+  duplicatePickerOptions,
+  hiddenDuplicatesOf,
+} from '../../../domain/duplicates/duplicate.rules';
+import { refundedLabel, refundForLabel, refundRowLine } from '../../refunds/refundLabels';
+import { hiddenDuplicatesLabel } from '../../duplicates/duplicateLabels';
 
 export interface TransactionDetailContentProps {
   transaction: Transaction;
@@ -34,11 +42,18 @@ export interface TransactionDetailContentProps {
   onChangeCategory?: (transaction: Transaction) => void;
   /** R3a: a transfer twin's "View transfer" link. */
   onOpenTransfer?: (transferId: string) => void;
+  /** R3b: refund ↔ expense and duplicate ↔ kept-row links. */
+  onOpenTransaction?: (transactionId: string) => void;
 }
 
 /** R3a: the kept SMS credit half of a confirmed transfer pair. */
 export function isTransferTwin(transaction: Pick<Transaction, 'linkKind'>): boolean {
   return transaction.linkKind === 'transfer_twin';
+}
+
+/** R3b: a row hidden as a duplicate of another (rejected, link_kind 'duplicate'). */
+export function isHiddenDuplicate(transaction: Pick<Transaction, 'linkKind'>): boolean {
+  return transaction.linkKind === 'duplicate';
 }
 
 const TIER_LABEL: Record<ReturnType<typeof confidenceTier>, string> = {
@@ -65,6 +80,14 @@ export interface TransactionDetailActionsProps {
   onMarkAsTransfer?: (transaction: Transaction) => void;
   /** R3a: a transfer confirmed from an SMS pair → "Undo transfer". */
   onUndoTransfer?: (transaction: Transaction) => void;
+  /** R3b: pending/approved unlinked income → "Link to original expense". */
+  onLinkRefund?: (transaction: Transaction) => void;
+  /** R3b: linked refund → "Unlink refund". */
+  onUnlinkRefund?: (transaction: Transaction) => void;
+  /** R3b: pending/approved income/expense with a same-amount twin → "Mark as duplicate of…". */
+  onMarkDuplicate?: (transaction: Transaction) => void;
+  /** R3b: hidden duplicate → "Not a duplicate". */
+  onRestoreDuplicate?: (transaction: Transaction) => void;
 }
 
 /**
@@ -80,18 +103,72 @@ export function TransactionDetailActions({
   onDelete,
   onMarkAsTransfer,
   onUndoTransfer,
+  onLinkRefund,
+  onUnlinkRefund,
+  onMarkDuplicate,
+  onRestoreDuplicate,
 }: TransactionDetailActionsProps) {
   const isPending = transaction.status === 'pending';
   const transactions = useTransactionsStore(state => state.transactions);
   // The twin is reached only from Activity; it has no actions of its own.
   if (isTransferTwin(transaction)) return null;
+  // R3b: a hidden duplicate (reached from Activity / the kept row) can only be restored.
+  if (isHiddenDuplicate(transaction)) {
+    return onRestoreDuplicate ? (
+      <View style={styles.actions}>
+        <Button
+          label="Not a duplicate"
+          variant="ghost"
+          onPress={() => onRestoreDuplicate(transaction)}
+          icon={<Icon name="backup-restore" size={18} color={colors.onSurface} />}
+          testID="detail-restore-duplicate"
+        />
+      </View>
+    ) : null;
+  }
   const isPaired =
     transaction.type === 'transfer' && findTransferTwin(transactions, transaction.id) !== null;
+  // R3b.1: an expense with linked refunds is not offered "Mark as transfer".
   const canMark =
-    transaction.status === 'approved' && isPairCandidate(transaction) && onMarkAsTransfer;
+    transaction.status === 'approved' &&
+    isPairCandidate(transaction) &&
+    refundsFor(transactions, transaction.id).length === 0 &&
+    onMarkAsTransfer;
+  const canLinkRefund = canLinkAsRefund(transaction) && onLinkRefund;
+  const canUnlinkRefund = isLinkedRefund(transaction) && onUnlinkRefund;
+  // Offered only when there is something it could be a duplicate of.
+  const canMarkDuplicate =
+    onMarkDuplicate && duplicatePickerOptions(transaction, transactions).length > 0;
 
   return (
     <View style={styles.actions}>
+      {canLinkRefund ? (
+        <Button
+          label="Link to original expense"
+          variant="ghost"
+          onPress={() => onLinkRefund(transaction)}
+          icon={<Icon name="cash-refund" size={18} color={colors.onSurface} />}
+          testID="detail-link-refund"
+        />
+      ) : null}
+      {canUnlinkRefund ? (
+        <Button
+          label="Unlink refund"
+          variant="ghost"
+          onPress={() => onUnlinkRefund(transaction)}
+          icon={<Icon name="link-variant-off" size={18} color={colors.onSurface} />}
+          testID="detail-unlink-refund"
+        />
+      ) : null}
+      {canMarkDuplicate ? (
+        <Button
+          label="Mark as duplicate of…"
+          variant="ghost"
+          onPress={() => onMarkDuplicate(transaction)}
+          icon={<Icon name="content-duplicate" size={18} color={colors.onSurface} />}
+          testID="detail-mark-duplicate"
+        />
+      ) : null}
       {canMark ? (
         <Button
           label="Mark as transfer"
@@ -150,11 +227,13 @@ export function TransactionDetailContent({
   hideActions = false,
   onChangeCategory,
   onOpenTransfer,
+  onOpenTransaction,
 }: TransactionDetailContentProps) {
   const [transparencyOpen, setTransparencyOpen] = useState(variant === 'screen');
   const [auditOpen, setAuditOpen] = useState(false);
   const categories = useTransactionsStore(state => state.categories);
   const accounts = useTransactionsStore(state => state.accounts);
+  const transactions = useTransactionsStore(state => state.transactions);
 
   const category = categories.find(c => c.id === transaction.categoryId);
   const visual = getCategoryVisual(transaction.categoryId, category);
@@ -170,11 +249,24 @@ export function TransactionDetailContent({
   const toAccount = isTransfer
     ? accounts.find(a => a.id === transaction.transferAccountId)
     : undefined;
+  // R3b links (looked up live; ids only are stored on the rows).
+  const hiddenDuplicate = isHiddenDuplicate(transaction);
+  const isRefund = isLinkedRefund(transaction);
+  const linkedRow =
+    (hiddenDuplicate || isRefund) && transaction.linkedTransactionId
+      ? transactions.find(t => t.id === transaction.linkedTransactionId) ?? null
+      : null;
+  const refunds = transaction.type === 'expense' ? refundsFor(transactions, transaction.id) : [];
+  const refundedTotal = refunds.reduce((sum, r) => sum + r.amountMinor, 0);
+  const hiddenDuplicates =
+    hiddenDuplicate || twin ? [] : hiddenDuplicatesOf(transactions, transaction.id);
 
   return (
     <View style={styles.container}>
       {twin ? (
         <Chip label="Part of a transfer" tone="neutral" icon={<Icon name="swap-horizontal" size={14} color={colors.secondary} />} />
+      ) : hiddenDuplicate ? (
+        <Chip label="Duplicate · hidden" tone="neutral" icon={<Icon name="content-duplicate" size={14} color={colors.secondary} />} />
       ) : isPending ? (
         <Chip label="Pending Approval" tone="pending" icon={<Icon name="clock-outline" size={14} color="#B7791F" />} />
       ) : transaction.status === 'rejected' ? (
@@ -203,6 +295,76 @@ export function TransactionDetailContent({
         </Card>
       ) : null}
 
+      {hiddenDuplicate ? (
+        <Card style={styles.fieldsCard} testID="duplicate-notice">
+          <Text style={styles.cardTitle}>
+            {linkedRow ? `Duplicate of ${linkedRow.merchantName}` : 'Duplicate'}
+          </Text>
+          <Text style={styles.transparencyMeta}>
+            You marked this as the same money recorded twice. It is kept only so SMS sync never
+            adds it again — it is not in any list, total or balance.
+          </Text>
+          {linkedRow && onOpenTransaction ? (
+            <Text
+              style={styles.linkText}
+              onPress={() => onOpenTransaction(linkedRow.id)}
+              accessibilityRole="link"
+              testID="duplicate-open-kept">
+              View the kept item ›
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {isRefund ? (
+        <Card style={styles.fieldsCard} testID="refund-notice">
+          <Text style={styles.cardTitle}>Refund</Text>
+          <Text style={styles.transparencyMeta}>
+            Not counted as income — it reduces what you spent. Your balance still includes it.
+          </Text>
+          {linkedRow ? (
+            <Text
+              style={styles.linkText}
+              onPress={onOpenTransaction ? () => onOpenTransaction(linkedRow.id) : undefined}
+              accessibilityRole="link"
+              testID="refund-open-expense">
+              {refundForLabel(linkedRow)} ›
+            </Text>
+          ) : (
+            <Text style={styles.transparencyMeta}>The original expense was deleted.</Text>
+          )}
+        </Card>
+      ) : null}
+
+      {refunds.length > 0 ? (
+        <Card style={styles.fieldsCard} testID="refunded-notice">
+          <Text style={styles.cardTitle}>{refundedLabel(refundedTotal)}</Text>
+          {refunds.map(refund => (
+            <Pressable
+              key={refund.id}
+              onPress={onOpenTransaction ? () => onOpenTransaction(refund.id) : undefined}
+              accessibilityRole="link"
+              accessibilityLabel={`Refund ${refundRowLine(refund)}`}
+              style={({ pressed }) => [styles.detailRow, styles.tappableRow, pressed && styles.pressed]}>
+              <Text style={styles.detailLabel}>{refund.merchantName}</Text>
+              <Text style={styles.linkText}>{refundRowLine(refund)} ›</Text>
+            </Pressable>
+          ))}
+        </Card>
+      ) : null}
+
+      {hiddenDuplicates.length > 0 ? (
+        <Pressable
+          onPress={onOpenTransaction ? () => onOpenTransaction(hiddenDuplicates[0].id) : undefined}
+          accessibilityRole="link"
+          testID="hidden-duplicates-link"
+          style={({ pressed }) => [styles.hiddenLink, pressed && styles.pressed]}>
+          <Icon name="content-duplicate" size={18} color={colors.secondary} />
+          <Text style={styles.hiddenLinkText}>{hiddenDuplicatesLabel(hiddenDuplicates.length)}</Text>
+          <Text style={styles.linkText}>View ›</Text>
+        </Pressable>
+      ) : null}
+
       <View style={styles.summary}>
         <View style={[styles.avatar, { backgroundColor: visual.backgroundColor }]}>
           <Icon name={visual.icon} size={28} color={visual.iconColor} />
@@ -225,6 +387,8 @@ export function TransactionDetailContent({
             label={
               isTransfer
                 ? 'Transfer · not income or expense'
+                : isRefund
+                ? 'Refund · reduces spending'
                 : transaction.type === 'income'
                 ? 'Income Inflow'
                 : 'Expense Outflow'
@@ -251,12 +415,14 @@ export function TransactionDetailContent({
           value={
             isTransfer
               ? 'Transfer'
+              : isRefund
+              ? 'Refund'
               : transaction.type === 'income'
               ? 'Credit Income'
               : 'Debit Expense'
           }
         />
-        {isTransfer ? null : onChangeCategory && !twin ? (
+        {isTransfer ? null : onChangeCategory && !twin && !hiddenDuplicate ? (
           <Pressable
             onPress={() => onChangeCategory(transaction)}
             accessibilityRole="button"
@@ -485,6 +651,20 @@ const styles = StyleSheet.create({
   linkText: {
     ...typography.labelLg,
     color: colors.primary,
+  },
+  hiddenLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    borderRadius: 16,
+    backgroundColor: colors.secondaryContainer,
+  },
+  hiddenLinkText: {
+    ...typography.labelLg,
+    color: colors.onSurface,
+    flex: 1,
   },
   actions: {
     gap: spacing.sm,

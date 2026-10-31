@@ -1,5 +1,6 @@
 import type { TransactionStatus, TransactionType } from '../transactions/transaction.types';
 import type { TransferPairPrevious } from '../transfers/transfer.rules';
+import type { DuplicateRowSnapshot } from '../duplicates/duplicate.rules';
 
 /**
  * Every money-changing action writes exactly one audit event (R1).
@@ -25,7 +26,13 @@ export type AuditEventType =
   | 'category_archived'
   /** R3a: an SMS debit + credit confirmed as one transfer / that undone. */
   | 'transfer_paired'
-  | 'transfer_unpaired';
+  | 'transfer_unpaired'
+  /** R3b: an income linked as a refund of an expense / that undone. */
+  | 'refund_linked'
+  | 'refund_unlinked'
+  /** R3b: a row hidden as a duplicate of another / "Not a duplicate". */
+  | 'duplicate_marked'
+  | 'duplicate_restored';
 
 export type AuditActor = 'system' | 'user';
 
@@ -65,7 +72,27 @@ export type AuditMetadata =
    * restores them exactly). Never merchant text, SMS text or amounts.
    */
   | { kind: 'transfer_paired'; debit_id: string; credit_id: string; previous: TransferPairPrevious }
-  | { kind: 'transfer_unpaired'; debit_id: string; credit_id: string };
+  | { kind: 'transfer_unpaired'; debit_id: string; credit_id: string }
+  /**
+   * R3b: ids only (+ the refund's category id before/after linking, so
+   * Unlink can put its category back). Never merchant text, SMS text or amounts.
+   */
+  | {
+      kind: 'refund_linked';
+      refund_id: string;
+      expense_id: string;
+      previous_category_id: string | null;
+      category_id: string | null;
+    }
+  | { kind: 'refund_unlinked'; refund_id: string; expense_id: string }
+  /** R3b: ids + the hidden row's previous enum/id/timestamp fields (exact restore). */
+  | {
+      kind: 'duplicate_marked';
+      kept_id: string;
+      duplicate_id: string;
+      previous: DuplicateRowSnapshot;
+    }
+  | { kind: 'duplicate_restored'; kept_id: string; duplicate_id: string };
 
 export interface AuditEvent {
   id: string;

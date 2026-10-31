@@ -70,6 +70,33 @@ export function sanitizeAuditMetadata(
         debit_id: String(metadata.debit_id),
         credit_id: String(metadata.credit_id),
       };
+    case 'refund_linked':
+      return {
+        kind: 'refund_linked',
+        refund_id: String(metadata.refund_id),
+        expense_id: String(metadata.expense_id),
+        previous_category_id: idOrNull(metadata.previous_category_id),
+        category_id: idOrNull(metadata.category_id),
+      };
+    case 'refund_unlinked':
+      return {
+        kind: 'refund_unlinked',
+        refund_id: String(metadata.refund_id),
+        expense_id: String(metadata.expense_id),
+      };
+    case 'duplicate_marked':
+      return {
+        kind: 'duplicate_marked',
+        kept_id: String(metadata.kept_id),
+        duplicate_id: String(metadata.duplicate_id),
+        previous: sanitizeRowSnapshot(metadata.previous),
+      };
+    case 'duplicate_restored':
+      return {
+        kind: 'duplicate_restored',
+        kept_id: String(metadata.kept_id),
+        duplicate_id: String(metadata.duplicate_id),
+      };
     default:
       return null;
   }
@@ -87,6 +114,10 @@ function sanitizeRowSnapshot(snapshot: TransferRowSnapshot): TransferRowSnapshot
       snapshot.linkedTransactionId == null ? null : String(snapshot.linkedTransactionId),
     linkKind: snapshot.linkKind ?? null,
   };
+}
+
+function idOrNull(value: string | null | undefined): string | null {
+  return value == null ? null : String(value);
 }
 
 function finiteOrNull(value: number | null): number | null {

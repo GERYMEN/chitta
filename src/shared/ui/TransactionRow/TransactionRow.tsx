@@ -16,6 +16,8 @@ export interface TransactionRowProps {
   icon: React.ReactNode;
   onPress?: (event: GestureResponderEvent) => void;
   testID?: string;
+  /** R3b: small tag after the title, e.g. "Refund". */
+  tag?: string | null;
 }
 
 const STATUS_LABEL: Record<TransactionStatus, string> = {
@@ -41,6 +43,7 @@ export function TransactionRow({
   icon,
   onPress,
   testID,
+  tag = null,
 }: TransactionRowProps) {
   return (
     <Pressable
@@ -49,9 +52,16 @@ export function TransactionRow({
       style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed]}>
       <View style={styles.avatar}>{icon}</View>
       <View style={styles.middle}>
-        <Text style={styles.title} numberOfLines={1}>
-          {merchantName}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={1}>
+            {merchantName}
+          </Text>
+          {tag ? (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>{tag}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.subtitle} numberOfLines={1}>
           {subtitle}
         </Text>
@@ -88,10 +98,26 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
     marginRight: spacing.sm,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   title: {
     ...typography.headlineSm,
     fontSize: 16,
     color: colors.onSurface,
+    flexShrink: 1,
+  },
+  tag: {
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 1,
+    borderRadius: radii.full,
+    backgroundColor: transactionStateColors.approved.bg,
+  },
+  tagText: {
+    ...typography.labelSm,
+    color: colors.primary,
   },
   subtitle: {
     ...typography.bodyMd,

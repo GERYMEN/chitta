@@ -2,33 +2,37 @@ import React from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
-import { useTransferPairs } from '../useTransferPairs';
-import { possibleTransfersLabel } from '../transferLabels';
+import { useTransferPairs } from '../../transfers/useTransferPairs';
+import { useDuplicatePairs } from '../../duplicates/useDuplicatePairs';
+import { toReviewLabel } from '../../duplicates/duplicateLabels';
 
 /**
- * R3a Home nudge: "N possible transfers — Review ›" (pairs of pending OR
- * approved rows). Renders nothing when N is 0.
+ * Home nudge (R3a transfers + R3b duplicates): "N to review — Review ›",
+ * N = possible transfer pairs + possible duplicate pairs (pending OR approved
+ * rows). Opens the Review screen. Renders nothing when N is 0.
  */
-export function PossibleTransfersCard({
+export function ReviewCard({
   onPress,
   style,
 }: {
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
-  const count = useTransferPairs().length;
+  const transferPairs = useTransferPairs();
+  const duplicatePairs = useDuplicatePairs();
+  const count = transferPairs.length + duplicatePairs.length;
   if (count === 0) return null;
-  const label = possibleTransfersLabel(count);
+  const label = toReviewLabel(count);
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${label}. Review`}
-      testID="possible-transfers-card"
+      testID="review-card"
       style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}>
       <View style={styles.icon}>
-        <Icon name="swap-horizontal" size={20} color={colors.secondary} />
+        <Icon name="clipboard-check-outline" size={20} color={colors.secondary} />
       </View>
       <Text style={styles.text}>{label}</Text>
       <Text style={styles.link}>Review ›</Text>

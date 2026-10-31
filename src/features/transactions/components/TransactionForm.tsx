@@ -49,6 +49,12 @@ export interface TransactionFormProps {
   submitting?: boolean;
   /** R3a Add Record: shows a third "Transfer" chip in the Type row. */
   onChooseTransfer?: () => void;
+  /**
+   * R3b.1: extra check run on submit after the schema passes (Edit uses it to
+   * guard linked rows). Return a field + message to block the submit and show
+   * the message inline under that field.
+   */
+  validate?: (values: TransactionFormValues) => { field: 'type' | 'amount'; message: string } | null;
 }
 
 /**
@@ -61,6 +67,7 @@ export function TransactionForm({
   initialValues,
   submitting = false,
   onChooseTransfer,
+  validate,
 }: TransactionFormProps) {
   const allAccounts = useTransactionsStore(state => state.accounts);
   // D10: the picker only offers active accounts.
@@ -83,6 +90,7 @@ export function TransactionForm({
     setValue,
     getValues,
     watch,
+    setError,
     formState: { errors },
   } = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
@@ -133,6 +141,15 @@ export function TransactionForm({
 
   const occurredDate = new Date(occurredAt);
 
+  function submitChecked(values: TransactionFormValues) {
+    const problem = validate?.(values) ?? null;
+    if (problem) {
+      setError(problem.field, { type: 'manual', message: problem.message });
+      return;
+    }
+    onSubmit(values);
+  }
+
   return (
     <ScrollView
       style={styles.screen}
@@ -157,6 +174,7 @@ export function TransactionForm({
           </View>
         )}
       />
+      <FieldError error={errors.type?.message} />
 
       <FieldLabel>Amount (₹)</FieldLabel>
       <Controller
@@ -304,7 +322,7 @@ export function TransactionForm({
         label={submitting ? 'Saving…' : 'Save'}
         variant="brand"
         loading={submitting}
-        onPress={() => handleSubmit(onSubmit)()}
+        onPress={() => handleSubmit(submitChecked)()}
         style={styles.submit}
       />
 

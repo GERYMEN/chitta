@@ -13,6 +13,10 @@ import { CategoryPickerSheet } from '../../categories/components/CategoryPickerS
 import { promptRememberCategory } from '../../categories/rememberCategory';
 import { TransferAccountPickerSheet } from '../../transfers/components/TransferAccountPickerSheet';
 import { findTransferTwin } from '../../../domain/transfers/transfer.rules';
+import { RefundCandidateSheet } from '../../refunds/components/RefundCandidateSheet';
+import { DuplicatePickerSheet } from '../../duplicates/components/DuplicatePickerSheet';
+import { REFUND_LINK_ERROR_TEXT, refundsFor } from '../../../domain/refunds/refund.rules';
+import { hiddenDuplicatesOf } from '../../../domain/duplicates/duplicate.rules';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -28,6 +32,49 @@ export function TransactionDetailScreen() {
   const deleteTransaction = useTransactionsStore(state => state.deleteTransaction);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [transferPickerOpen, setTransferPickerOpen] = useState(false);
+  const [refundPickerOpen, setRefundPickerOpen] = useState(false);
+  const [duplicatePickerOpen, setDuplicatePickerOpen] = useState(false);
+
+  // R3b: "Link to original expense" — the refund nets out of spend.
+  async function handleLinkRefund(expenseId: string) {
+    setRefundPickerOpen(false);
+    if (!transaction) return;
+    const error = await useTransactionsStore.getState().linkRefund(transaction.id, expenseId);
+    if (error === null) {
+      showSnackbar({ message: 'Linked as a refund' });
+    } else {
+      showDialog({
+        title: 'Could not link this refund',
+        message: error === 'missing' ? 'That item no longer exists.' : REFUND_LINK_ERROR_TEXT[error],
+        icon: 'alert-circle-outline',
+        actions: [{ label: 'OK', variant: 'primary' }],
+      });
+    }
+  }
+
+  async function handleUnlinkRefund(refundId: string) {
+    const ok = await useTransactionsStore.getState().unlinkRefund(refundId);
+    showSnackbar({ message: ok ? 'Refund unlinked — counts as income again' : 'Could not unlink' });
+  }
+
+  // R3b: manual "Mark as duplicate of…" — the picked row is kept, this one hidden.
+  async function handleMarkDuplicate(keptId: string) {
+    setDuplicatePickerOpen(false);
+    if (!transaction) return;
+    const duplicateId = transaction.id;
+    const ok = await useTransactionsStore.getState().markDuplicate(keptId, duplicateId);
+    if (!ok) {
+      showSnackbar({ message: 'Could not mark as a duplicate' });
+      return;
+    }
+    showSnackbar({ message: 'Marked as a duplicate' });
+    navigation.goBack();
+  }
+
+  async function handleRestoreDuplicate(duplicateId: string) {
+    const ok = await useTransactionsStore.getState().restoreDuplicate(duplicateId);
+    showSnackbar({ message: ok ? 'Restored — not a duplicate' : 'Could not restore this item' });
+  }
 
   // R3a: "Mark as transfer" — expense: pick "to"; income: pick "from".
   async function handleMarkAsTransfer(otherAccountId: string) {
@@ -74,12 +121,28 @@ export function TransactionDetailScreen() {
   function handleDelete(transactionId: string) {
     const state = useTransactionsStore.getState();
     const current = state.transactions.find(t => t.id === transactionId);
+    // R3b: a refund must never point at a deleted expense — unlink first.
+    const linkedRefunds = refundsFor(state.transactions, transactionId);
+    if (linkedRefunds.length > 0) {
+      showDialog({
+        title: 'Unlink refunds first',
+        message: `This expense has ${linkedRefunds.length} linked refund${
+          linkedRefunds.length === 1 ? '' : 's'
+        }. Open ${linkedRefunds.length === 1 ? 'it' : 'each one'} and tap Unlink refund, then delete the expense.`,
+        icon: 'link-variant',
+        actions: [{ label: 'OK', variant: 'primary' }],
+      });
+      return;
+    }
+    const hiddenCount = hiddenDuplicatesOf(state.transactions, transactionId).length;
     const paired =
       current?.type === 'transfer' && findTransferTwin(state.transactions, transactionId) !== null;
     showDialog({
       title: current?.type === 'transfer' ? 'Delete transfer?' : 'Delete transaction?',
       message: paired
         ? 'This permanently removes the transfer and moves both balances back. The SMS credit it was paired with stays hidden — use Undo transfer instead to get both SMS items back.'
+        : hiddenCount > 0
+        ? 'This will permanently remove the record. Its hidden duplicate stays hidden — use Not a duplicate on it first if you want to keep that one instead.'
         : 'This will permanently remove the record.',
       icon: 'trash-can-outline',
       actions: [
@@ -141,6 +204,7 @@ export function TransactionDetailScreen() {
           onDelete={t => handleDelete(t.id)}
           onChangeCategory={() => setCategoryPickerOpen(true)}
           onOpenTransfer={id => navigation.push('TransactionDetail', { transactionId: id })}
+          onOpenTransaction={id => navigation.push('TransactionDetail', { transactionId: id })}
         />
       </ScrollView>
       <View style={styles.footer}>
@@ -158,6 +222,10 @@ export function TransactionDetailScreen() {
           onDelete={t => handleDelete(t.id)}
           onMarkAsTransfer={() => setTransferPickerOpen(true)}
           onUndoTransfer={t => handleUndoTransfer(t.id)}
+          onLinkRefund={() => setRefundPickerOpen(true)}
+          onUnlinkRefund={t => handleUnlinkRefund(t.id)}
+          onMarkDuplicate={() => setDuplicatePickerOpen(true)}
+          onRestoreDuplicate={t => handleRestoreDuplicate(t.id)}
         />
       </View>
       <TransferAccountPickerSheet
@@ -166,6 +234,18 @@ export function TransactionDetailScreen() {
         excludeAccountId={transaction.accountId}
         direction={transaction.type === 'income' ? 'from' : 'to'}
         onSelect={handleMarkAsTransfer}
+      />
+      <RefundCandidateSheet
+        visible={refundPickerOpen}
+        onClose={() => setRefundPickerOpen(false)}
+        refund={transaction}
+        onSelect={handleLinkRefund}
+      />
+      <DuplicatePickerSheet
+        visible={duplicatePickerOpen}
+        onClose={() => setDuplicatePickerOpen(false)}
+        transaction={transaction}
+        onSelect={handleMarkDuplicate}
       />
       <CategoryPickerSheet
         visible={categoryPickerOpen}

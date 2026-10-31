@@ -10,6 +10,8 @@ import { RootStackParamList } from '../../../app/navigation/routes';
 import { TransactionForm } from '../components/TransactionForm';
 import { TransferForm } from '../components/TransferForm';
 import { promptRememberCategory } from '../../categories/rememberCategory';
+import { canEditTransaction, linkedEditError } from '../../../domain/links/linkedEdit.rules';
+import { linkedEditMessage } from '../../refunds/refundLabels';
 import {
   amountInputToMinor,
   minorToAmountInput,
@@ -33,6 +35,35 @@ export function EditTransactionScreen() {
         <Text style={styles.missingText}>Transaction not found.</Text>
       </View>
     );
+  }
+
+  // R3b.1: hidden rows (transfer twin, hidden duplicate) are never edited.
+  if (!canEditTransaction(transaction)) {
+    return (
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Icon name="arrow-left" size={22} color={colors.onSurface} onPress={() => navigation.goBack()} />
+          <Text style={styles.headerTitle}>Edit Transaction</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.missing}>
+          <Text style={styles.missingText} testID="edit-hidden-row">
+            {linkedEditMessage({ reason: 'hidden' })}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // R3b.1: a linked refund stays income and within its expense; an expense
+  // with refunds stays an expense and never below what was refunded.
+  function guardLinked(values: TransactionFormValues) {
+    const problem = linkedEditError(
+      transaction!,
+      { type: values.type, amountMinor: amountInputToMinor(values.amount) },
+      useTransactionsStore.getState().transactions,
+    );
+    return problem ? { field: problem.field, message: linkedEditMessage(problem) } : null;
   }
 
   // R3a: a transfer edits From / To / amount / date / notes (no category).
@@ -107,6 +138,7 @@ export function EditTransactionScreen() {
       ) : (
         <TransactionForm
           onSubmit={handleSubmit}
+          validate={guardLinked}
           submitting={submitting}
           initialValues={{
             type: transaction.type === 'income' ? 'income' : 'expense',
@@ -153,5 +185,7 @@ const styles = StyleSheet.create({
   missingText: {
     ...typography.bodyLg,
     color: colors.outline,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xl,
   },
 });

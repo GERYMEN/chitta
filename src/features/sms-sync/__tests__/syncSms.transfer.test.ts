@@ -170,7 +170,86 @@ describe('autoApproveAfterSync (pure)', () => {
 
   it('manual mode approves nothing; below-threshold items are neither approved nor held', () => {
     const fresh = base('new', { confidenceScore: 80 });
-    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'manual', 90)).toEqual({ approve: [], heldForTransfer: [] });
-    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'auto', 90)).toEqual({ approve: [], heldForTransfer: [] });
+    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'manual', 90)).toEqual({ approve: [], heldForTransfer: [], heldForDuplicate: [] });
+    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'auto', 90)).toEqual({ approve: [], heldForTransfer: [], heldForDuplicate: [] });
+  });
+});
+
+describe('R3b T4: autoApproveAfterSync holds possible duplicates (pure)', () => {
+  const base = (id: string, patch: Partial<Transaction>): Transaction => ({
+    id,
+    type: 'expense',
+    status: 'pending',
+    amountMinor: 5000,
+    currency: 'INR',
+    merchantName: 'QA',
+    categoryId: 'cat-uncategorised',
+    accountId: 'acc-qa',
+    paymentMethod: 'other',
+    occurredAt: '2026-10-25T10:00:00.000Z',
+    detectedAt: '2026-10-25T10:00:00.000Z',
+    approvedAt: null,
+    note: null,
+    sourceType: 'sms',
+    sourceReferenceHash: id,
+    sanitizedPreview: null,
+    confidenceScore: 95,
+    parserVersion: 'v',
+    bulkBatchId: null,
+    createdAt: '2026-10-25T10:00:00.000Z',
+    updatedAt: '2026-10-25T10:00:00.000Z',
+    ...patch,
+  });
+  const accounts = [{ id: 'acc-qa', deletedAt: null }, { id: 'acc-wallet', deletedAt: null }];
+
+  it('a new item duplicating an EXISTING approved row is held; an unrelated one is approved', () => {
+    const existing = base('old', { status: 'approved' });
+    const fresh = base('new', { occurredAt: '2026-10-25T10:04:00.000Z' });
+    const other = base('other', { amountMinor: 7000 });
+    const out = autoApproveAfterSync([fresh, other], [existing, fresh, other], accounts, [], 'auto', 90);
+    expect(out.approve.map(t => t.id)).toEqual(['other']);
+    expect(out.heldForDuplicate.map(t => t.id)).toEqual(['new']);
+    expect(out.heldForTransfer).toEqual([]);
+  });
+
+  it('two new identical items are both held; a dismissed pair is approved', () => {
+    const a = base('a', {});
+    const b = base('b', { occurredAt: '2026-10-25T10:01:00.000Z' });
+    const held = autoApproveAfterSync([a, b], [a, b], accounts, [], 'auto', 90);
+    expect(held.approve).toEqual([]);
+    expect(held.heldForDuplicate.map(t => t.id).sort()).toEqual(['a', 'b']);
+    const dismissed = autoApproveAfterSync([a, b], [a, b], accounts, [], 'auto', 90, [{ aId: 'a', bId: 'b' }]);
+    expect(dismissed.approve.map(t => t.id).sort()).toEqual(['a', 'b']);
+    expect(dismissed.heldForDuplicate).toEqual([]);
+  });
+
+  it('outside the 10-minute window nothing is held', () => {
+    const a = base('a', {});
+    const b = base('b', { occurredAt: '2026-10-25T10:10:00.001Z' });
+    expect(autoApproveAfterSync([a, b], [a, b], accounts, [], 'auto', 90).approve).toHaveLength(2);
+  });
+});
+
+describe('R3b T4: syncSms holds a new duplicate pair (end to end)', () => {
+  it('two identical 50.00 debits a minute apart stay pending; dedup unchanged after marking', async () => {
+    mockReadInbox.mockResolvedValue([
+      { id: '11', address: 'AD-QASNDR', body: 'Rs.50.00 debited from your account at QA-Shop on 25-Oct-2026.', date: T0 },
+      { id: '12', address: 'AD-QASNDR', body: 'Rs.50.00 debited from your account at QA-Shop on 25-Oct-2026.', date: T0 + 60_000 },
+      { id: '13', address: 'AD-QASNDR', body: 'Rs.70.00 debited from your account at QA-Cafe on 25-Oct-2026.', date: T0 + 120_000 },
+    ]);
+    const result = await syncSms();
+    expect(result.created).toBe(3);
+    expect(result.heldForDuplicate).toBe(2);
+    expect(result.heldForTransfer).toBe(0);
+    expect(result.autoApproved).toBe(1);
+
+    const s = useTransactionsStore.getState();
+    const fifties = s.transactions.filter(t => t.amountMinor === 5000);
+    expect(fifties.every(t => t.status === 'pending')).toBe(true);
+    expect(await s.markDuplicate(fifties[0].id, fifties[1].id)).toBe(true);
+
+    const again = await syncSms();
+    expect(again.created).toBe(0);
+    expect(db.tables.get('transactions')!.size).toBe(3);
   });
 });

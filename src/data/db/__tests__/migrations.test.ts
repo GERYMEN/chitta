@@ -209,7 +209,7 @@ describe('runMigrations versioning', () => {
     expect(appliedVersions.has(6)).toBe(true);
   });
 
-  it('R3a: migration 6 never rewrites existing rows, interpolates no values, and is the last migration', () => {
+  it('R3a: migration 6 never rewrites existing rows and interpolates no values', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m6 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 6);
     const sqls: string[] = m6.statements.map((st: string | { sql: string }) =>
@@ -220,7 +220,40 @@ describe('runMigrations versioning', () => {
     expect(joined).not.toContain("'cat-transfer'");
     expect(joined).toMatch(/PRIMARY KEY \(debit_id, credit_id\)/);
     expect(joined).toMatch(/debit_id TEXT NOT NULL,\s+credit_id TEXT NOT NULL,\s+dismissed_at TEXT NOT NULL/);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(6);
+  });
+
+  it('R3b: runs migration 7 exactly once (idempotent) and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+
+    const { runMigrations } = require('../connection');
+
+    await runMigrations();
+    await runMigrations();
+    await runMigrations();
+
+    expect(
+      executed.filter(sql => /CREATE TABLE IF NOT EXISTS duplicate_pair_dismissals/.test(sql)),
+    ).toHaveLength(1);
+    expect(appliedVersions.has(7)).toBe(true);
+  });
+
+  it('R3b: migration 7 only creates the dismissals table (a_id < b_id), rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m7 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 7);
+    const sqls: string[] = m7.statements.map((st: string | { sql: string }) =>
+      typeof st === 'string' ? st : st.sql,
+    );
+    expect(sqls).toHaveLength(1);
+    const joined = sqls.join('\n');
+    expect(joined).toMatch(/^CREATE TABLE IF NOT EXISTS duplicate_pair_dismissals/);
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b|\bALTER\b|\bINSERT\b/);
+    expect(joined).toMatch(/a_id TEXT NOT NULL,\s+b_id TEXT NOT NULL,\s+dismissed_at TEXT NOT NULL/);
+    expect(joined).toMatch(/PRIMARY KEY \(a_id, b_id\)/);
+    expect(joined).toMatch(/CHECK \(a_id < b_id\)/);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(7);
   });
 
   it('a fresh install seeds the six base categories BEFORE migration 5 adds Uncategorised', async () => {

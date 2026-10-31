@@ -14,9 +14,7 @@ import { useTransactionsStore, selectPending } from '../../transactions/state/tr
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
-import { TransferPair } from '../../../domain/transfers/transfer.rules';
-import { useTransferPairs } from '../../transfers/useTransferPairs';
-import { TransferPairCard } from '../../transfers/components/TransferPairCard';
+import { ReviewSections } from '../../review/components/ReviewSections';
 import {
   autoApproveButtonState,
   autoApproveConfirmTitle,
@@ -52,42 +50,6 @@ export function PendingScreen() {
   const [reviewing, setReviewing] = useState<Transaction | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [approving, setApproving] = useState(false);
-  const [pairBusy, setPairBusy] = useState(false);
-  const allPairs = useTransferPairs();
-  // R3a: "Looks like a transfer" — pairs of pending OR approved rows; the
-  // account chip narrows them to pairs touching that account.
-  const pairs = useMemo(
-    () =>
-      accountFilter
-        ? allPairs.filter(
-            p => p.debit.accountId === accountFilter || p.credit.accountId === accountFilter,
-          )
-        : allPairs,
-    [allPairs, accountFilter],
-  );
-
-  async function confirmPair(pair: TransferPair) {
-    setPairBusy(true);
-    try {
-      const ok = await useTransactionsStore
-        .getState()
-        .confirmTransferPair(pair.debit.id, pair.credit.id);
-      showSnackbar({ message: ok ? 'Recorded as a transfer' : 'This pair changed — not recorded' });
-    } finally {
-      setPairBusy(false);
-    }
-  }
-
-  async function dismissPair(pair: TransferPair) {
-    setPairBusy(true);
-    try {
-      await useTransactionsStore.getState().dismissTransferPair(pair.debit.id, pair.credit.id);
-      showSnackbar({ message: 'Kept as separate items' });
-    } finally {
-      setPairBusy(false);
-    }
-  }
-
   // R2b: the Add/Link snackbar's "View" opens Pending filtered to that account.
   const paramAccountId = route.params?.accountId;
   const focusKey = route.params?.focusKey;
@@ -251,27 +213,8 @@ export function PendingScreen() {
               </Pressable>
             </View>
 
-            {pairs.length > 0 ? (
-              <View style={styles.pairSection} testID="transfer-pairs-section">
-                <Text style={styles.sectionHeader} testID="transfer-pairs-header">
-                  Looks like a transfer · {pairs.length}
-                </Text>
-                <Text style={styles.pairHint}>
-                  Money out of one of your accounts and the same amount into another. A transfer
-                  moves both balances and is never counted as income or expense.
-                </Text>
-                {pairs.map(pair => (
-                  <TransferPairCard
-                    key={`${pair.debit.id}|${pair.credit.id}`}
-                    pair={pair}
-                    accounts={accounts}
-                    busy={pairBusy}
-                    onConfirm={confirmPair}
-                    onDismiss={dismissPair}
-                  />
-                ))}
-              </View>
-            ) : null}
+            {/* R3a transfers + R3b possible duplicates (pending OR approved pairs). */}
+            <ReviewSections accountId={accountFilter} />
           </>
         }
         renderSectionHeader={({ section }) => (
@@ -406,13 +349,6 @@ const styles = StyleSheet.create({
   chipHit: {
     minHeight: 48,
     justifyContent: 'center',
-  },
-  pairSection: {
-    gap: spacing.sm,
-  },
-  pairHint: {
-    ...typography.bodyMd,
-    color: colors.outline,
   },
   sectionHeader: {
     ...typography.labelLg,

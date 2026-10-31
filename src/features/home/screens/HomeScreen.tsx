@@ -23,8 +23,9 @@ import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import {
   canFastApprove,
   incomeExpenseTotals,
+  isLinkedRefund,
 } from '../../../domain/transactions/transaction.rules';
-import { PossibleTransfersCard } from '../../transfers/components/PossibleTransfersCard';
+import { ReviewCard } from '../../review/components/ReviewCard';
 import { transferRowSubtitle } from '../../transfers/transferLabels';
 import { syncSms, SmsSyncError } from '../../sms-sync/syncSms';
 import { formatSyncToast } from '../../sms-sync/syncToast';
@@ -56,7 +57,8 @@ export function HomeScreen() {
     .filter(account => account.type !== 'credit_card')
     .reduce((sum, account) => sum + calculateBalance(account, transactions, account.id), 0);
 
-  // R3a: one income/expense rule for every total — transfers never count.
+  // R3a/R3b: one income/expense rule for every total — transfers and hidden
+  // duplicates never count; a linked refund reduces spend instead of income.
   const { incomeMinor: monthIncome, expenseMinor: monthExpense } = incomeExpenseTotals(approved);
 
   const fastApprovablePending = pending.filter(t => canFastApprove(t.confidenceScore)).slice(0, 2);
@@ -145,7 +147,7 @@ export function HomeScreen() {
 
       <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
 
-      <PossibleTransfersCard onPress={() => navigation.navigate('Pending')} />
+      <ReviewCard onPress={() => navigation.navigate('Review')} />
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -202,6 +204,7 @@ export function HomeScreen() {
               amountMinor={transaction.amountMinor}
               type={transaction.type}
               status={transaction.status}
+              tag={isLinkedRefund(transaction) ? 'Refund' : null}
               icon={<Icon name={visual.icon} size={22} color={visual.iconColor} />}
               onPress={() =>
                 navigation.navigate('TransactionDetail', { transactionId: transaction.id })

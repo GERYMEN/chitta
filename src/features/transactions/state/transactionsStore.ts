@@ -19,6 +19,21 @@ import {
 } from '../../../domain/transfers/transfer.rules';
 import { TRANSFER_CATEGORY_ID } from '../../../domain/categories/category.rules';
 import { transferRepository } from '../../../data/repositories/transfer.repository';
+import { linkRepository } from '../../../data/repositories/link.repository';
+import {
+  linkRefundPatch,
+  RefundLinkError,
+  refundsFor,
+  unlinkRefundPatch,
+  validateRefundLink,
+} from '../../../domain/refunds/refund.rules';
+import {
+  DuplicateDismissal,
+  markDuplicate as buildDuplicateMarking,
+  restoreDuplicate as buildDuplicateRestore,
+} from '../../../domain/duplicates/duplicate.rules';
+import { isLinkedRefund } from '../../../domain/transactions/transaction.rules';
+import { linkedEditError } from '../../../domain/links/linkedEdit.rules';
 import { activeAccounts, deletedAccounts } from '../../../domain/accounts/account.rules';
 import { runMigrations } from '../../../data/db/connection';
 import {
@@ -122,7 +137,8 @@ interface TransactionsState {
   deleteTransaction: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
   addTransaction: (input: CreateTransactionInput) => Promise<Transaction>;
-  updateTransaction: (id: string, patch: TransactionPatch) => Promise<void>;
+  /** R3b.1: false (no write) when the edit breaks a link (see linkedEditError). */
+  updateTransaction: (id: string, patch: TransactionPatch) => Promise<boolean>;
   addAccount: (input: CreateAccountInput) => Promise<void>;
   updateAccount: (id: string, patch: AccountPatch) => Promise<void>;
   /** D10 soft delete — the account's transactions are never touched. */
@@ -162,6 +178,18 @@ interface TransactionsState {
   dismissTransferPair: (debitId: string, creditId: string) => Promise<void>;
   /** R3a: "Undo transfer" on a paired transfer — restores both rows exactly. */
   undoTransfer: (transferId: string) => Promise<boolean>;
+  /** R3b: "Not duplicates" decisions (pairs never suggested again). */
+  duplicateDismissals: DuplicateDismissal[];
+  /** R3b: link an income as a refund of an expense. Null = linked, else why not. */
+  linkRefund: (refundId: string, expenseId: string) => Promise<RefundLinkError | 'missing' | null>;
+  /** R3b: "Unlink refund" — the income counts as income again. */
+  unlinkRefund: (refundId: string) => Promise<boolean>;
+  /** R3b: keep `keptId`, hide `duplicateId` (rejected + link_kind duplicate). */
+  markDuplicate: (keptId: string, duplicateId: string) => Promise<boolean>;
+  /** R3b: "Not a duplicate" on a hidden row — restores it exactly. */
+  restoreDuplicate: (duplicateId: string) => Promise<boolean>;
+  /** R3b: "Not duplicates" on a suggestion. */
+  dismissDuplicatePair: (aId: string, bId: string) => Promise<void>;
 }
 
 function transitionLocal(
@@ -185,19 +213,22 @@ function rulesToMap(rules: ReadonlyArray<MerchantRule>): Record<string, string> 
 }
 
 async function loadAll() {
-  const [transactions, accounts, categories, rules, transferDismissals] = await Promise.all([
-    transactionRepository.listAll(),
-    accountRepository.listAllAccounts(),
-    categoryRepository.listAll(),
-    merchantRuleRepository.listAll(),
-    transferRepository.listDismissals(),
-  ]);
+  const [transactions, accounts, categories, rules, transferDismissals, duplicateDismissals] =
+    await Promise.all([
+      transactionRepository.listAll(),
+      accountRepository.listAllAccounts(),
+      categoryRepository.listAll(),
+      merchantRuleRepository.listAll(),
+      transferRepository.listDismissals(),
+      linkRepository.listDuplicateDismissals(),
+    ]);
   return {
     transactions,
     accounts,
     categories,
     merchantRules: rulesToMap(rules),
     transferDismissals,
+    duplicateDismissals,
   };
 }
 
@@ -207,6 +238,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   categories: [],
   merchantRules: {},
   transferDismissals: [],
+  duplicateDismissals: [],
   isHydrated: false,
   hasOnboarded: false,
   userName: '',
@@ -386,6 +418,21 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   updateTransaction: async (id, patch) => {
     const existing =
       get().transactions.find(t => t.id === id) ?? (await transactionRepository.getById(id));
+    // R3b.1: the same guard the Edit form shows inline — hidden rows are never
+    // edited, refund links never break through an edit.
+    if (
+      existing &&
+      linkedEditError(
+        existing,
+        {
+          type: patch.type ?? existing.type,
+          amountMinor: patch.amountMinor ?? existing.amountMinor,
+        },
+        get().transactions,
+      )
+    ) {
+      return false;
+    }
     const fields = existing ? changedTransactionFields(existing, patch) : [];
     // A save that changes nothing is not a money change: no audit row.
     const audit: AuditEventDraft[] =
@@ -396,6 +443,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set(state => ({
       transactions: state.transactions.map(t => (t.id === id ? updated : t)),
     }));
+    return true;
   },
 
   addAccount: async input => {
@@ -601,8 +649,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     if (!patch) return false;
     // Audited 'edited' with the field names that really changed
     // (type, transferAccountId, plus categoryId / accountId when they move).
-    await get().updateTransaction(id, patch);
-    return true;
+    // R3b.1: an expense with linked refunds cannot become a transfer.
+    return get().updateTransaction(id, patch);
   },
 
   confirmTransferPair: async (debitId, creditId) => {
@@ -647,7 +695,87 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     }));
     return true;
   },
+
+  linkRefund: async (refundId, expenseId) => {
+    const transactions = get().transactions;
+    const refund = transactions.find(t => t.id === refundId);
+    const expense = transactions.find(t => t.id === expenseId);
+    if (!refund || !expense) return 'missing';
+    const error = validateRefundLink(refund, expense, transactions);
+    if (error) return error;
+    const linked = linkRefundPatch(refund, expense, new Date().toISOString());
+    await linkRepository.linkRefund(linked, expense.id, refund.categoryId);
+    set(state => ({
+      transactions: state.transactions.map(t => (t.id === linked.id ? linked : t)),
+    }));
+    return null;
+  },
+
+  unlinkRefund: async refundId => {
+    const refund = get().transactions.find(t => t.id === refundId);
+    if (!refund || !isLinkedRefund(refund)) return false;
+    const expenseId = refund.linkedTransactionId as string;
+    const link = await linkRepository.latestRefundLink(refundId, expenseId);
+    const unlinked = unlinkRefundPatch(
+      refund,
+      link?.previous_category_id ?? null,
+      link?.category_id ?? null,
+      new Date().toISOString(),
+    );
+    if (!unlinked) return false;
+    await linkRepository.unlinkRefund(unlinked, expenseId);
+    set(state => ({
+      transactions: state.transactions.map(t => (t.id === unlinked.id ? unlinked : t)),
+    }));
+    return true;
+  },
+
+  markDuplicate: async (keptId, duplicateId) => {
+    const byId = new Map(get().transactions.map(t => [t.id, t]));
+    const kept = byId.get(keptId);
+    const duplicate = byId.get(duplicateId);
+    if (!kept || !duplicate) return false;
+    const marking = buildDuplicateMarking(kept, duplicate, new Date().toISOString());
+    if (!marking) return false;
+    await linkRepository.markDuplicate(marking.duplicate, kept.id, marking.previous);
+    set(state => ({
+      transactions: state.transactions.map(t =>
+        t.id === marking.duplicate.id ? marking.duplicate : t,
+      ),
+    }));
+    return true;
+  },
+
+  restoreDuplicate: async duplicateId => {
+    const hidden = get().transactions.find(t => t.id === duplicateId);
+    if (!hidden || hidden.linkKind !== 'duplicate' || hidden.linkedTransactionId == null) {
+      return false;
+    }
+    const keptId = hidden.linkedTransactionId;
+    const mark = await linkRepository.latestDuplicateMark(duplicateId, keptId);
+    if (!mark) return false;
+    const restored = buildDuplicateRestore(hidden, mark.previous, new Date().toISOString());
+    if (!restored) return false;
+    await linkRepository.restoreDuplicate(restored, keptId);
+    set(state => ({
+      transactions: state.transactions.map(t => (t.id === restored.id ? restored : t)),
+    }));
+    return true;
+  },
+
+  dismissDuplicatePair: async (aId, bId) => {
+    const dismissal = await linkRepository.dismissDuplicatePair(aId, bId);
+    set(state => ({ duplicateDismissals: [...state.duplicateDismissals, dismissal] }));
+  },
 }));
+
+/** R3b: live refunds linked to an expense (used by Detail + the delete guard). */
+export function linkedRefundsOf(
+  state: Pick<TransactionsState, 'transactions'>,
+  expenseId: string,
+): Transaction[] {
+  return refundsFor(state.transactions, expenseId);
+}
 
 /**
  * `accounts` holds ALL accounts (incl. soft-deleted, for transaction labels).

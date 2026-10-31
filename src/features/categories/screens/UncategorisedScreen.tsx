@@ -3,23 +3,27 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useShallow } from 'zustand/react/shallow';
-import { Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { colors, spacing, typography } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { uncategorisedItems } from '../../../domain/categories/category.rules';
-import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { promptRememberCategory } from '../rememberCategory';
+import { UncategorisedRow } from '../components/UncategorisedRow';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../../app/navigation/routes';
 
 /**
  * R2 T4 quick-assign: every pending/approved item still in Uncategorised.
  * Each row is merchant + date + a category chip; picking a category goes
- * through the same "Always use…?" flow as Edit/Detail. Amounts are not shown.
+ * through the same "Always use…?" flow as Edit/Detail. R3b.1 F2: each row
+ * also shows amount + account, and for SMS rows the SMS description and a
+ * "View original SMS" link (see UncategorisedRow).
  */
 export function UncategorisedScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const accounts = useTransactionsStore(state => state.accounts);
   const items = useTransactionsStore(useShallow(state => uncategorisedItems(state.transactions)));
   const [editing, setEditing] = useState<Transaction | null>(null);
 
@@ -61,28 +65,12 @@ export function UncategorisedScreen() {
           ) : undefined
         }
         renderItem={({ item }) => (
-          <View style={styles.row} testID="quick-assign-row">
-            <View style={styles.rowText}>
-              <Text style={styles.merchant} numberOfLines={1}>
-                {item.merchantName}
-              </Text>
-              <Text style={styles.date}>
-                {formatTransactionTimestamp(item.occurredAt)}
-                {item.status === 'pending' ? ' · Pending' : ''}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => setEditing(item)}
-              hitSlop={{ top: 6, bottom: 6 }}
-              accessibilityRole="button"
-              accessibilityLabel={`Choose category for ${item.merchantName}`}>
-              <Chip
-                label="Uncategorised"
-                tone="pending"
-                icon={<Icon name="chevron-down" size={14} color={colors.onSurfaceVariant} />}
-              />
-            </Pressable>
-          </View>
+          <UncategorisedRow
+            transaction={item}
+            account={accounts.find(a => a.id === item.accountId) ?? null}
+            onOpen={t => navigation.navigate('TransactionDetail', { transactionId: t.id })}
+            onChooseCategory={setEditing}
+          />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -137,31 +125,6 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.onSurfaceVariant,
     marginBottom: spacing.md,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 64,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: radii.default,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
-  },
-  rowText: {
-    flex: 1,
-    gap: 2,
-  },
-  merchant: {
-    ...typography.bodyLg,
-    color: colors.onSurface,
-  },
-  date: {
-    ...typography.labelMd,
-    color: colors.outline,
   },
   empty: {
     flex: 1,

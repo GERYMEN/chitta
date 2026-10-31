@@ -403,3 +403,82 @@ describe('R3a transfer sentences', () => {
     expect(deleted.impact).toEqual({ text: 'Balances moved back', tone: 'negative' });
   });
 });
+
+describe('R3b refund + duplicate sentences', () => {
+  const REFUND = { merchantName: 'QA-Merchant-10', amountMinor: 10000, type: 'income' as const };
+  const ORIGINAL = { merchantName: 'QA-Merchant-10 Store' };
+  const DUPLICATE = { merchantName: 'QA-Merchant-11', amountMinor: 5000, type: 'expense' as const };
+
+  const linkedEvent = event({
+    eventType: 'refund_linked',
+    metadata: {
+      kind: 'refund_linked',
+      refund_id: 'txn-1',
+      expense_id: 'txn-0',
+      previous_category_id: 'cat-uncategorised',
+      category_id: 'cat-shopping',
+    },
+  });
+
+  it('masked by default (R2 privacy): no amount appears', () => {
+    const linked = describeRaw(linkedEvent, { transaction: REFUND, linkedTransaction: ORIGINAL });
+    expect(linked.sentence).toBe(`You linked a ${MASKED_AMOUNT} refund to QA-Merchant-10 Store`);
+    expect(linked.sentence).not.toMatch(/100/);
+    expect(linked.impact).toEqual({ text: 'Not income · reduces spending', tone: 'neutral' });
+
+    const marked = describeRaw(
+      event({
+        eventType: 'duplicate_marked',
+        metadata: {
+          kind: 'duplicate_marked',
+          kept_id: 'txn-0',
+          duplicate_id: 'txn-1',
+          previous: {
+            type: 'expense',
+            status: 'approved',
+            categoryId: 'cat-food',
+            approvedAt: null,
+            transferAccountId: null,
+            linkedTransactionId: null,
+            linkKind: null,
+          },
+        },
+      }),
+      { transaction: DUPLICATE, linkedTransaction: { merchantName: 'QA-Merchant-11' } },
+    );
+    expect(marked.sentence).toBe(`You marked QA-Merchant-11 ${MASKED_AMOUNT} as a duplicate`);
+    expect(marked.sentence).not.toMatch(/50/);
+    expect(marked.icon).toBe('content-duplicate');
+  });
+
+  it('revealed with the eye; unlink + restore sentences', () => {
+    expect(describeActivity(linkedEvent, { transaction: REFUND, linkedTransaction: ORIGINAL }).sentence).toBe(
+      'You linked a ₹100.00 refund to QA-Merchant-10 Store',
+    );
+    expect(
+      describeRaw(
+        event({
+          eventType: 'refund_unlinked',
+          metadata: { kind: 'refund_unlinked', refund_id: 'txn-1', expense_id: 'txn-0' },
+        }),
+        { transaction: REFUND, linkedTransaction: ORIGINAL },
+      ),
+    ).toMatchObject({
+      sentence: `You unlinked a ${MASKED_AMOUNT} refund from QA-Merchant-10 Store`,
+      impact: { text: 'Counts as income again', tone: 'neutral' },
+    });
+    expect(
+      describeRaw(
+        event({
+          eventType: 'duplicate_restored',
+          metadata: { kind: 'duplicate_restored', kept_id: 'txn-0', duplicate_id: 'txn-1' },
+        }),
+        { transaction: DUPLICATE },
+      ).sentence,
+    ).toBe(`You restored QA-Merchant-11 ${MASKED_AMOUNT} — not a duplicate`);
+  });
+
+  it('falls back when the rows are gone', () => {
+    expect(describeRaw(linkedEvent).sentence).toBe(`You linked a ${MASKED_AMOUNT} refund to an expense`);
+  });
+});

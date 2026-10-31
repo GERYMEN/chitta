@@ -1,0 +1,173 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md (section R3 features 3–4 +
+"Working rules"), ongoing/roadmap/STATE.md, ongoing/roadmap/R3a-transfers.md
+(previous phase — data model, totals helper call-site map, pairing,
+undo-via-audit-metadata pattern; build on it and reuse its patterns),
+ongoing/roadmap/BUGS.md (do NOT fix B1–B4), the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute device-safety + privacy
+rules), docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: you are on branch phase/R3b-refund-duplicate (created from
+phase/R3a-transfers). Stay on it. Do not switch branches, do not commit.
+
+PHASE R3b — Link refund + mark duplicate.
+Goal: a refund cancels out the spending it belongs to instead of
+counting as income; a transaction recorded twice counts once.
+
+Verified current state (grep to confirm):
+- LinkKind = 'transfer_twin' | 'refund' | 'duplicate' already exists
+  (src/domain/transactions/transaction.types.ts); columns
+  linked_transaction_id / link_kind exist (migration 6). Last migration
+  = 6.
+- countsTowardIncomeExpense / incomeExpenseTotals is the single totals
+  helper (see R3a report call-site map). Everything below goes through it.
+
+TASKS
+T1 Refund model (pure, unit-tested):
+   - A refund = an income row with link_kind 'refund' and
+     linked_transaction_id = the original expense id. It keeps its own
+     account, date and status; its category becomes the original's.
+   - Totals: a linked refund does NOT count as income. It reduces spend
+     (expense total, and per-category sums later) in the period of the
+     REFUND's own date. Balance math unchanged (refund money still enters
+     the account).
+   - Partial and multiple refunds allowed; the sum of refunds linked to
+     one expense may not exceed its amount (validate; clear error).
+   - Candidate expenses for "Link to original": pure ranker —
+     approved/pending expenses, not linked/rejected/transfer, amount ≥
+     refund amount minus already-refunded, occurred within 90 days
+     BEFORE the refund; rank by same normalizeMerchant key, then same
+     account, then closest date. Unit-test ranking + limits.
+T2 Duplicate model (pure, unit-tested):
+   - findDuplicatePairs(transactions, dismissals, windowMinutes = 10):
+     same account, same type (income/expense only), same amount,
+     |occurredAt diff| ≤ window, both pending or approved, neither linked/
+     transfer/rejected, pair not dismissed. Each row in at most one pair.
+     Edge tests: window boundary, 1 paisa off, different account,
+     three rows, dismissed.
+   - Mark duplicate: the user picks which row to KEEP (default: the
+     approved one, else the earlier). The other row becomes status
+     'rejected', link_kind 'duplicate', linked_transaction_id = kept id;
+     it keeps its sourceReferenceHash (re-sync never recreates it) and is
+     hidden from Pending, lists, totals and balances like an R3a twin.
+     Store the previous state in the audit metadata (R3a pattern) so
+     "Not a duplicate" on the hidden row's detail restores it EXACTLY.
+   - "Not duplicates" on a suggestion → dismissal. Migration 7:
+     duplicate_pair_dismissals(a_id, b_id, dismissed_at, PRIMARY KEY
+     (a_id, b_id)) with a_id < b_id. Parameterized, idempotent.
+   - Manual "Mark as duplicate of…" on any pending/approved income or
+     expense detail → picker of rows with same account + type + amount
+     within 3 days.
+T3 Audit (metadata never contains SMS text, merchant text or amounts
+   beyond what existing events already store): 'refund_linked'
+   {refund_id, expense_id}, 'refund_unlinked', 'duplicate_marked'
+   {kept_id, duplicate_id, previous…}, 'duplicate_restored'. Dismissals
+   write no audit row (R3a precedent). Activity sentences: "You linked a
+   ₹•••• refund to <merchant>", "You marked <merchant> ₹•••• as a
+   duplicate" (respect R2 masking).
+T4 SMS sync (and the R2b "Add account" import): a new item that forms a
+   duplicate pair is held from auto-approve, same as R3a transfer pairs.
+T5 UI:
+   - Income detail: "Link to original expense" → BottomSheet of ranked
+     candidates (merchant, date, amount, "₹X left to refund"); confirm.
+     Linked refund detail: "Refund for <merchant> · <date>" (tap → the
+     expense) + "Unlink refund". Expense detail: "Refunded ₹X" with the
+     refund rows listed (tap → refund).
+   - List rows: refunds show a "Refund" tag; amount colour = neutral/
+     positive token per DESIGN.md.
+   - Duplicates: Pending gets a "Possible duplicates" section (card per
+     pair: both rows with date/time + which will be kept, [Keep this one]
+     ×2 or [Mark duplicate] + [Not duplicates]). The R3a Home review card
+     becomes one card "N to review — Review ›" counting transfers +
+     duplicates, opening a review list with both sections.
+   - Hidden duplicate detail (from Activity): "Duplicate of <merchant>"
+     link + "Not a duplicate".
+   - Kept row detail: "1 duplicate hidden" (tap → hidden row).
+T6 Tests: refund totals (same month, cross-month, partial, multiple,
+   over-refund rejected, unlink restores totals); ranker; duplicate
+   pairing edges; mark/restore exact; dismissal; sync hold; migration 7
+   idempotent; audit events + no SMS text; Activity sentences masked.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+DEVICE (USB serial 00015365L001524). The phone currently has the RELEASE
+build installed (same debug-keystore signature, so `adb install -r` of
+the debug APK keeps data). Use debug + Metro + `adb reverse tcp:8081
+tcp:8081` for testing (re-run adb reverse after any USB reset). Phone
+absent 2 min or locked → stop device part. SYNTHETIC DATA ONLY on
+"QA Delete Bank 9999" (active). Do NOT tap Sync SMS. Real totals never
+printed: capture into shell variables and print only SAME/DIFFERENT or
+the numeric DELTA (deltas come only from QA amounts).
+ D1 Refund: Add expense "QA-Merchant-10" 300.00 and income
+    "QA-Merchant-10" 100.00 on the QA bank; approve both. Capture Home
+    income + spent. Income detail → Link to original → QA-Merchant-10
+    expense is the top candidate (grep QA only) → link. Home income
+    delta = −100.00, spent delta = −100.00; QA bank balance unchanged by
+    the link. Expense detail shows "Refunded ₹100.00". Unlink → deltas
+    back to 0. Re-link.
+ D2 Duplicate: Add two expenses "QA-Merchant-11" 50.00, same account,
+    same date/time; approve both. "Possible duplicates" shows the QA
+    pair (grep QA). Mark duplicate → spent delta −50.00, QA bank balance
+    +50.00 vs before marking. Hidden row detail → Not a duplicate →
+    deltas back to 0.
+ D3 Real data: report COUNT only of possible duplicates and of the Home
+    "to review" card. Do NOT act on real items.
+ D4 Activity shows the QA refund/duplicate sentences masked (grep QA).
+ D5 Cleanup: delete all QA-Merchant-10/11 rows (unlink first if the UI
+    requires). Force-stop + relaunch; logcat 0 FATAL com.tracker, 0
+    "Maximum update depth", 0 ReactNativeJS errors.
+ D6 Release: cd android && ./gradlew assembleRelease; adb install -r
+    app/build/outputs/apk/release/app-release.apk (if it ever reports
+    INSTALL_FAILED_UPDATE_INCOMPATIBLE: STOP, never uninstall); launch
+    with `am start -W -n com.tracker/.MainActivity`; logcat 0 FATAL.
+    Leave the release build installed; end with force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Other app in front: HOME (unless a call is
+  active — then wait), relaunch Tracker; never inspect it. Locked = stop.
+- Every uiautomator dump grep-filtered to one QA element or one label;
+  never print a full dump, real merchants, amounts, previews or senders;
+  `adb shell rm /sdcard/u.xml` after; /sdcard only inside adb shell.
+- Never change the owner's real transactions, accounts or settings; never
+  link/mark/dismiss real items; never tracker.db / sqlite3 / run-as; no
+  uninstall/clear-data/screenshots.
+- If something changes on screen that you did not do (the owner may be
+  using the phone), stop touching it and report.
+
+OUTPUT: ongoing/roadmap/R3b-refund-duplicate.md (files, migration 7 SQL,
+refund + duplicate data model, totals rules, ranker + pairing rules,
+UI description, gates, D1–D6 PASS/FAIL, leftover synthetic data, what is
+unit-test only). Leak-scan the report before finishing with the pattern
+below — and never write this pattern into any repo file:
+  (pattern passed in the dispatch message)
+Do not commit.
+REPLY ONLY: gates yes/no; files changed count; D1–D6 PASS/FAIL; not
+verified and why; decisions you made.
+
+--- FOLLOW-UP R3b.1 (2026-10-31, same branch, code + gates only; NO device) ---
+F1 Edit guard for linked rows (known gap from R3b): editing a linked
+   refund cannot change its type away from income; editing an expense
+   cannot lower its amount below the sum already refunded; editing a
+   hidden duplicate/transfer twin is not offered. Clear inline errors
+   (zod/refine or domain validator). Unit tests.
+F2 User request — Uncategorised screen (src/features/categories/screens/
+   UncategorisedScreen.tsx): users cannot tell what an item is from the
+   merchant name alone. Each row shows: merchant, date, amount, account
+   label, and for SMS-sourced rows the stored sanitizedPreview as the
+   "SMS description" (2 lines, tap to expand) plus a "View original SMS"
+   link that reuses OriginalSmsView with parseSmsReference (live read on
+   demand, held only in component state — never stored or logged).
+   Manual rows show no SMS section. Tapping the row body (not the
+   category chip) may open TransactionDetail. Category chip + "Always?"
+   flow unchanged. Tests: rows render preview / link only for SMS rows;
+   no raw SMS persisted.
+Gates as above. Append F1/F2 to the report (files, decisions). Device
+part (D1–D6 + F2 check: count of "View original SMS" links on the
+Uncategorised screen only — never tap one on real rows, never print row
+text) runs later, only when the orchestrator says the phone is free.

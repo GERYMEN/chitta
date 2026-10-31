@@ -94,7 +94,7 @@ async function runImport(
   });
 
   // Opt-in auto mode: exactly the Sync SMS rule and path (system actor).
-  // R3a: items that form a possible transfer pair stay pending.
+  // R3a/R3b: items that form a possible transfer or duplicate pair stay pending.
   const latest = useTransactionsStore.getState();
   const { approvalMode, autoApproveThreshold } = latest;
   const { approve: toApprove } = autoApproveAfterSync(
@@ -104,6 +104,7 @@ async function runImport(
     latest.transferDismissals,
     approvalMode,
     autoApproveThreshold,
+    latest.duplicateDismissals,
   );
   let autoApproved = 0;
   for (const transaction of toApprove) {

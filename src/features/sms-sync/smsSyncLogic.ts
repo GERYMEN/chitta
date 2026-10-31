@@ -8,6 +8,11 @@ import {
   TransferDismissal,
 } from '../../domain/transfers/transfer.rules';
 import { ParsedSmsTransaction } from './smsParser';
+import {
+  DuplicateDismissal,
+  duplicatePairIds,
+  findDuplicatePairs,
+} from '../../domain/duplicates/duplicate.rules';
 import { activeAccounts, deletedAccounts } from '../../domain/accounts/account.rules';
 import { accountKeyToString, ACCOUNT_KEY_NORMALIZER_VERSION } from './normalizeAccountKey';
 import { normalizeMerchant } from '../../domain/merchants/normalizeMerchant';
@@ -280,14 +285,17 @@ export interface PostSyncApproval {
   approve: Transaction[];
   /** New items the auto rule WOULD approve but that form a possible transfer pair. */
   heldForTransfer: Transaction[];
+  /** R3b: … or a possible duplicate pair (and no transfer pair). */
+  heldForDuplicate: Transaction[];
 }
 
 /**
  * R3a T4: run AFTER all new pending items of a sync are inserted. Any new item
  * that forms a possible transfer pair (with another new item or an existing
  * pending/approved row) is NOT auto-approved — it stays pending so the user
- * decides "It's a transfer" / "Not a transfer" first. Every other new item
- * follows the unchanged single auto-approve rule (`shouldAutoApprove`).
+ * decides "It's a transfer" / "Not a transfer" first. R3b: the same hold for a
+ * new item that forms a possible duplicate pair. Every other new item follows
+ * the unchanged single auto-approve rule (`shouldAutoApprove`).
  */
 export function autoApproveAfterSync(
   created: ReadonlyArray<Transaction>,
@@ -296,14 +304,17 @@ export function autoApproveAfterSync(
   dismissals: ReadonlyArray<Pick<TransferDismissal, 'debitId' | 'creditId'>>,
   mode: ApprovalMode,
   threshold: number,
+  duplicateDismissals: ReadonlyArray<Pick<DuplicateDismissal, 'aId' | 'bId'>> = [],
 ): PostSyncApproval {
   const eligible = created.filter(
     t => t.status === 'pending' && shouldAutoApprove(mode, threshold, t.confidenceScore),
   );
-  if (eligible.length === 0) return { approve: [], heldForTransfer: [] };
+  if (eligible.length === 0) return { approve: [], heldForTransfer: [], heldForDuplicate: [] };
   const paired = pairedTransactionIds(findTransferPairs(allTransactions, accounts, dismissals));
+  const duplicates = duplicatePairIds(findDuplicatePairs(allTransactions, duplicateDismissals));
   return {
-    approve: eligible.filter(t => !paired.has(t.id)),
+    approve: eligible.filter(t => !paired.has(t.id) && !duplicates.has(t.id)),
     heldForTransfer: eligible.filter(t => paired.has(t.id)),
+    heldForDuplicate: eligible.filter(t => !paired.has(t.id) && duplicates.has(t.id)),
   };
 }

@@ -30,7 +30,7 @@ import {
   isArchivedCategory,
   visibleCategories,
 } from '../../../domain/categories/category.rules';
-import { incomeExpenseTotals } from '../../../domain/transactions/transaction.rules';
+import { incomeExpenseTotals, isLinkedRefund } from '../../../domain/transactions/transaction.rules';
 import { transferRowSubtitle } from '../../transfers/transferLabels';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 
@@ -250,6 +250,7 @@ export function TransactionsScreen() {
               amountMinor={item.amountMinor}
               type={item.type}
               status={item.status}
+              tag={isLinkedRefund(item) ? 'Refund' : null}
               icon={<Icon name={visual.icon} size={22} color={visual.iconColor} />}
               onPress={() => navigation.navigate('TransactionDetail', { transactionId: item.id })}
             />

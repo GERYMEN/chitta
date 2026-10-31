@@ -35,6 +35,11 @@ export interface ActivityContext {
   transferAccount?: Pick<Account, 'name' | 'lastFour'> | null;
   /** R2: the category a rule/category event refers to (looked up by id). */
   category?: Pick<Category, 'name' | 'archivedAt'> | null;
+  /**
+   * R3b: the OTHER row of a refund/duplicate event — the original expense of
+   * a refund, the kept row of a duplicate (looked up by the id in metadata).
+   */
+  linkedTransaction?: Pick<Transaction, 'merchantName'> | null;
 }
 
 export interface ActivityOptions {
@@ -67,6 +72,10 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   category_archived: 'archive-outline',
   transfer_paired: 'swap-horizontal',
   transfer_unpaired: 'undo-variant',
+  refund_linked: 'cash-refund',
+  refund_unlinked: 'link-variant-off',
+  duplicate_marked: 'content-duplicate',
+  duplicate_restored: 'backup-restore',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -206,6 +215,28 @@ export function describeActivity(
         ? `You undid a transfer of ${amountLabel(subject.amountMinor, show)}`
         : 'You undid a transfer';
       impact = { text: 'Both items restored as they were', tone: 'neutral' };
+      break;
+    case 'refund_linked':
+    case 'refund_unlinked': {
+      const refundAmount = subject ? amountLabel(subject.amountMinor, show) : MASKED_AMOUNT;
+      const original = context.linkedTransaction?.merchantName ?? 'an expense';
+      sentence =
+        event.eventType === 'refund_linked'
+          ? `You linked a ${refundAmount} refund to ${original}`
+          : `You unlinked a ${refundAmount} refund from ${original}`;
+      impact =
+        event.eventType === 'refund_linked'
+          ? { text: 'Not income · reduces spending', tone: 'neutral' }
+          : { text: 'Counts as income again', tone: 'neutral' };
+      break;
+    }
+    case 'duplicate_marked':
+      sentence = `You marked ${what} as a duplicate`;
+      impact = { text: 'Hidden · not in totals or balances', tone: 'neutral' };
+      break;
+    case 'duplicate_restored':
+      sentence = `You restored ${what} — not a duplicate`;
+      impact = { text: 'Back exactly as it was', tone: 'neutral' };
       break;
     case 'detected': {
       sentence = `Detected ${what} from SMS`;

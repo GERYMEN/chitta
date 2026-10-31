@@ -7,8 +7,10 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
 
 /**
  * R3a: what a link on a row means. 'transfer_twin' = the SMS credit half of a
- * confirmed transfer pair (kept, rejected, for dedup). R3b adds
- * 'refund' / 'duplicate' (declared now, not built yet).
+ * confirmed transfer pair (kept, rejected, for dedup). R3b: 'refund' = an
+ * income linked to the expense it gives money back for (not income; reduces
+ * spend); 'duplicate' = a row hidden as a duplicate of the linked (kept) row
+ * (rejected, kept for dedup).
  */
 export type LinkKind = 'transfer_twin' | 'refund' | 'duplicate';
 
@@ -45,7 +47,7 @@ export interface Transaction {
   bulkBatchId: string | null;
   /** R3a: the "to" account of a transfer (null/absent for income/expense). */
   transferAccountId?: string | null;
-  /** R3a: the row this one is linked to (a transfer twin → its transfer). */
+  /** R3a/R3b: the row this one is linked to (twin → transfer, refund → expense, duplicate → kept row). */
   linkedTransactionId?: string | null;
   linkKind?: LinkKind | null;
   createdAt: string;
