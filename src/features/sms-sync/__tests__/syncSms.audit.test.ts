@@ -16,9 +16,10 @@ jest.mock('../../../native/android/permissions/smsPermission', () => ({
 
 const SENDER = 'AD-QASNDR';
 const mockReadInbox = jest.fn();
-jest.mock('../../../native/android/sms/smsReader', () => ({
-  readInbox: (limit: number) => mockReadInbox(limit),
-}));
+// R4b: paged native API, served from the synthetic inbox `mockReadInbox` returns.
+jest.mock('../../../native/android/sms/smsReader', () =>
+  jest.requireActual('../../../test/helpers/fakeInbox').fakeInboxModule(() => mockReadInbox()),
+);
 
 // Every parsed SMS belongs to the QA account — matching is covered elsewhere.
 jest.mock('../smsSyncLogic', () => {
@@ -64,6 +65,8 @@ beforeEach(() => {
     BODIES.map((body, i) => ({ id: String(i + 1), address: SENDER, body, date: 1700000000000 + i })),
   );
   useTransactionsStore.setState({
+    smsSyncStartAt: null,
+    smsLastSyncedAt: null,
     transactions: [],
     accounts: [rowToAccount(ACCOUNT_ROW)],
     categories: [

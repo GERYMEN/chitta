@@ -42,7 +42,7 @@ export function ProfileSetupScreen() {
             <Text style={styles.brand}>Tracker</Text>
           </View>
           <View style={styles.stepRow}>
-            <Text style={styles.stepLabel}>STEP 7 OF 8 · PROFILE</Text>
+            <Text style={styles.stepLabel}>STEP 7 OF 9 · PROFILE</Text>
           </View>
           <Text style={styles.headline}>Let's set you up.</Text>
           <Text style={styles.subtext}>

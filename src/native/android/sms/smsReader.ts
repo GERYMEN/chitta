@@ -14,17 +14,43 @@ export interface SmsMessage {
 }
 
 interface SmsReaderNativeModule {
-  readInbox(limit: number): Promise<SmsMessage[]>;
+  readInboxPage(
+    sinceMs: number,
+    beforeMs: number,
+    beforeId: number,
+    limit: number,
+  ): Promise<SmsMessage[]>;
+  countInboxSince(sinceMs: number): Promise<number>;
   readById(id: string): Promise<SmsMessage | null>;
 }
 
 const { SmsReader } = NativeModules as { SmsReader?: SmsReaderNativeModule };
 
-export async function readInbox(limit = 200): Promise<SmsMessage[]> {
+function nativeModule(): SmsReaderNativeModule {
   if (!SmsReader) {
     throw new Error('SmsReader native module is not available on this platform');
   }
-  return SmsReader.readInbox(limit);
+  return SmsReader;
+}
+
+/**
+ * R4b: one page of inbox SMS, newest first, with `sinceMs <= date` and
+ * (date, _id) strictly before (beforeMs, beforeId). Paging rules live in
+ * features/sms-sync/inboxPaging.ts (pure mirror, unit-tested). Bodies are
+ * for in-memory parsing only.
+ */
+export async function readInboxPage(
+  sinceMs: number,
+  beforeMs: number,
+  beforeId: number,
+  limit: number,
+): Promise<SmsMessage[]> {
+  return nativeModule().readInboxPage(sinceMs, beforeMs, beforeId, limit);
+}
+
+/** R4b: COUNT of inbox SMS with date >= sinceMs (no text is read). */
+export async function countInboxSince(sinceMs: number): Promise<number> {
+  return Number(await nativeModule().countInboxSince(sinceMs));
 }
 
 /**
@@ -33,8 +59,5 @@ export async function readInbox(limit = 200): Promise<SmsMessage[]> {
  * the result must stay in component state and never be stored or logged.
  */
 export async function readSmsById(id: string): Promise<SmsMessage | null> {
-  if (!SmsReader) {
-    throw new Error('SmsReader native module is not available on this platform');
-  }
-  return SmsReader.readById(id);
+  return nativeModule().readById(id);
 }

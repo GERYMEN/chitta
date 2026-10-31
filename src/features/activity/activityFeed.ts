@@ -4,6 +4,11 @@ import { Account } from '../../domain/accounts/account.types';
 import { Category } from '../../domain/categories/category.types';
 import { categoryLabel } from '../../domain/categories/category.rules';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
+import {
+  SmsSyncStartMode,
+  START_MODE_LABEL,
+  syncStartLabel,
+} from '../../domain/settings/smsSyncStart.rules';
 
 /**
  * Pure sentence building for the Activity feed. No React, no store — every
@@ -82,6 +87,7 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   refund_unlinked: 'link-variant-off',
   duplicate_marked: 'content-duplicate',
   duplicate_restored: 'backup-restore',
+  approval_undone: 'undo-variant',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -191,6 +197,7 @@ function recordedType(event: AuditFeedEvent): TransactionType | null {
     case 'created':
     case 'approved':
     case 'rejected':
+    case 'approval_undone':
       return metadata.transactionType;
     case 'detected':
     case 'auto_approved':
@@ -360,6 +367,10 @@ export function describeActivity(
       sentence = `You approved ${what}`;
       impact = balanceImpact(subject, show);
       break;
+    case 'approval_undone':
+      sentence = `You undid the approval of ${what}`;
+      impact = { text: 'Back in Pending · not in balance', tone: 'pending' };
+      break;
     case 'rejected':
       sentence = `You rejected ${what}`;
       impact = { text: 'Not counted in balance', tone: 'neutral' };
@@ -460,6 +471,9 @@ function describeSettingsChange(
   if (metadata?.kind !== 'settings_changed') {
     return { sentence: 'You changed approval settings', impact: null };
   }
+  if (metadata.key === 'sms_sync_start_at' || metadata.key === 'sms_sync_start_mode') {
+    return describeSyncStartChange(event.actor, metadata.key, metadata.from, metadata.to);
+  }
   if (metadata.key === 'approval_mode') {
     return {
       sentence: metadata.to === 'auto' ? 'You turned on auto-approve' : 'You turned off auto-approve',
@@ -469,6 +483,46 @@ function describeSettingsChange(
   return {
     sentence: `You set the auto-approve threshold to ${metadata.to}%`,
     impact: { text: `Was ${metadata.from}%`, tone: 'neutral' },
+  };
+}
+
+const UNSET = 'unset';
+
+/** R4b: '' = whole inbox; 'unset' = the key did not exist yet (upgrade). */
+function syncStartValueLabel(value: string): string {
+  if (value === UNSET) return 'not set';
+  return syncStartLabel(value === '' ? null : value);
+}
+
+function describeSyncStartChange(
+  actor: AuditFeedEvent['actor'],
+  key: 'sms_sync_start_at' | 'sms_sync_start_mode',
+  from: string,
+  to: string,
+): Pick<ActivityItem, 'sentence' | 'impact'> {
+  if (key === 'sms_sync_start_mode') {
+    const label = START_MODE_LABEL[to as SmsSyncStartMode] ?? to;
+    const was = START_MODE_LABEL[from as SmsSyncStartMode];
+    return {
+      sentence:
+        actor === 'system'
+          ? `SMS sync start mode set to ${label}`
+          : `You chose SMS sync start: ${label}`,
+      impact: was ? { text: `Was ${was}`, tone: 'neutral' } : null,
+    };
+  }
+  const target = syncStartValueLabel(to);
+  return {
+    sentence:
+      actor === 'system'
+        ? `SMS sync start set to ${target}`
+        : to === ''
+        ? 'You set SMS sync to read the whole inbox'
+        : `You set SMS sync to start from ${target}`,
+    impact:
+      actor === 'system' && from === UNSET
+        ? { text: 'Set automatically on update', tone: 'neutral' }
+        : { text: `Was ${syncStartValueLabel(from)}`, tone: 'neutral' },
   };
 }
 

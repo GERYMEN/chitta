@@ -83,6 +83,15 @@ import {
   TransactionFilters,
 } from '../filters/transactionFilters';
 import { Period } from '../../../domain/periods/period.types';
+import {
+  parseIsoOrNull,
+  parseStartMode,
+  SMS_SYNC_KEYS,
+  SmsSyncStartMode,
+  smsTransactionBounds,
+  upgradeDefaultStart,
+} from '../../../domain/settings/smsSyncStart.rules';
+import { smsSyncRepository } from '../../../data/repositories/smsSync.repository';
 import { DEFAULT_PERIOD } from '../../../domain/periods/period.rules';
 
 /** R3a: Add Record → Transfer / Edit transfer form values (paise, ISO date). */
@@ -114,6 +123,21 @@ export interface AutoApproval {
 }
 
 /**
+ * R4b: what "Approve all" changed, so Undo returns exactly these items. The
+ * `approvedAt` written by the approval is kept: Undo only touches an item
+ * that is still approved with that same timestamp and link (nobody changed
+ * it since).
+ */
+export interface ApprovalSnapshot {
+  id: string;
+  approvedAt: string | null;
+  linkKind: Transaction['linkKind'] | null;
+}
+
+/** Audit `from` value of an R4b settings key that did not exist yet. */
+export const SETTING_UNSET = 'unset';
+
+/**
  * Hydration/cache layer over the on-device SQLite repositories. Screens read
  * and write through this store only — no screen imports SQLite directly.
  */
@@ -128,6 +152,33 @@ interface TransactionsState {
   userName: string;
   approvalMode: ApprovalMode;
   autoApproveThreshold: number;
+  /** R4b: where SMS sync starts (null mode = not chosen yet). */
+  smsSyncStartMode: SmsSyncStartMode | null;
+  /** ISO; null = whole inbox. */
+  smsSyncStartAt: string | null;
+  /** ISO of the newest SMS date a normal sync fully processed. */
+  smsLastSyncedAt: string | null;
+  /**
+   * R4b: save the sync start (mode + date). Each changed key is audited
+   * 'settings_changed' {key, from, to} — dates/mode names only.
+   */
+  setSmsSyncStart: (
+    mode: SmsSyncStartMode,
+    startAt: string | null,
+    actor?: AuditActor,
+  ) => Promise<void>;
+  /** R4b: sync cursor (not a user setting — not audited). */
+  setSmsLastSyncedAt: (iso: string) => Promise<void>;
+  /**
+   * R4b upgrade path: onboarding already done and no start saved → 'custom'
+   * at the earliest of (first sms_sync_runs start, earliest SMS-sourced
+   * transaction), else `now`. No UI. Returns true when it wrote something.
+   */
+  applySmsSyncStartUpgrade: (now?: Date) => Promise<boolean>;
+  /** R4b: Pending "Approve all" — each item via `approve` (canTransition, audited). */
+  approveAll: (ids: ReadonlyArray<string>) => Promise<ApprovalSnapshot[]>;
+  /** R4b: Undo of "Approve all" — back to pending, audited 'approval_undone'. */
+  undoApprovals: (snapshots: ReadonlyArray<ApprovalSnapshot>) => Promise<number>;
   hydrate: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
   updateProfile: (patch: ProfilePatch) => Promise<void>;
@@ -256,6 +307,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   userName: '',
   approvalMode: DEFAULT_APPROVAL_MODE,
   autoApproveThreshold: DEFAULT_AUTO_APPROVE_THRESHOLD,
+  smsSyncStartMode: null,
+  smsSyncStartAt: null,
+  smsLastSyncedAt: null,
   transactionFilters: DEFAULT_TRANSACTION_FILTERS,
   selectedPeriod: DEFAULT_PERIOD,
 
@@ -269,22 +323,147 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   hydrate: async () => {
     await runMigrations();
-    const [data, hasOnboardedValue, userNameValue, approvalModeValue, thresholdValue] =
-      await Promise.all([
-        loadAll(),
-        settingsRepository.getValue('has_onboarded'),
-        settingsRepository.getValue(SETTINGS_KEYS.userName),
-        settingsRepository.getValue(SETTINGS_KEYS.approvalMode),
-        settingsRepository.getValue(SETTINGS_KEYS.autoApproveThreshold),
-      ]);
+    const [
+      data,
+      hasOnboardedValue,
+      userNameValue,
+      approvalModeValue,
+      thresholdValue,
+      startModeValue,
+      startAtValue,
+      lastSyncedValue,
+    ] = await Promise.all([
+      loadAll(),
+      settingsRepository.getValue('has_onboarded'),
+      settingsRepository.getValue(SETTINGS_KEYS.userName),
+      settingsRepository.getValue(SETTINGS_KEYS.approvalMode),
+      settingsRepository.getValue(SETTINGS_KEYS.autoApproveThreshold),
+      settingsRepository.getValue(SMS_SYNC_KEYS.startMode),
+      settingsRepository.getValue(SMS_SYNC_KEYS.startAt),
+      settingsRepository.getValue(SMS_SYNC_KEYS.lastSyncedAt),
+    ]);
     set({
       ...data,
       hasOnboarded: hasOnboardedValue === 'true',
       userName: (userNameValue ?? '').trim(),
       approvalMode: parseApprovalMode(approvalModeValue),
       autoApproveThreshold: parseThreshold(thresholdValue),
-      isHydrated: true,
+      smsSyncStartMode: parseStartMode(startModeValue),
+      smsSyncStartAt: parseIsoOrNull(startAtValue),
+      smsLastSyncedAt: parseIsoOrNull(lastSyncedValue),
     });
+    // R4b: existing installs get a start without seeing the setup step again.
+    // A failure here must never block the app from opening.
+    await get()
+      .applySmsSyncStartUpgrade()
+      .catch(() => false);
+    set({ isHydrated: true });
+  },
+
+  applySmsSyncStartUpgrade: async (now = new Date()) => {
+    const state = get();
+    if (!state.hasOnboarded || state.smsSyncStartMode != null) return false;
+    const firstRunStartedAtMs = await smsSyncRepository.firstRunStartedAtMs().catch(() => null);
+    const bounds = smsTransactionBounds(state.transactions);
+    const startAt = upgradeDefaultStart({
+      firstRunStartedAtMs,
+      earliestSmsTransactionAt: bounds.earliest,
+      now,
+    });
+    await get().setSmsSyncStart('custom', startAt, 'system');
+    // The old 200-cap sync already read the inbox up to its last run: the
+    // newest SMS-sourced row is a safe (earlier) cursor, so the first sync
+    // after the upgrade stays incremental (1-day overlap, dedup by hash).
+    if (bounds.newest && get().smsLastSyncedAt == null) {
+      await get().setSmsLastSyncedAt(bounds.newest);
+    }
+    return true;
+  },
+
+  setSmsSyncStart: async (mode, startAt, actor = 'user') => {
+    const current = get();
+    const fromMode = current.smsSyncStartMode ?? SETTING_UNSET;
+    const fromAt =
+      current.smsSyncStartMode == null ? SETTING_UNSET : current.smsSyncStartAt ?? '';
+    const nextAt = mode === 'all' ? null : startAt;
+    const toAt = nextAt ?? '';
+    const audit: AuditEventInput[] = [];
+    if (fromMode !== mode) {
+      audit.push({
+        eventType: 'settings_changed',
+        actor,
+        metadata: { kind: 'settings_changed', key: 'sms_sync_start_mode', from: fromMode, to: mode },
+      });
+    }
+    if (fromAt !== toAt) {
+      audit.push({
+        eventType: 'settings_changed',
+        actor,
+        metadata: { kind: 'settings_changed', key: 'sms_sync_start_at', from: fromAt, to: toAt },
+      });
+    }
+    await settingsRepository.setMany(
+      [
+        [SMS_SYNC_KEYS.startMode, mode],
+        [SMS_SYNC_KEYS.startAt, toAt],
+      ],
+      audit,
+    );
+    set({ smsSyncStartMode: mode, smsSyncStartAt: nextAt });
+  },
+
+  setSmsLastSyncedAt: async iso => {
+    await settingsRepository.setValue(SMS_SYNC_KEYS.lastSyncedAt, iso);
+    set({ smsLastSyncedAt: iso });
+  },
+
+  approveAll: async ids => {
+    const snapshots: ApprovalSnapshot[] = [];
+    for (const id of ids) {
+      const before = get().transactions.find(t => t.id === id);
+      if (!before || !canTransition(before.status, 'approved')) continue;
+      await get().approve(id);
+      const after = get().transactions.find(t => t.id === id);
+      if (after?.status === 'approved') {
+        snapshots.push({ id, approvedAt: after.approvedAt, linkKind: after.linkKind ?? null });
+      }
+    }
+    return snapshots;
+  },
+
+  undoApprovals: async snapshots => {
+    let restored = 0;
+    for (const snapshot of snapshots) {
+      const current = get().transactions.find(t => t.id === snapshot.id);
+      // Exact undo only: still approved by that same "Approve all", unlinked since.
+      if (
+        !current ||
+        current.status !== 'approved' ||
+        current.approvedAt !== snapshot.approvedAt ||
+        (current.linkKind ?? null) !== snapshot.linkKind
+      ) {
+        continue;
+      }
+      const now = new Date().toISOString();
+      // approved → pending is not a normal transition (canTransition): this
+      // is the explicit Undo of the user's own bulk approval, audited.
+      set(state => ({
+        transactions: state.transactions.map(t =>
+          t.id === snapshot.id ? { ...t, status: 'pending', approvedAt: null, updatedAt: now } : t,
+        ),
+      }));
+      await transactionRepository
+        .update(snapshot.id, { status: 'pending', approvedAt: null }, [
+          {
+            eventType: 'approval_undone',
+            actor: 'user',
+            metadata: { kind: 'approval_undone', transactionType: current.type },
+          },
+        ])
+        .catch(() => get().refresh());
+      restored++;
+    }
+    return restored;
   },
 
   completeOnboarding: async () => {

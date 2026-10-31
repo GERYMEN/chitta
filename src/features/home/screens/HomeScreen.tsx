@@ -23,7 +23,9 @@ import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { canFastApprove, isLinkedRefund } from '../../../domain/transactions/transaction.rules';
 import { ReviewCard } from '../../review/components/ReviewCard';
 import { transferRowSubtitle } from '../../transfers/transferLabels';
-import { syncSms, SmsSyncError } from '../../sms-sync/syncSms';
+import { SmsSyncError } from '../../sms-sync/syncSms';
+import { runSmsSync, useSyncRunStore } from '../../sms-sync/syncRunner';
+import type { SyncWindow } from '../../../domain/settings/smsSyncStart.rules';
 import { formatSyncToast } from '../../sms-sync/syncToast';
 import { greetingFor } from '../../profile/utils/greeting';
 import { ProfileSettingsSheet } from '../../profile/components/ProfileSettingsSheet';
@@ -57,6 +59,12 @@ export function HomeScreen() {
   const userName = useTransactionsStore(state => state.userName);
   const categories = useTransactionsStore(state => state.categories);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // R4b: live scan progress (counts only) for the Balance card.
+  const syncRunning = useSyncRunStore(state => state.running);
+  const syncScanned = useSyncRunStore(state => state.scanned);
+  const syncTotal = useSyncRunStore(state => state.total);
+  const syncCancelling = useSyncRunStore(state => state.cancelRequested);
+  const cancelSync = useSyncRunStore(state => state.cancel);
   const greeting = greetingFor(new Date(), userName);
   const avatarInitial = userName.trim().charAt(0).toUpperCase();
 
@@ -92,10 +100,31 @@ export function HomeScreen() {
   const fastApprovablePending = pending.filter(t => canFastApprove(t.confidenceScore)).slice(0, 2);
   const recent = approved.slice(0, 4);
 
-  async function handleSyncSms() {
+  /**
+   * Normal Sync, or (R4b) a Settings gap scan: `gap.window` is scanned and
+   * `gap.onCompleted` (save the new start) runs only if the scan finished.
+   */
+  async function handleSyncSms(gap?: { window: SyncWindow; onCompleted: () => Promise<void> }) {
     try {
-      const result = await syncSms();
-      ToastAndroid.show(formatSyncToast(result), ToastAndroid.LONG);
+      const result = await runSmsSync(gap ? { window: gap.window } : {});
+      if (!result) {
+        ToastAndroid.show('A scan is already running.', ToastAndroid.SHORT);
+        return;
+      }
+      if (result.declined) return;
+      if (gap) {
+        if (result.cancelled) {
+          ToastAndroid.show(
+            `${formatSyncToast(result)} · start date not changed`,
+            ToastAndroid.LONG,
+          );
+        } else {
+          await gap.onCompleted();
+          ToastAndroid.show(formatSyncToast(result), ToastAndroid.LONG);
+        }
+      } else {
+        ToastAndroid.show(formatSyncToast(result), ToastAndroid.LONG);
+      }
       if (result.suggestions.length > 0) {
         navigation.navigate('SmsSuggestions', { runId: result.suggestionRunId });
       }
@@ -165,7 +194,13 @@ export function HomeScreen() {
       <BalanceCard
         totalBalanceMinor={totalBalanceMinor}
         onAddRecord={() => navigation.navigate('AddRecord')}
-        onSyncSms={handleSyncSms}
+        onSyncSms={() => handleSyncSms()}
+        syncProgress={
+          syncRunning
+            ? { scanned: syncScanned, total: syncTotal, cancelling: syncCancelling }
+            : null
+        }
+        onCancelSync={cancelSync}
       />
 
       <View style={styles.periodBlock}>
@@ -269,6 +304,10 @@ export function HomeScreen() {
         onOpenCategories={() => {
           setSettingsOpen(false);
           navigation.navigate('Categories');
+        }}
+        onScanGap={(window, onCompleted) => {
+          setSettingsOpen(false);
+          handleSyncSms({ window, onCompleted });
         }}
       />
     </SafeAreaView>

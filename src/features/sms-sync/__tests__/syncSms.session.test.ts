@@ -16,9 +16,10 @@ jest.mock('../../../native/android/permissions/smsPermission', () => ({
 }));
 
 const mockReadInbox = jest.fn();
-jest.mock('../../../native/android/sms/smsReader', () => ({
-  readInbox: (limit: number) => mockReadInbox(limit),
-}));
+// R4b: paged native API, served from the synthetic inbox `mockReadInbox` returns.
+jest.mock('../../../native/android/sms/smsReader', () =>
+  jest.requireActual('../../../test/helpers/fakeInbox').fakeInboxModule(() => mockReadInbox()),
+);
 
 const mockGetDatabase = getDatabase as jest.MockedFunction<typeof getDatabase>;
 
@@ -57,6 +58,8 @@ beforeEach(() => {
     BODIES.map((body, i) => ({ id: String(i + 1), address: 'AD-QASNDR', body, date: 1700000000000 + i })),
   );
   useTransactionsStore.setState({
+    smsSyncStartAt: null,
+    smsLastSyncedAt: null,
     transactions: [],
     accounts: [rowToAccount(ACCOUNT_ROW)],
     categories: [
@@ -84,8 +87,14 @@ describe('syncSms suggestion session (R2b T1)', () => {
     expect(result.suggestions).toEqual([
       { bankName: 'HDFC', accountKind: 'bank', lastFour: '4242', messageCount: 3 },
     ]);
-    // Nothing about the waiting items is written to the DB.
-    expect(db.calls.filter(c => /^INSERT/.test(c.sql))).toHaveLength(0);
+    // Nothing about the waiting items is written to the DB — only the R4b
+    // sync cursor (a date, no SMS content).
+    const inserts = db.calls.filter(c => /^INSERT/.test(c.sql));
+    expect(inserts.filter(c => c.params[0] !== 'sms_last_synced_at')).toHaveLength(0);
+    for (const c of inserts) {
+      expect(c.params).toHaveLength(2);
+      expect(Number.isFinite(Date.parse(String(c.params[1])))).toBe(true);
+    }
     // No raw SMS body / sender in the session.
     const json = JSON.stringify(session.groups);
     expect(json).not.toContain('AD-QASNDR');

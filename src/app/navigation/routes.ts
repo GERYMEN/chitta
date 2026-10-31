@@ -20,6 +20,7 @@ export const Routes = {
   Onboarding: 'Onboarding',
   ProfileSetup: 'ProfileSetup',
   Permissions: 'Permissions',
+  SyncStart: 'SyncStart',
 } as const;
 
 export type MainTabParamList = {
@@ -54,4 +55,6 @@ export type RootStackParamList = {
   Onboarding: undefined;
   ProfileSetup: undefined;
   Permissions: undefined;
+  /** R4b: onboarding "Where should SMS sync start?" */
+  SyncStart: undefined;
 };

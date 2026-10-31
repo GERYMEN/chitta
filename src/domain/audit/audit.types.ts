@@ -32,12 +32,19 @@ export type AuditEventType =
   | 'refund_unlinked'
   /** R3b: a row hidden as a duplicate of another / "Not a duplicate". */
   | 'duplicate_marked'
-  | 'duplicate_restored';
+  | 'duplicate_restored'
+  /** R4b: Pending "Approve all" → Undo put an approved item back to pending. */
+  | 'approval_undone';
 
 export type AuditActor = 'system' | 'user';
 
 /** Settings keys whose changes are audited. `user_name` is never audited. */
-export type AuditedSettingKey = 'approval_mode' | 'auto_approve_threshold';
+export type AuditedSettingKey =
+  | 'approval_mode'
+  | 'auto_approve_threshold'
+  /** R4b: dates/mode names only — never SMS content. */
+  | 'sms_sync_start_mode'
+  | 'sms_sync_start_at';
 
 /**
  * Small typed payloads only. NEVER SMS text, SMS sender, or
@@ -55,6 +62,7 @@ export type AuditMetadata =
   | { kind: 'created'; transactionType: TransactionType }
   | { kind: 'approved'; transactionType: TransactionType }
   | { kind: 'rejected'; transactionType: TransactionType }
+  | { kind: 'approval_undone'; transactionType: TransactionType }
   | {
       kind: 'auto_approved';
       confidence: number;

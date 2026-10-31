@@ -64,3 +64,44 @@ export function isDestructiveDialog(config: DialogConfig): boolean {
 export function showDialog(options: DialogOptions): void {
   useDialogStore.getState().show(options);
 }
+
+export interface ConfirmOptions {
+  title: string;
+  message?: string;
+  icon?: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+}
+
+/**
+ * R4b: a two-action dialog as a promise. Resolves true on the confirm
+ * action; false on Cancel, back button, scrim, or when another dialog
+ * replaces it.
+ */
+export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
+  return new Promise(resolve => {
+    let settled = false;
+    let unsubscribe: () => void = () => undefined;
+    const settle = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      resolve(value);
+    };
+    useDialogStore.getState().show({
+      title: options.title,
+      message: options.message,
+      icon: options.icon,
+      actions: [
+        { label: options.cancelLabel ?? 'Cancel', variant: 'ghost', onPress: () => settle(false) },
+        { label: options.confirmLabel, variant: 'primary', onPress: () => settle(true) },
+      ],
+    });
+    const shown = useDialogStore.getState().current;
+    // Closed without an action (back / scrim) or replaced → treat as Cancel.
+    // `press` clears `current` before it runs the handler, so defer a tick.
+    unsubscribe = useDialogStore.subscribe(state => {
+      if (state.current !== shown) setTimeout(() => settle(false), 0);
+    });
+  });
+}

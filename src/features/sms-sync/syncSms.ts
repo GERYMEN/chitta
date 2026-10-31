@@ -1,5 +1,9 @@
 import { useTransactionsStore } from '../transactions/state/transactionsStore';
-import { readInbox } from '../../native/android/sms/smsReader';
+import {
+  countInboxSince,
+  readInboxPage,
+  SmsMessage,
+} from '../../native/android/sms/smsReader';
 import {
   checkSmsPermission,
   requestSmsPermission,
@@ -23,6 +27,15 @@ import { activeAccounts } from '../../domain/accounts/account.rules';
 import { UNCATEGORISED_ID } from '../../domain/categories/category.rules';
 import { groupUnmatchedCandidates } from './suggestionGroups';
 import { useSuggestionSession } from './suggestionSession';
+import { ParsedSmsTransaction } from './smsParser';
+import {
+  computeSyncWindow,
+  needsLargeScanConfirm,
+  nextLastSyncedAt,
+  SMS_PAGE_SIZE,
+  SyncWindow,
+} from '../../domain/settings/smsSyncStart.rules';
+import { firstCursor, isLastPage, nextCursor } from './inboxPaging';
 
 export interface SmsSyncResult {
   scanned: number;
@@ -39,6 +52,10 @@ export interface SmsSyncResult {
   heldForTransfer: number;
   /** R3b: new items held from auto-approve because they form a possible duplicate pair. */
   heldForDuplicate: number;
+  /** R4b: the user pressed Cancel — items already inserted are kept. */
+  cancelled: boolean;
+  /** R4b: the user said no to the large-scan warning — nothing was read. */
+  declined: boolean;
   suggestions: SmsAccountSuggestion[];
   /**
    * R2b: id of this run's in-memory suggestion session (the groups with
@@ -79,14 +96,86 @@ export class SmsSyncError extends Error {
   }
 }
 
-const INBOX_LIMIT = 200;
+export interface SyncProgress {
+  scanned: number;
+  /** The COUNT estimate taken before the scan (0 if unavailable). */
+  total: number;
+}
+
+/** R4b: a plain flag the caller flips; checked between pages. */
+export interface CancelToken {
+  cancelled: boolean;
+}
+
+export interface SyncOptions {
+  /**
+   * Explicit window (Settings "start moved earlier" gap scan). A gap scan
+   * never moves `sms_last_synced_at`. Default: the normal sync window.
+   */
+  window?: SyncWindow;
+  onProgress?: (progress: SyncProgress) => void;
+  /** Asked when the estimate is above LARGE_SCAN_THRESHOLD; false = no scan. */
+  confirmLargeScan?: (estimate: number) => Promise<boolean>;
+  cancel?: CancelToken;
+  pageSize?: number;
+  /** Injected clock (tests). */
+  now?: () => number;
+}
+
+/** Yield to the JS event loop so the UI can render between pages. */
+function yieldToUi(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 /**
- * User-triggered SMS sync. Reads the existing inbox (no background listening),
- * parses each message with the v1 heuristic parser, dedupes against existing
+ * R4b: SMS count inside a half-open window, from two COUNT queries
+ * (date >= since) − (date >= before). No text is read.
+ */
+export async function estimateWindowCount(window: SyncWindow): Promise<number> {
+  const [fromSince, fromBefore] = await Promise.all([
+    countInboxSince(window.sinceMs),
+    countInboxSince(window.beforeMs),
+  ]);
+  return Math.max(0, fromSince - fromBefore);
+}
+
+/** R4b: the normal Sync window for the current settings. */
+export function currentSyncWindow(nowMs: number = Date.now()): SyncWindow {
+  const { smsSyncStartAt, smsLastSyncedAt } = useTransactionsStore.getState();
+  return computeSyncWindow({ startAt: smsSyncStartAt, lastSyncedAt: smsLastSyncedAt, nowMs });
+}
+
+function emptyResult(declined: boolean): SmsSyncResult {
+  return {
+    scanned: 0,
+    created: 0,
+    uncategorised: 0,
+    skipped: 0,
+    autoApproved: 0,
+    heldForTransfer: 0,
+    heldForDuplicate: 0,
+    cancelled: false,
+    declined,
+    suggestions: [],
+    suggestionRunId: '',
+  };
+}
+
+/**
+ * User-triggered SMS sync. Reads the existing inbox (no background listening)
+ * inside a date window, page by page (R4b: no 200-message cap), parses each
+ * message with the v1 heuristic parser, dedupes against existing
  * `sourceReferenceHash` values, and creates `pending` transactions. Nothing is
  * auto-approved by default (same Detect -> Review -> Approve -> Record principle
  * as manual entry).
+ *
+ * R4b window: first sync [start, now]; later syncs from
+ * max(start, sms_last_synced_at − 1 day) — dedup by hash prevents doubles.
+ * Pages of SMS_PAGE_SIZE, newest first, parsed + inserted per page with a
+ * yield in between; raw messages of a page are dropped once parsed (bodies
+ * live in memory only during parsing). Cancel (checked between pages) keeps
+ * what was inserted and does NOT move `sms_last_synced_at`: pages run newest
+ * → oldest, so the cursor only advances once the whole window is processed.
  *
  * Opt-in auto-approve: when the user has chosen approval mode 'auto', each
  * transaction CREATED BY THIS SYNC whose confidence is >= the user's threshold
@@ -105,7 +194,7 @@ const INBOX_LIMIT = 200;
  * one 'auto_approved' event (actor 'system', confidence + threshold) in the
  * same db.transaction as the status change.
  */
-export async function syncSms(): Promise<SmsSyncResult> {
+export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult> {
   const granted = await checkSmsPermission();
   if (!granted) {
     const requested = await requestSmsPermission();
@@ -125,15 +214,26 @@ export async function syncSms(): Promise<SmsSyncResult> {
     throw new SmsSyncError('no-accounts', 'Add an account before syncing SMS');
   }
 
-  let messages;
+  const now = options.now ?? Date.now;
+  const isGapScan = options.window != null;
+  const window = options.window ?? currentSyncWindow(now());
+  const pageSize = Math.max(1, options.pageSize ?? SMS_PAGE_SIZE);
+  const cancel = options.cancel ?? { cancelled: false };
+
+  let total: number;
   try {
-    messages = await readInbox(INBOX_LIMIT);
+    total = await estimateWindowCount(window);
   } catch (error) {
     throw new SmsSyncError(
       'read-failed',
       error instanceof Error ? error.message : 'Failed to read the SMS inbox',
     );
   }
+  if (options.confirmLargeScan && needsLargeScanConfirm(total)) {
+    const go = await options.confirmLargeScan(total);
+    if (!go) return emptyResult(true);
+  }
+  options.onProgress?.({ scanned: 0, total });
 
   const existingHashes = new Set(
     store.transactions
@@ -141,44 +241,77 @@ export async function syncSms(): Promise<SmsSyncResult> {
       .filter((hash): hash is string => hash != null),
   );
 
-  const candidates = messages
-    .map(message => parseSmsMessage(message))
-    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null);
-
-  const fresh = filterNewCandidates(candidates, existingHashes);
-
   // D10: SMS owned by a soft-deleted account (exact type+lastFour match, or
   // a 'deleted' decision for its normalized key) are dropped — not imported,
   // not suggested. Active accounts are matched first and always win.
   // R2b: explicit Add/Link decisions route a key to its account; Ignore drops it.
   const deletedDecisionKeys = await accountRepository.listDeletedDecisionKeys();
   const decisions = toSuggestionDecisions(await accountRepository.listSuggestionDecisions());
-  const { matched, unmatched } = partitionCandidates(
-    fresh,
-    store.accounts,
-    deletedDecisionKeys,
-    decisions,
-  );
 
   // Snapshot the policy once so a settings change mid-sync can't mix modes.
   const { approvalMode, autoApproveThreshold } = store;
 
+  let scanned = 0;
   let uncategorised = 0;
+  let newestSeenMs: number | null = null;
+  let completed = false;
   const createdRows: Transaction[] = [];
-  for (const { parsed, accountId } of matched) {
-    // R2: merchant rule first, else the system "Uncategorised" bucket.
-    const categoryId = resolveCategoryIdForSms(
-      store.categories,
-      parsed.type,
-      parsed.merchantName,
-      store.merchantRules,
+  const unmatchedAll: ParsedSmsTransaction[] = [];
+  let cursor = firstCursor(window);
+
+  while (!cancel.cancelled) {
+    let page: SmsMessage[];
+    try {
+      page = await readInboxPage(window.sinceMs, cursor.beforeMs, cursor.beforeId, pageSize);
+    } catch (error) {
+      throw new SmsSyncError(
+        'read-failed',
+        error instanceof Error ? error.message : 'Failed to read the SMS inbox',
+      );
+    }
+    if (newestSeenMs == null && page.length > 0) newestSeenMs = page[0].date;
+
+    const candidates = page
+      .map(message => parseSmsMessage(message))
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null);
+    const fresh = filterNewCandidates(candidates, existingHashes);
+    for (const candidate of fresh) existingHashes.add(candidate.sourceReferenceHash);
+
+    const latestStore = useTransactionsStore.getState();
+    const { matched, unmatched } = partitionCandidates(
+      fresh,
+      latestStore.accounts,
+      deletedDecisionKeys,
+      decisions,
     );
-    if (categoryId == null) continue;
+    unmatchedAll.push(...unmatched);
 
-    const input = buildSmsTransactionInput(parsed, accountId, categoryId, new Date().toISOString());
+    for (const { parsed, accountId } of matched) {
+      // R2: merchant rule first, else the system "Uncategorised" bucket.
+      const categoryId = resolveCategoryIdForSms(
+        latestStore.categories,
+        parsed.type,
+        parsed.merchantName,
+        latestStore.merchantRules,
+      );
+      if (categoryId == null) continue;
 
-    createdRows.push(await useTransactionsStore.getState().addTransaction(input));
-    if (categoryId === UNCATEGORISED_ID) uncategorised++;
+      const input = buildSmsTransactionInput(parsed, accountId, categoryId, new Date().toISOString());
+
+      createdRows.push(await useTransactionsStore.getState().addTransaction(input));
+      if (categoryId === UNCATEGORISED_ID) uncategorised++;
+    }
+
+    scanned += page.length;
+    options.onProgress?.({ scanned, total });
+    const last = isLastPage(page.length, pageSize);
+    cursor = nextCursor(page, cursor);
+    // The raw page (address/body) goes out of scope here.
+    if (last) {
+      completed = true;
+      break;
+    }
+    await yieldToUi();
   }
   const created = createdRows.length;
 
@@ -206,12 +339,20 @@ export async function syncSms(): Promise<SmsSyncResult> {
     if (after?.status === 'approved') autoApproved++;
   }
 
+  // R4b: the cursor moves only when a normal sync processed its whole window.
+  if (completed && !isGapScan) {
+    const previous = useTransactionsStore.getState().smsLastSyncedAt;
+    const next = nextLastSyncedAt(previous, newestSeenMs);
+    if (next != null && next !== previous) {
+      await useTransactionsStore.getState().setSmsLastSyncedAt(next);
+    }
+  }
+
   // R2b: keep each suggestion's waiting candidates in the in-memory session
   // (not nav params, not the DB) so New Accounts Found can show them.
-  const groups = groupUnmatchedCandidates(unmatched);
+  const groups = groupUnmatchedCandidates(unmatchedAll);
   const suggestionRunId = useSuggestionSession.getState().start(groups);
   const suggestions = groups.map(group => ({ ...group.suggestion }));
-  const scanned = messages.length;
   return {
     scanned,
     created,
@@ -220,6 +361,8 @@ export async function syncSms(): Promise<SmsSyncResult> {
     autoApproved,
     heldForTransfer: heldForTransfer.length,
     heldForDuplicate: heldForDuplicate.length,
+    cancelled: !completed,
+    declined: false,
     suggestions,
     suggestionRunId,
   };

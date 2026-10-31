@@ -17,9 +17,10 @@ jest.mock('../../../native/android/permissions/smsPermission', () => ({
 }));
 
 const mockReadInbox = jest.fn();
-jest.mock('../../../native/android/sms/smsReader', () => ({
-  readInbox: (limit: number) => mockReadInbox(limit),
-}));
+// R4b: paged native API, served from the synthetic inbox `mockReadInbox` returns.
+jest.mock('../../../native/android/sms/smsReader', () =>
+  jest.requireActual('../../../test/helpers/fakeInbox').fakeInboxModule(() => mockReadInbox()),
+);
 
 // Debits land on the QA bank, credits on the QA wallet — matching is covered elsewhere.
 jest.mock('../smsSyncLogic', () => {
@@ -71,6 +72,8 @@ beforeEach(() => {
   mockGetDatabase.mockReturnValue(db as never);
   mockReadInbox.mockResolvedValue(INBOX);
   useTransactionsStore.setState({
+    smsSyncStartAt: null,
+    smsLastSyncedAt: null,
     transactions: [],
     accounts: ACCOUNTS.map(rowToAccount),
     categories: [

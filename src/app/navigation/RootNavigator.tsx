@@ -9,6 +9,7 @@ import { SmsSuggestionsScreen } from '../../features/sms-sync/screens/SmsSuggest
 import { OnboardingScreen } from '../../features/onboarding/screens/OnboardingScreen';
 import { ProfileSetupScreen } from '../../features/onboarding/screens/ProfileSetupScreen';
 import { PermissionsScreen } from '../../features/onboarding/screens/PermissionsScreen';
+import { SyncStartScreen } from '../../features/onboarding/screens/SyncStartScreen';
 import { ActivityScreen } from '../../features/activity/screens/ActivityScreen';
 import { CategoriesScreen } from '../../features/categories/screens/CategoriesScreen';
 import { UncategorisedScreen } from '../../features/categories/screens/UncategorisedScreen';
@@ -28,6 +29,7 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <Stack.Screen name="Permissions" component={PermissionsScreen} />
+      <Stack.Screen name="SyncStart" component={SyncStartScreen} />
       <Stack.Screen name="Tabs" component={MainTabs} />
       <Stack.Screen
         name="TransactionDetail"

@@ -6,7 +6,8 @@ import { Button, Card, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { requestSmsPermission } from '../../../native/android/permissions/smsPermission';
-import { useTransactionsStore } from '../../transactions/state/transactionsStore';
+import { saveOnboardingSyncStart } from './SyncStartScreen';
+import { DEFAULT_SMS_SYNC_START_CHOICE } from '../../../domain/settings/smsSyncStart.rules';
 
 interface PermissionRow {
   icon: string;
@@ -60,8 +61,10 @@ export function PermissionsScreen() {
   const navigation = useNavigation();
   const [instantAlerts, setInstantAlerts] = useState(true);
 
-  function enterAppManual() {
-    useTransactionsStore.getState().completeOnboarding();
+  async function enterAppManual() {
+    // R4b: no SMS question for manual entry — the recommended default
+    // (install date) is saved, audited, and changeable in Settings.
+    await saveOnboardingSyncStart(DEFAULT_SMS_SYNC_START_CHOICE);
     navigation.reset({ index: 0, routes: [{ name: 'Tabs' as never }] });
   }
 
@@ -74,16 +77,16 @@ export function PermissionsScreen() {
     } catch {
       // Ignore request failures — onboarding still proceeds.
     }
-    await useTransactionsStore.getState().completeOnboarding();
-    navigation.reset({ index: 0, routes: [{ name: 'Tabs' as never }] });
+    // R4b: next step asks where SMS sync starts (it completes onboarding).
+    navigation.navigate('SyncStart' as never);
   }
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.stepRow}>
-          <Text style={styles.stepLabel}>STEP 8 OF 8 · PERMISSIONS</Text>
-          <Text style={styles.stepPercent}>100% Completed</Text>
+          <Text style={styles.stepLabel}>STEP 8 OF 9 · PERMISSIONS</Text>
+          <Text style={styles.stepPercent}>89% Completed</Text>
         </View>
 
         <Text style={styles.headline}>Enable transaction detection.</Text>
@@ -136,7 +139,7 @@ export function PermissionsScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Enable &amp; Continue to Home" variant="primary" onPress={enterApp} />
+        <Button label="Enable &amp; Continue" variant="primary" onPress={enterApp} />
         <Text style={styles.manualLink} onPress={enterAppManual}>
           Enter transactions manually instead
         </Text>

@@ -21,7 +21,8 @@ export function sanitizeAuditMetadata(
       };
     case 'created':
     case 'approved':
-    case 'rejected': {
+    case 'rejected':
+    case 'approval_undone': {
       const type = typeOrNull(metadata.transactionType);
       return type ? { kind: metadata.kind, transactionType: type } : null;
     }

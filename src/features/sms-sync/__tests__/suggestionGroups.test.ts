@@ -18,7 +18,10 @@ import {
 import { toSuggestionDecisions } from '../syncSms';
 
 // syncSms imports the native modules at load time; only the pure helper is used.
-jest.mock('../../../native/android/sms/smsReader', () => ({ readInbox: jest.fn() }));
+jest.mock('../../../native/android/sms/smsReader', () => ({
+  readInboxPage: jest.fn(),
+  countInboxSince: jest.fn(),
+}));
 jest.mock('../../../native/android/permissions/smsPermission', () => ({
   checkSmsPermission: jest.fn(),
   requestSmsPermission: jest.fn(),

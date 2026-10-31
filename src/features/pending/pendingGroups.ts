@@ -2,6 +2,16 @@ import { Account } from '../../domain/accounts/account.types';
 import { accountDisplayLabel } from '../../domain/accounts/account.rules';
 import { Transaction } from '../../domain/transactions/transaction.types';
 import {
+  findTransferPairs,
+  pairedTransactionIds,
+  TransferDismissal,
+} from '../../domain/transfers/transfer.rules';
+import {
+  DuplicateDismissal,
+  duplicatePairIds,
+  findDuplicatePairs,
+} from '../../domain/duplicates/duplicate.rules';
+import {
   ApprovalMode,
   clampThreshold,
   shouldAutoApprove,
@@ -93,4 +103,35 @@ export function autoApproveButtonState(
 
 export function autoApproveConfirmTitle(count: number, threshold: number): string {
   return `Approve ${count} transaction${count === 1 ? '' : 's'} at or above ${threshold}% confidence?`;
+}
+
+/**
+ * R4b: what Pending "Approve all N" approves — the VISIBLE pending items
+ * (current type + account filter) that are NOT part of a possible transfer
+ * or duplicate pair (those wait for "It's a transfer" / "Not duplicates").
+ * Pairs are found over ALL transactions, so a visible item whose twin is
+ * filtered out is still excluded.
+ */
+export function approveAllEligible(
+  visible: ReadonlyArray<Transaction>,
+  allTransactions: ReadonlyArray<Transaction>,
+  accounts: ReadonlyArray<Pick<Account, 'id' | 'deletedAt'>>,
+  transferDismissals: ReadonlyArray<Pick<TransferDismissal, 'debitId' | 'creditId'>>,
+  duplicateDismissals: ReadonlyArray<Pick<DuplicateDismissal, 'aId' | 'bId'>>,
+): Transaction[] {
+  const pending = visible.filter(t => t.status === 'pending');
+  if (pending.length === 0) return [];
+  const paired = pairedTransactionIds(
+    findTransferPairs(allTransactions, accounts, transferDismissals),
+  );
+  const duplicates = duplicatePairIds(findDuplicatePairs(allTransactions, duplicateDismissals));
+  return pending.filter(t => !paired.has(t.id) && !duplicates.has(t.id));
+}
+
+export function approveAllConfirmTitle(count: number): string {
+  return `Approve all ${count} item${count === 1 ? '' : 's'}?`;
+}
+
+export function approvedSnackbarText(count: number): string {
+  return `Approved ${count}`;
 }

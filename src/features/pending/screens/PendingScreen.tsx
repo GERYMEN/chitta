@@ -16,6 +16,9 @@ import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
 import { ReviewSections } from '../../review/components/ReviewSections';
 import {
+  approveAllConfirmTitle,
+  approveAllEligible,
+  approvedSnackbarText,
   autoApproveButtonState,
   autoApproveConfirmTitle,
   autoApproveEligible,
@@ -44,6 +47,9 @@ export function PendingScreen() {
   const approve = useTransactionsStore(state => state.approve);
   const reject = useTransactionsStore(state => state.reject);
   const refresh = useTransactionsStore(state => state.refresh);
+  const transactions = useTransactionsStore(state => state.transactions);
+  const transferDismissals = useTransactionsStore(state => state.transferDismissals);
+  const duplicateDismissals = useTransactionsStore(state => state.duplicateDismissals);
 
   const [filter, setFilter] = useState<Filter>('all');
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
@@ -74,6 +80,12 @@ export function PendingScreen() {
 
   const sections = useMemo(() => groupPendingByAccount(visible, accounts), [visible, accounts]);
   const autoState = autoApproveButtonState(approvalMode, threshold, visible);
+  // R4b: "Approve all N" — visible items not in a possible transfer/duplicate pair.
+  const approveAllTargets = useMemo(
+    () =>
+      approveAllEligible(visible, transactions, accounts, transferDismissals, duplicateDismissals),
+    [visible, transactions, accounts, transferDismissals, duplicateDismissals],
+  );
   const filteredAccount = accountFilter ? accounts.find(a => a.id === accountFilter) : undefined;
 
   const handleRefresh = useCallback(async () => {
@@ -115,6 +127,41 @@ export function PendingScreen() {
               }
               showSnackbar({
                 message: `Approved ${approved} transaction${approved === 1 ? '' : 's'}`,
+              });
+            } finally {
+              setApproving(false);
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  function confirmApproveAll() {
+    const targets = approveAllTargets.map(t => t.id);
+    if (targets.length === 0) return;
+    showDialog({
+      title: approveAllConfirmTitle(targets.length),
+      message:
+        'They will count toward your balances. Possible transfers and duplicates stay in Pending. You can undo for 5 seconds.',
+      icon: 'check-all',
+      actions: [
+        { label: 'Cancel', variant: 'ghost' },
+        {
+          label: 'Approve all',
+          variant: 'primary',
+          onPress: async () => {
+            setApproving(true);
+            try {
+              const store = useTransactionsStore.getState();
+              const snapshots = await store.approveAll(targets);
+              if (snapshots.length === 0) return;
+              showSnackbar({
+                message: approvedSnackbarText(snapshots.length),
+                actionLabel: 'Undo',
+                onAction: async () => {
+                  await useTransactionsStore.getState().undoApprovals(snapshots);
+                },
               });
             } finally {
               setApproving(false);
@@ -169,6 +216,19 @@ export function PendingScreen() {
                 </Text>
               </View>
             </View>
+
+            {visible.length > 0 ? (
+              <View style={styles.autoWrap}>
+                <Button
+                  label={`Approve all ${approveAllTargets.length}`}
+                  variant="primary"
+                  disabled={approveAllTargets.length === 0 || approving}
+                  onPress={confirmApproveAll}
+                  icon={<Icon name="check-all" size={16} color={colors.onPrimary} />}
+                  testID="pending-approve-all"
+                />
+              </View>
+            ) : null}
 
             {autoState.visible ? (
               <View style={styles.autoWrap}>

@@ -482,3 +482,51 @@ describe('R3b refund + duplicate sentences', () => {
     expect(describeRaw(linkedEvent).sentence).toBe(`You linked a ${MASKED_AMOUNT} refund to an expense`);
   });
 });
+
+describe('R4b activity copy', () => {
+  const day = (y: number, m: number, d: number) => new Date(y, m, d).toISOString();
+
+  it('approval_undone: back in Pending', () => {
+    const item = describeActivity(
+      event({ eventType: 'approval_undone', metadata: { kind: 'approval_undone', transactionType: 'expense' } }),
+      { transaction: EXPENSE },
+    );
+    expect(item.sentence).toBe('You undid the approval of QA-Merchant-07 ₹50.00');
+    expect(item.impact).toEqual({ text: 'Back in Pending · not in balance', tone: 'pending' });
+    expect(item.icon).toBe('undo-variant');
+  });
+
+  it('sync start set automatically on update (system)', () => {
+    const item = describeActivity(
+      event({
+        eventType: 'settings_changed',
+        transactionId: null,
+        actor: 'system',
+        metadata: { kind: 'settings_changed', key: 'sms_sync_start_at', from: 'unset', to: day(2026, 9, 14) },
+      }),
+    );
+    expect(item.sentence).toBe('SMS sync start set to 14 Oct 2026');
+    expect(item.impact?.text).toBe('Set automatically on update');
+  });
+
+  it('sync start changed by the user: dates and mode names only', () => {
+    const at = describeActivity(
+      event({
+        eventType: 'settings_changed',
+        transactionId: null,
+        metadata: { kind: 'settings_changed', key: 'sms_sync_start_at', from: day(2026, 9, 14), to: '' },
+      }),
+    );
+    expect(at.sentence).toBe('You set SMS sync to read the whole inbox');
+    expect(at.impact?.text).toBe('Was 14 Oct 2026');
+    const mode = describeActivity(
+      event({
+        eventType: 'settings_changed',
+        transactionId: null,
+        metadata: { kind: 'settings_changed', key: 'sms_sync_start_mode', from: 'install', to: '3m' },
+      }),
+    );
+    expect(mode.sentence).toBe('You chose SMS sync start: Last 3 months');
+    expect(mode.impact?.text).toBe('Was From install date');
+  });
+});

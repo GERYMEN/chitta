@@ -1,0 +1,112 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules" + R7 for
+context), ongoing/roadmap/STATE.md, ongoing/roadmap/R4-insights.md,
+ongoing/roadmap/R2b-new-accounts-pending.md, ongoing/roadmap/
+R3a-transfers.md + R3b-refund-duplicate.md (pair holds), the decisions
+log of ongoing/realtime-persistence/STATE.md (absolute privacy rules),
+docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R4b-sms-sync-start (created from phase/R4-insights).
+Stay on it. Do not switch branches, do not commit.
+
+PHASE R4b — Choose where SMS sync starts + no 200-message cap.
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+Verified current state (grep to confirm):
+- src/features/sms-sync/syncSms.ts:82 INBOX_LIMIT = 200; every Sync
+  reads only the newest 200 inbox SMS.
+- android/app/src/main/java/com/tracker/SmsReaderModule.kt readInbox
+  (limit): query content://sms/inbox, no selection, "date DESC", stops
+  at limit. readSmsById exists (bound args).
+- settings table (schema.ts ~69, key/value); sms_sync_runs table (~96).
+- Onboarding: src/features/onboarding/screens (Onboarding, Permissions,
+  ProfileSetup).
+
+USER DECISIONS (2026-11-01):
+- First-install question "Where should SMS sync start?" with 4 choices:
+  From install date (PRE-SELECTED, "Recommended"), Start of this month,
+  Last 3 months (start of the month 2 months back — reuse periodRange
+  '3M' semantics), Whole inbox.
+- "From install date" = the moment setup completes; the first sync
+  finds nothing (start empty) — say so in the option's helper text.
+- Existing installs (the owner's phone, data since 14 Oct 2026): NO
+  setup screen again. Start is set automatically to the earliest of
+  (first sms_sync_runs start, earliest SMS-sourced transaction date);
+  if neither exists, the time of the upgrade. Changeable in Settings.
+- Big scans: warn before scanning ("About N SMS to scan — this may add
+  many items to Pending") + Pending "Approve all N" with Undo.
+
+TASKS
+T1 Native (own module only; NO new dependency, NO new permission):
+   - readInboxPage(sinceMs, beforeMs, limit): selection "date >= ? AND
+     date < ?" with BOUND args, "date DESC", returns at most limit rows.
+     (beforeMs drives paging: next page beforeMs = oldest date seen; make
+     paging correct when several SMS share the same date — e.g. page by
+     (date, _id) or include _id tiebreak; document.)
+   - countInboxSince(sinceMs): COUNT(*) only (for the estimate).
+   - Keep readSmsById. Remove readInbox if nothing else uses it.
+   - Bodies stay in memory only during parsing, never stored/logged
+     (unchanged rule).
+T2 Settings (no schema migration needed if the key/value table fits;
+   if a migration is needed, migration 8):
+   - sms_sync_start_mode: 'install' | 'month' | '3m' | 'all' | 'custom'
+     ('custom' = set by upgrade or Settings date), sms_sync_start_at
+     (ISO; 'all' = null), sms_last_synced_at (newest SMS date fully
+     processed).
+   - Upgrade path (existing install, onboarding already completed, keys
+     missing): set 'custom' + computed start (see user decisions), no UI.
+   - Changes audited 'settings_changed' {key, from, to} (dates/modes
+     only; never SMS content).
+T3 Sync engine (syncSms.ts):
+   - Remove the 200 cap. Window = [start, now] on the first sync; later
+     syncs read from max(start, sms_last_synced_at − 1 day overlap)
+     (dedup by sourceReferenceHash already prevents doubles).
+   - Pages of ~300, parse + insert per page, yield between pages so the
+     UI stays responsive; progress callback {scanned, total}; Cancel
+     keeps what is already inserted and does NOT advance
+     sms_last_synced_at past the last fully processed page.
+   - Before a scan whose count > 500: confirm Dialog with the estimate.
+   - Everything else unchanged: account matching, R2b suggestions cache,
+     R2 categories, R3a/R3b pair holds, auto-approve rule, audit.
+   - Toast: "Scanned N SMS · M new" (counts only).
+T4 UI:
+   - Onboarding step after Permissions: "Where should SMS sync start?"
+     radio list (4 options, helper line each, Recommended badge on
+     install date), Continue. ≥48dp rows, accessibility labels.
+   - Settings sheet row "SMS sync starts: <d MMM yyyy | Whole inbox>" →
+     same 4 options + "Pick a date" for custom (only if a date picker
+     already exists in the codebase; otherwise skip custom and document).
+     Moving the start EARLIER: confirm "Scan SMS from <date> to <old
+     date>? About N SMS." then scan only that gap. Moving it LATER: no
+     deletion; message "Items already recorded stay; future syncs start
+     from <date>."
+   - Home Sync SMS: progress UI (inline "Scanning 1,200 / 4,800" with
+     Cancel), no layout jump.
+   - Pending: "Approve all N" button (N = visible pending items under
+     the current filter that are NOT in a possible transfer/duplicate
+     pair) → confirm Dialog → approve via store (canTransition), each
+     audited 'approved' actor 'user' → Snackbar "Approved N — Undo"
+     (5 s) → Undo returns exactly those items to pending (store their
+     previous state; audit with a new type 'approval_undone' or
+     document the choice). Coexists with the R2b Auto-approve (N)
+     button (show both only in auto mode).
+T5 Tests: native paging logic mirrored in a pure TS planner if possible
+   (page boundaries, equal dates, cancel); window computation (first
+   sync, incremental overlap, start moved earlier → gap only, later →
+   no deletion); upgrade default start (runs vs SMS rows vs none);
+   estimate threshold; onboarding choice saved + audited; Approve all
+   excludes pair items, respects filter, Undo exact; no SMS text in
+   audit/settings/logs.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+OUTPUT: ongoing/roadmap/R4b-sms-sync-start.md (files, native API, settings
+keys, window rules, paging, UI, gates, decisions, and a DEVICE PLAN for
+later that never changes the owner's sync start and never scans more of
+the real inbox than a normal incremental sync). Leak-scan the report
+with the pattern given in the dispatch message (shell only — never
+write it into a repo file). Do not commit.
+REPLY ONLY: gates yes/no; files changed count; decisions you made.

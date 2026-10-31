@@ -2,6 +2,9 @@ import { Account } from '../../../domain/accounts/account.types';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { shouldAutoApprove, thresholdNoteText } from '../../../domain/settings/approval.rules';
 import {
+  approveAllConfirmTitle,
+  approveAllEligible,
+  approvedSnackbarText,
   autoApproveButtonState,
   autoApproveConfirmTitle,
   autoApproveEligible,
@@ -195,5 +198,56 @@ describe("store.approve with actor 'user' (Pending Auto-approve button)", () => 
       { transaction: { merchantName: 'QA-Merchant-05', amountMinor: 1000, type: 'expense' } },
     );
     expect(item.sentence).toMatch(/^You auto-approved QA-Merchant-05 .* at 90% match$/);
+  });
+});
+
+describe('approveAllEligible (R4b Approve all N)', () => {
+  const accounts = [account(), account({ id: 'acc-2', name: 'QA Wallet 8888', lastFour: '8888' })];
+
+  it('excludes possible transfer and duplicate pair items, respects the visible filter', () => {
+    const plain = txn({ amountMinor: 1111, occurredAt: '2026-10-01T00:00:00.000Z' });
+    const plainIncome = txn({ type: 'income', amountMinor: 2222, occurredAt: '2026-10-02T00:00:00.000Z' });
+    // Transfer pair: debit on acc-1, credit on acc-2, same amount, 1 min apart.
+    const debit = txn({ amountMinor: 5000, occurredAt: '2026-10-05T10:00:00.000Z' });
+    const credit = txn({
+      type: 'income',
+      accountId: 'acc-2',
+      amountMinor: 5000,
+      occurredAt: '2026-10-05T10:01:00.000Z',
+    });
+    // Duplicate pair: same account/type/amount, 2 min apart.
+    const dupA = txn({ amountMinor: 7777, occurredAt: '2026-10-07T10:00:00.000Z' });
+    const dupB = txn({ amountMinor: 7777, occurredAt: '2026-10-07T10:02:00.000Z' });
+    const all = [plain, plainIncome, debit, credit, dupA, dupB];
+
+    expect(approveAllEligible(all, all, accounts, [], []).map(t => t.id)).toEqual([
+      plain.id,
+      plainIncome.id,
+    ]);
+    // Expense filter: the credit twin is not visible, the debit is still held.
+    const expenses = all.filter(t => t.type === 'expense');
+    expect(approveAllEligible(expenses, all, accounts, [], []).map(t => t.id)).toEqual([plain.id]);
+  });
+
+  it('dismissed pairs ("Not a transfer" / "Not duplicates") are approvable again', () => {
+    const debit = txn({ amountMinor: 5000, occurredAt: '2026-10-05T10:00:00.000Z' });
+    const credit = txn({
+      type: 'income',
+      accountId: 'acc-2',
+      amountMinor: 5000,
+      occurredAt: '2026-10-05T10:01:00.000Z',
+    });
+    const all = [debit, credit];
+    expect(
+      approveAllEligible(all, all, accounts, [{ debitId: debit.id, creditId: credit.id }], []),
+    ).toHaveLength(2);
+  });
+
+  it('only pending items count; copy is counts only', () => {
+    const approved = txn({ status: 'approved', amountMinor: 3333 });
+    expect(approveAllEligible([approved], [approved], accounts, [], [])).toEqual([]);
+    expect(approveAllConfirmTitle(1)).toBe('Approve all 1 item?');
+    expect(approveAllConfirmTitle(4)).toBe('Approve all 4 items?');
+    expect(approvedSnackbarText(4)).toBe('Approved 4');
   });
 });
