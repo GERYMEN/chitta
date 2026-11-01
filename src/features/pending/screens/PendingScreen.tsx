@@ -24,6 +24,7 @@ import {
   autoApproveEligible,
   groupPendingByAccount,
 } from '../pendingGroups';
+import { useRedacted } from '../../../shared/privacy/redaction';
 
 type Filter = 'all' | 'expense' | 'income';
 
@@ -78,7 +79,13 @@ export function PendingScreen() {
     return scoped.filter(t => t.type === filter);
   }, [scoped, filter]);
 
-  const sections = useMemo(() => groupPendingByAccount(visible, accounts), [visible, accounts]);
+  // R4c: account labels (last-4) are masked in the feedback screenshot.
+  const redacted = useRedacted();
+  const sections = useMemo(
+    () => groupPendingByAccount(visible, accounts),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visible, accounts, redacted],
+  );
   const autoState = autoApproveButtonState(approvalMode, threshold, visible);
   // R4b: "Approve all N" — visible items not in a possible transfer/duplicate pair.
   const approveAllTargets = useMemo(
@@ -189,6 +196,7 @@ export function PendingScreen() {
 
       <SectionList
         sections={sections}
+        extraData={redacted}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.content}
         stickySectionHeadersEnabled={false}

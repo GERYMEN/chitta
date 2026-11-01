@@ -1,0 +1,75 @@
+GROUND FACTS: read ongoing/roadmap/R4b-sms-sync-start.md (what was built +
+its "DEVICE PLAN" section, which this prompt follows), ongoing/roadmap/
+R4-device.md (R4 leftovers), ongoing/roadmap/prompts/R4-device.txt
+(device-safety rules + idle-phone wait), and the decisions log of
+ongoing/realtime-persistence/STATE.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker,
+branch phase/R4b-sms-sync-start (committed 897ee8a). Do not edit source,
+do not commit, do not switch branches.
+
+R4b DEVICE PASS — owner asked: release build, install, test the flow.
+
+STEP 0 BUILD (no phone): cd android && export JAVA_HOME=/opt/homebrew/
+opt/openjdk@17/libexec/openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/
+bin:$PATH; export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools;
+./gradlew assembleRelease. Confirm the bundle contains R4b strings
+(e.g. "SMS sync starts").
+
+STEP 1 IDLE WAIT + INSTALL: wait until the phone is unlocked with the
+launcher or Tracker in front for 2 consecutive minutes (package name +
+lock state only, give up after 30 min). logcat -c; adb install -r
+app/build/outputs/apk/release/app-release.apk (INSTALL_FAILED_UPDATE_
+INCOMPATIBLE → STOP, never uninstall); am start -W -n
+com.tracker/.MainActivity.
+
+CHECKS — follow the report's DEVICE PLAN steps 1–8 exactly, with these
+specifics:
+ U  Upgrade path: settings sheet row "SMS sync starts: <date>" — print
+    the DATE only. Activity: the automatic "SMS sync start set to …"
+    row exists (print that QA-free system sentence only).
+ S  Tap Sync SMS ONCE (owner asked to test the flow). Report only the
+    toast counts and whether a progress row appeared. If the large-scan
+    dialog appears: tap Cancel, report it, do not sync again.
+ E  Settings editor: open, verify the option rows render (count, ≥48dp,
+    Recommended badge present), close WITHOUT saving. Never save, never
+    pick a date, never trigger a gap scan.
+ A  Approve all + Undo: the QA account to use is "QA Wallet 8888" (cash,
+    active, left over from R4) — if missing, create "QA Delete Bank
+    9999" (owner-approved pattern). Add 2 manual QA expenses
+    "QA-Merchant-20" 10.00 and "QA-Merchant-21" 20.00 on it (they start
+    pending). Pending → filter to the QA account FIRST (verify only QA
+    rows are visible: count of visible rows = 2 and both are QA) →
+    "Approve all 2" → confirm → Undo within 5 s → both back in Pending;
+    Activity shows the undo rows for QA. Never tap Approve all with real
+    items visible.
+ C  Cleanup: delete QA-Merchant-20/21; remove QA Wallet 8888 (and the QA
+    bank if you created it); confirm both appear under Deleted accounts
+    (QA labels only) — also confirm whether QA Delete Bank 9999 is
+    under Deleted (leftover from R4). Force-stop + relaunch; logcat since
+    install: 0 FATAL com.tracker, 0 ANR, 0 "Maximum update depth", 0
+    ReactNativeJS errors. Leave the R4b release build installed; end with
+    force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data):
+- Before EVERY tap/dump, guard that ABORTS on failure:
+  `adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'` — both
+  lines must contain com.tracker, else stop the chain (one action per
+  command or `|| exit 1`). Locked = stop (never enter a PIN).
+- If another app comes to the front or anything changes that you did not
+  do: stop touching the phone, never press HOME over the owner's app,
+  never inspect it; watch package name + lock state only for up to 10
+  minutes, resume only after Tracker has been back in front and idle for
+  2 minutes; otherwise stop and report what ran.
+- Every uiautomator dump grep-filtered to one QA element or one label;
+  never print a full dump, real merchants, amounts, previews or senders;
+  `adb shell rm /sdcard/u.xml` after; /sdcard only inside adb shell.
+- Never change the owner's sync start or other settings; never act on
+  real items; never tracker.db / sqlite3 / run-as; no uninstall/
+  clear-data/screenshots.
+
+OUTPUT: ongoing/roadmap/R4b-device.md (build, each check PASS/FAIL/NOT
+RUN with QA-only evidence or counts, leftovers, what did not run and
+why). Leak-scan it with the pattern given in the dispatch message (shell
+only, never written to a file). Do not commit.
+REPLY ONLY: build yes/no; each check PASS/FAIL/NOT RUN; anything
+surprising.

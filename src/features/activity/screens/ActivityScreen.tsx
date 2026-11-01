@@ -19,6 +19,7 @@ import {
   typesAtEventTime,
 } from '../activityFeed';
 import { useOnFocusRegained } from '../../../shared/hooks/useOnFocusRegained';
+import { useRedacted } from '../../../shared/privacy/redaction';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -44,6 +45,8 @@ export function ActivityScreen() {
   // R2 T0: amounts are private. Hidden by default every time the screen is
   // opened or comes back into focus; never persisted.
   const [showAmounts, setShowAmounts] = useState(false);
+  // R4c: feedback screenshot — names + amounts masked while capturing.
+  const redacted = useRedacted();
 
   // B3: re-mask ONLY on an unfocused → focused transition — never on a
   // re-render, a store refresh, a data reload or a repeated focus event.
@@ -96,11 +99,11 @@ export function ActivityScreen() {
           category: categoryId ? categoryById.get(categoryId) ?? null : null,
           typeAtEvent: eventTypes.get(event.id) ?? null,
         },
-        { showAmounts },
+        { showAmounts, hideNames: redacted },
       );
     });
     return groupActivityByDay(items, new Date());
-  }, [events, transactions, accounts, categories, showAmounts]);
+  }, [events, transactions, accounts, categories, showAmounts, redacted]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>

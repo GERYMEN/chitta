@@ -1,5 +1,6 @@
 import { Account, AccountType } from '../../domain/accounts/account.types';
 import { activeAccounts } from '../../domain/accounts/account.rules';
+import { redactLast4 } from '../../shared/privacy/redaction';
 import { ParsedSmsTransaction } from './smsParser';
 import { decisionKeyFor, SmsAccountSuggestion, suggestionKeyFor } from './smsSyncLogic';
 
@@ -98,7 +99,7 @@ export function proposedAccountTitle(
   suggestion: Pick<SmsAccountSuggestion, 'bankName' | 'accountKind' | 'lastFour'>,
 ): string {
   const base = proposedAccountBaseName(suggestion);
-  return suggestion.lastFour ? `${base} ••${suggestion.lastFour}` : `${base} (no last 4)`;
+  return suggestion.lastFour ? `${base} ••${redactLast4(suggestion.lastFour)}` : `${base} (no last 4)`;
 }
 
 export interface GroupSummary {

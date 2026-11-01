@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { shadows } from '../../../theme/shadows';
 import { useSnackbarStore } from './snackbarStore';
+import { useRedacted } from '../../privacy/redaction';
 
 /**
  * Mount once at the app root (next to DialogHost). Obsidian pill above the
@@ -13,7 +14,10 @@ export function SnackbarHost() {
   const current = useSnackbarStore(state => state.current);
   const press = useSnackbarStore(state => state.press);
   const insets = useSafeAreaInsets();
-  if (!current) return null;
+  // R4c: a snackbar message is precomputed text (may name a merchant or an
+  // amount) — keep it out of the feedback screenshot entirely.
+  const redacted = useRedacted();
+  if (!current || redacted) return null;
 
   return (
     <View

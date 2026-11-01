@@ -9,6 +9,7 @@ import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { parseSmsReference } from '../../sms-sync/smsReference';
 import { OriginalSmsView } from '../../transactions/components/OriginalSmsView';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 /**
  * R3b.1 F2 — one Uncategorised quick-assign row. Users cannot tell an item
@@ -31,6 +32,7 @@ export function UncategorisedRow({
   onChooseCategory: (transaction: Transaction) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  useRedacted(); // R4c
   const isSms = transaction.sourceType === 'sms';
   const preview = isSms ? transaction.sanitizedPreview : null;
   const reference = isSms ? parseSmsReference(transaction.sourceReferenceHash) : null;
@@ -46,7 +48,7 @@ export function UncategorisedRow({
           style={({ pressed }) => [styles.body, pressed && styles.pressed]}>
           <View style={styles.titleRow}>
             <Text style={styles.merchant} numberOfLines={1}>
-              {transaction.merchantName}
+              {redactText(transaction.merchantName)}
             </Text>
             <AmountText
               amountMinor={transaction.amountMinor}
@@ -85,7 +87,7 @@ export function UncategorisedRow({
               testID="quick-assign-preview">
               <Text style={styles.smsLabel}>SMS description</Text>
               <Text style={styles.smsText} numberOfLines={expanded ? undefined : 2}>
-                {preview}
+                {redactText(preview)}
               </Text>
             </Pressable>
           ) : null}

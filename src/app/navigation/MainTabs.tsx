@@ -9,6 +9,7 @@ import { colors } from '../../theme';
 import { useShallow } from 'zustand/react/shallow';
 import { useTransactionsStore, selectPending } from '../../features/transactions/state/transactionsStore';
 import { MainTabParamList } from './routes';
+import { TourTarget } from '../../features/tour/components/TourTarget';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -28,9 +29,15 @@ export function MainTabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.outline,
-        tabBarIcon: ({ color, size }) => (
-          <Icon name={TAB_ICON[route.name as keyof MainTabParamList]} size={size} color={color} />
-        ),
+        tabBarIcon: ({ color, size }) =>
+          route.name === 'Pending' ? (
+            // R4c: tour step 2 spotlights the Pending tab.
+            <TourTarget targetKey="tab.Pending">
+              <Icon name={TAB_ICON.Pending} size={size} color={color} />
+            </TourTarget>
+          ) : (
+            <Icon name={TAB_ICON[route.name as keyof MainTabParamList]} size={size} color={color} />
+          ),
       })}>
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Transactions" component={TransactionsScreen} />

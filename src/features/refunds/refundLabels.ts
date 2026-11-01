@@ -2,6 +2,7 @@ import { Transaction } from '../../domain/transactions/transaction.types';
 import { LinkedEditError } from '../../domain/links/linkedEdit.rules';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
 import { formatTransactionTimestamp } from '../../shared/utils/date';
+import { redactText } from '../../shared/privacy/redaction';
 
 /** R3b pure display strings for refunds (picker, detail). */
 
@@ -19,7 +20,7 @@ export function leftToRefundLabel(leftMinor: number): string {
 
 /** Linked refund detail: "Refund for <merchant> · <date>". */
 export function refundForLabel(expense: Pick<Transaction, 'merchantName' | 'occurredAt'>): string {
-  return `Refund for ${expense.merchantName} · ${formatTransactionTimestamp(expense.occurredAt)}`;
+  return `Refund for ${redactText(expense.merchantName)} · ${formatTransactionTimestamp(expense.occurredAt)}`;
 }
 
 /** Expense detail: "Refunded ₹100.00". */

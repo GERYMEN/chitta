@@ -32,6 +32,7 @@ import {
   trendCaption,
   trendSpanLabel,
 } from '../insightLabels';
+import { useRedacted } from '../../../shared/privacy/redaction';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -46,6 +47,7 @@ const INCOME_COLOR = colors.primary;
  */
 export function InsightsScreen() {
   const navigation = useNavigation<Nav>();
+  useRedacted(); // R4c: totals + chart labels masked in the feedback screenshot
   const transactions = useTransactionsStore(state => state.transactions);
   const categories = useTransactionsStore(state => state.categories);
   const { period, setPeriod, now, range } = useSelectedPeriod();

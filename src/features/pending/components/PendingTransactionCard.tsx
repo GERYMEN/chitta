@@ -10,6 +10,7 @@ import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { categoryLabel, UNCATEGORISED_ID } from '../../../domain/categories/category.rules';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 export interface PendingTransactionCardProps {
   transaction: Transaction;
@@ -36,6 +37,7 @@ export function PendingTransactionCard({
   onReview,
 }: PendingTransactionCardProps) {
   const categories = useTransactionsStore(state => state.categories);
+  useRedacted(); // R4c
 
   const category = categories.find(c => c.id === transaction.categoryId);
   const visual = getCategoryVisual(transaction.categoryId, category);
@@ -48,7 +50,7 @@ export function PendingTransactionCard({
           <Icon name={visual.icon} size={22} color={visual.iconColor} />
         </View>
         <View style={styles.middle}>
-          <Text style={styles.merchant}>{transaction.merchantName}</Text>
+          <Text style={styles.merchant}>{redactText(transaction.merchantName)}</Text>
           <Text style={styles.subtitle}>
             {formatTransactionTimestamp(transaction.occurredAt)} · {CHANNEL_LABEL[transaction.paymentMethod]}
           </Text>

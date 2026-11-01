@@ -14,6 +14,7 @@ import {
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { CategoryFormSheet, CategoryFormValues } from '../components/CategoryFormSheet';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 const TYPE_LABEL: Record<Category['type'], string> = {
   expense: 'Expense',
@@ -27,6 +28,7 @@ const TYPE_LABEL: Record<Category['type'], string> = {
  */
 export function CategoriesScreen() {
   const navigation = useNavigation();
+  useRedacted(); // R4c: merchant-rule names masked in the feedback screenshot
   const categories = useTransactionsStore(state => state.categories);
   const merchantRules = useTransactionsStore(state => state.merchantRules);
   const [form, setForm] = useState<{ editing: Category | null } | null>(null);
@@ -159,7 +161,7 @@ export function CategoriesScreen() {
               <View key={rule.merchantKey} style={styles.row} testID="merchant-rule-row">
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle} numberOfLines={1}>
-                    {rule.merchantKey}
+                    {redactText(rule.merchantKey)}
                   </Text>
                   <Text style={styles.rowCaption}>
                     Always {categoryLabel(categoryById.get(rule.categoryId))}

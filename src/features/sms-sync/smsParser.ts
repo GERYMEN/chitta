@@ -1,7 +1,7 @@
 import { TransactionType } from '../../domain/transactions/transaction.types';
 import { CONFIDENCE_HIGH } from '../../domain/transactions/transaction.rules';
 import { AccountType } from '../../domain/accounts/account.types';
-import { formatRupeesFromMinor } from '../../shared/utils/currency';
+import { formatRupeesPlain } from '../../shared/utils/currency';
 import type { SmsMessage } from '../../native/android/sms/smsReader';
 import { normalizeAccountKey } from './normalizeAccountKey';
 
@@ -176,7 +176,7 @@ export function parseSmsMessage(msg: SmsMessage): ParsedSmsTransaction | null {
   const sourceReferenceHash = `sms-${msg.id}-${msg.date}`;
   const sanitizedPreview = `${
     type === 'expense' ? 'Debited' : 'Credited'
-  } ${formatRupeesFromMinor(amountMinor)} — ${merchantName}`;
+  } ${formatRupeesPlain(amountMinor)} — ${merchantName}`;
 
   return {
     type,

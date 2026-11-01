@@ -44,6 +44,8 @@ import {
   PERIOD_CAPTION,
   periodPhrase,
 } from '../../insights/insightLabels';
+import { redactLast4, redactText, useRedacted } from '../../../shared/privacy/redaction';
+import { TourTarget } from '../../tour/components/TourTarget';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -51,6 +53,9 @@ type Picker = 'account' | 'category' | null;
 
 export function TransactionsScreen() {
   const navigation = useNavigation<Nav>();
+  // R4c: totals, day nets, merchant chip, search text and last-4 masked in
+  // the feedback screenshot (rows mask themselves).
+  const redacted = useRedacted();
   const approved = useTransactionsStore(useShallow(selectApproved));
   const activeAccountList = useTransactionsStore(useShallow(selectActiveAccounts));
   const deletedAccountList = useTransactionsStore(useShallow(selectDeletedAccounts));
@@ -99,7 +104,7 @@ export function TransactionsScreen() {
   );
   const accountChipLabel = selectedAccount
     ? selectedAccount.lastFour
-      ? `${selectedAccount.name} ••${selectedAccount.lastFour}`
+      ? `${selectedAccount.name} ••${redactLast4(selectedAccount.lastFour)}`
       : selectedAccount.name
     : 'Account';
 
@@ -114,6 +119,7 @@ export function TransactionsScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <SectionList
         sections={sections}
+        extraData={redacted}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.content}
         stickySectionHeadersEnabled={false}
@@ -153,12 +159,14 @@ export function TransactionsScreen() {
               </Text>
             ) : null}
 
-            <View style={styles.searchBar}>
-              <Icon name="magnify" size={18} color={colors.outline} />
+            {/* R4c: tour step 4 spotlights search + filters. */}
+            <TourTarget targetKey="transactions.search">
+              <View style={styles.searchBar}>
+                <Icon name="magnify" size={18} color={colors.outline} />
               <TextInput
                 placeholder="Search merchant or notes"
                 placeholderTextColor={colors.outline}
-                value={filters.query}
+                value={redactText(filters.query)}
                 onChangeText={query => setFilters({ query })}
                 style={styles.searchInput}
                 testID="transactions-search"
@@ -173,7 +181,7 @@ export function TransactionsScreen() {
               {filters.merchantKey !== null ? (
                 <FilterChip
                   testID="filter-merchant"
-                  label={merchantFilterChipLabel(filters.merchantLabel)}
+                  label={merchantFilterChipLabel(redactText(filters.merchantLabel))}
                   accessibilityLabel={`Merchant filter ${filters.merchantLabel ?? ''}. Remove`}
                   active
                   onPress={() => setFilters({ merchantKey: null, merchantLabel: null })}
@@ -226,7 +234,8 @@ export function TransactionsScreen() {
                   onPress={resetFilters}
                 />
               ) : null}
-            </ScrollView>
+              </ScrollView>
+            </TourTarget>
           </>
         }
         ListEmptyComponent={

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
@@ -42,6 +42,9 @@ import { PeriodNotices } from '../../insights/components/PeriodNotices';
 import { WhereItWentCard } from '../../insights/components/WhereItWentCard';
 import { useSelectedPeriod, usePeriodNotices } from '../../insights/hooks/usePeriod';
 import { formatMonthYear, PERIOD_CAPTION } from '../../insights/insightLabels';
+import { useRedacted } from '../../../shared/privacy/redaction';
+import { registerTourScroller, useTourTarget } from '../../tour/tourTargets';
+import { replayTour } from '../../tour/tourStore';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -59,14 +62,31 @@ export function HomeScreen() {
   const userName = useTransactionsStore(state => state.userName);
   const categories = useTransactionsStore(state => state.categories);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // R4c: the tour scrolls Home so a target is visible, and spotlights the
+  // period chips.
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const scrollY = useRef(0);
+  const periodTargetRef = useTourTarget('home.periods');
+  useEffect(
+    () =>
+      registerTourScroller('Home', {
+        scrollBy: dy =>
+          scrollRef.current?.scrollTo({ y: Math.max(0, scrollY.current + dy), animated: true }),
+      }),
+    [],
+  );
   // R4b: live scan progress (counts only) for the Balance card.
   const syncRunning = useSyncRunStore(state => state.running);
   const syncScanned = useSyncRunStore(state => state.scanned);
   const syncTotal = useSyncRunStore(state => state.total);
   const syncCancelling = useSyncRunStore(state => state.cancelRequested);
   const cancelSync = useSyncRunStore(state => state.cancel);
-  const greeting = greetingFor(new Date(), userName);
-  const avatarInitial = userName.trim().charAt(0).toUpperCase();
+  // R4c: the user's name (greeting + avatar initial) and every amount are
+  // masked while the feedback screenshot is taken.
+  const redacted = useRedacted();
+  const shownName = redacted ? '' : userName;
+  const greeting = greetingFor(new Date(), shownName);
+  const avatarInitial = shownName.trim().charAt(0).toUpperCase();
 
   // R4: the selected period (shared with Transactions) + this screen's
   // injected now (device clock, refreshed on focus).
@@ -170,7 +190,14 @@ export function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        onScroll={event => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={32}>
         <Pressable
           style={({ pressed }) => [styles.greetingRow, pressed && styles.pressed]}
           onPress={() => setSettingsOpen(true)}
@@ -203,7 +230,7 @@ export function HomeScreen() {
         onCancelSync={cancelSync}
       />
 
-      <View style={styles.periodBlock}>
+      <View ref={periodTargetRef} collapsable={false} style={styles.periodBlock}>
         <PeriodSelector value={period} onChange={setPeriod} />
         <PeriodNotices
           range={range}
@@ -308,6 +335,11 @@ export function HomeScreen() {
         onScanGap={(window, onCompleted) => {
           setSettingsOpen(false);
           handleSyncSms({ window, onCompleted });
+        }}
+        onReplayTour={() => {
+          setSettingsOpen(false);
+          scrollRef.current?.scrollTo({ y: 0, animated: false });
+          replayTour();
         }}
       />
     </SafeAreaView>

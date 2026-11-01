@@ -65,6 +65,14 @@ export const colors = {
   // Obsidian anchor — dark balance card / primary pill on dark surfaces.
   obsidian: '#0B0E11',
   onObsidian: '#ffffff',
+
+  // R4c: WhatsApp brand green for the "Send on WhatsApp" button only
+  // (obsidian label: white on this green fails contrast).
+  whatsapp: '#25D366',
+  onWhatsapp: '#0B0E11',
+
+  // R4c: tour dim layer.
+  scrim: 'rgba(11, 14, 17, 0.72)',
 } as const;
 
 /**

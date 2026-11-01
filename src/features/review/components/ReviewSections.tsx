@@ -9,6 +9,7 @@ import { useTransferPairs } from '../../transfers/useTransferPairs';
 import { useDuplicatePairs } from '../../duplicates/useDuplicatePairs';
 import { TransferPairCard } from '../../transfers/components/TransferPairCard';
 import { DuplicatePairCard } from '../../duplicates/components/DuplicatePairCard';
+import { useRedacted } from '../../../shared/privacy/redaction';
 
 /**
  * R3a "Looks like a transfer" + R3b "Possible duplicates" — shared by Pending
@@ -24,6 +25,7 @@ export function ReviewSections({
   emptyText?: string;
 }) {
   const accounts = useTransactionsStore(state => state.accounts);
+  useRedacted(); // R4c: pair cards re-render masked in the feedback screenshot
   const allTransferPairs = useTransferPairs();
   const allDuplicatePairs = useDuplicatePairs();
   const [busy, setBusy] = useState(false);

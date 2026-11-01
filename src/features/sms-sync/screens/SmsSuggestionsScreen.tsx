@@ -41,6 +41,7 @@ import {
   linkSuggestion,
   showImportSnackbar,
 } from '../importSuggestion';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'SmsSuggestions'>;
@@ -197,6 +198,7 @@ interface SuggestionCardProps {
 
 function SuggestionCard({ group, busy, canLink, onAdd, onLink, onIgnore }: SuggestionCardProps) {
   const [expanded, setExpanded] = useState(false);
+  useRedacted(); // R4c: title last-4 + in/out amounts masked in the feedback screenshot
   const summary = useMemo(() => summarizeGroup(group.items), [group.items]);
   const title = proposedAccountTitle(group.suggestion);
 
@@ -261,6 +263,7 @@ function SuggestionCard({ group, busy, canLink, onAdd, onLink, onIgnore }: Sugge
 
 function WaitingItemRow({ item }: { item: ParsedSmsTransaction }) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  useRedacted(); // R4c
   const reference = parseSmsReference(item.sourceReferenceHash);
   const income = item.type === 'income';
 
@@ -276,7 +279,7 @@ function WaitingItemRow({ item }: { item: ParsedSmsTransaction }) {
         </View>
         <View style={styles.itemMiddle}>
           <Text style={styles.itemMerchant} numberOfLines={1}>
-            {item.merchantName}
+            {redactText(item.merchantName)}
           </Text>
           <Text style={styles.itemDate}>{formatTransactionTimestamp(item.occurredAt)}</Text>
         </View>
@@ -288,7 +291,7 @@ function WaitingItemRow({ item }: { item: ParsedSmsTransaction }) {
         onPress={() => setPreviewOpen(value => !value)}
         accessibilityRole="button"
         accessibilityHint={previewOpen ? 'Collapse SMS description' : 'Expand SMS description'}>
-        {item.sanitizedPreview}
+        {redactText(item.sanitizedPreview)}
       </Text>
       {reference ? <OriginalSmsView reference={reference} /> : null}
     </View>

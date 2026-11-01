@@ -1,3 +1,5 @@
+import { isRedacted, REDACTED_AMOUNT } from '../privacy/redaction';
+
 /**
  * INR formatting, Indian numbering convention (docs/DESIGN.md).
  * Amounts are stored as integer minor units (paise); this is the only
@@ -23,7 +25,23 @@ export interface FormatRupeesOptions {
   showPositiveSign?: boolean;
 }
 
+/**
+ * Display formatter. R4c: while the feedback screenshot is being taken
+ * (redaction flag on) every amount renders as "₹ ••••".
+ */
 export function formatRupeesFromMinor(
+  amountMinor: number,
+  options: FormatRupeesOptions = {},
+): string {
+  if (isRedacted()) return REDACTED_AMOUNT;
+  return formatRupeesPlain(amountMinor, options);
+}
+
+/**
+ * Never redacted — only for text that is computed and STORED (e.g. the SMS
+ * sanitizedPreview), never for what is drawn on screen.
+ */
+export function formatRupeesPlain(
   amountMinor: number,
   options: FormatRupeesOptions = {},
 ): string {

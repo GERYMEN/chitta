@@ -24,6 +24,7 @@ import {
 import { refundedLabel, refundForLabel, refundRowLine } from '../../refunds/refundLabels';
 import { hiddenDuplicatesLabel } from '../../duplicates/duplicateLabels';
 import { MerchantHistoryChip } from '../../insights/components/MerchantHistoryChip';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 export interface TransactionDetailContentProps {
   transaction: Transaction;
@@ -236,6 +237,8 @@ export function TransactionDetailContent({
   onOpenTransaction,
   merchantChip = null,
 }: TransactionDetailContentProps) {
+  // R4c: names, note, SMS text, amounts and last-4 masked in the feedback screenshot.
+  useRedacted();
   const [transparencyOpen, setTransparencyOpen] = useState(variant === 'screen');
   const [auditOpen, setAuditOpen] = useState(false);
   const categories = useTransactionsStore(state => state.categories);
@@ -305,7 +308,7 @@ export function TransactionDetailContent({
       {hiddenDuplicate ? (
         <Card style={styles.fieldsCard} testID="duplicate-notice">
           <Text style={styles.cardTitle}>
-            {linkedRow ? `Duplicate of ${linkedRow.merchantName}` : 'Duplicate'}
+            {linkedRow ? `Duplicate of ${redactText(linkedRow.merchantName)}` : 'Duplicate'}
           </Text>
           <Text style={styles.transparencyMeta}>
             You marked this as the same money recorded twice. It is kept only so SMS sync never
@@ -353,7 +356,7 @@ export function TransactionDetailContent({
               accessibilityRole="link"
               accessibilityLabel={`Refund ${refundRowLine(refund)}`}
               style={({ pressed }) => [styles.detailRow, styles.tappableRow, pressed && styles.pressed]}>
-              <Text style={styles.detailLabel}>{refund.merchantName}</Text>
+              <Text style={styles.detailLabel}>{redactText(refund.merchantName)}</Text>
               <Text style={styles.linkText}>{refundRowLine(refund)} ›</Text>
             </Pressable>
           ))}
@@ -377,7 +380,7 @@ export function TransactionDetailContent({
           <Icon name={visual.icon} size={28} color={visual.iconColor} />
         </View>
         <View style={styles.merchantRow}>
-          <Text style={styles.merchant}>{transaction.merchantName}</Text>
+          <Text style={styles.merchant}>{redactText(transaction.merchantName)}</Text>
           {confidencePercent !== null ? (
             <Chip label={`${confidencePercent}% match`} tone="approved" />
           ) : null}
@@ -459,7 +462,7 @@ export function TransactionDetailContent({
           <DetailRow label="Account" value={accountDisplayLabel(account)} />
         )}
         <DetailRow label="Date & Time" value={formatTransactionTimestamp(transaction.occurredAt)} />
-        {transaction.note ? <DetailRow label="Personal Note" value={transaction.note} /> : null}
+        {transaction.note ? <DetailRow label="Personal Note" value={redactText(transaction.note)} /> : null}
       </Card>
 
       <Card style={styles.fieldsCard}>
@@ -487,13 +490,13 @@ export function TransactionDetailContent({
               </View>
             </View>
             <Text style={styles.transparencyMeta}>
-              Parser: {transaction.parserVersion ?? 'unknown'} · Ref ID: {transaction.sourceReferenceHash ?? '—'}
+              Parser: {transaction.parserVersion ?? 'unknown'} · Ref ID: {redactText(transaction.sourceReferenceHash) ?? '—'}
             </Text>
 
             {transaction.sanitizedPreview ? (
               <View style={styles.sourceBox}>
                 <Text style={styles.sourceLabel}>SANITIZED SOURCE MESSAGE</Text>
-                <Text style={styles.sourceText}>&ldquo;{transaction.sanitizedPreview}&rdquo;</Text>
+                <Text style={styles.sourceText}>&ldquo;{redactText(transaction.sanitizedPreview)}&rdquo;</Text>
                 <Text style={styles.sourceFootnote}>Zero credentials stored · Sanitized entirely on-device</Text>
               </View>
             ) : null}

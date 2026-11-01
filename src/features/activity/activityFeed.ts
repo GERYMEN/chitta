@@ -4,6 +4,7 @@ import { Account } from '../../domain/accounts/account.types';
 import { Category } from '../../domain/categories/category.types';
 import { categoryLabel } from '../../domain/categories/category.rules';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
+import { REDACTED_TEXT, redactLast4 } from '../../shared/privacy/redaction';
 import {
   SmsSyncStartMode,
   START_MODE_LABEL,
@@ -59,6 +60,11 @@ export interface ActivityOptions {
    * amount in the sentence and the impact line renders as MASKED_AMOUNT.
    */
   showAmounts?: boolean;
+  /**
+   * R4c: feedback screenshot (redaction on) — merchant / payee names render
+   * as REDACTED_TEXT and amounts stay masked.
+   */
+  hideNames?: boolean;
 }
 
 export const MASKED_AMOUNT = '₹ ••••';
@@ -140,7 +146,7 @@ export function transferSideLabel(
   account: Pick<Account, 'name' | 'lastFour'> | null | undefined,
 ): string {
   if (!account) return 'an account';
-  return account.lastFour ? `${account.name} ••${account.lastFour}` : account.name;
+  return account.lastFour ? `${account.name} ••${redactLast4(account.lastFour)}` : account.name;
 }
 
 /** R3a: "You moved ₹ •••• from A to B" (masked unless amounts are shown). */
@@ -157,7 +163,7 @@ const TRANSFER_NOTE = 'not income or expense';
 
 export function accountShortLabel(account: Pick<Account, 'name' | 'lastFour'> | null | undefined): string {
   if (!account) return 'an account';
-  return account.lastFour ? `••${account.lastFour}` : account.name;
+  return account.lastFour ? `••${redactLast4(account.lastFour)}` : account.name;
 }
 
 function fieldList(fields: ReadonlyArray<string>): string {
@@ -286,8 +292,11 @@ export function describeActivity(
   context: ActivityContext = {},
   options: ActivityOptions = {},
 ): ActivityItem {
-  const show = options.showAmounts ?? false;
-  const subject = subjectFor(event, context);
+  const hideNames = options.hideNames ?? false;
+  const show = (options.showAmounts ?? false) && !hideNames;
+  const rawSubject = subjectFor(event, context);
+  const subject =
+    rawSubject && hideNames ? { ...rawSubject, merchantName: REDACTED_TEXT } : rawSubject;
   const what = subjectText(subject, show);
   const merchant = subject ? subject.merchantName : null;
   const categoryName = context.category ? categoryLabel(context.category) : 'a category';
@@ -322,7 +331,11 @@ export function describeActivity(
     case 'refund_linked':
     case 'refund_unlinked': {
       const refundAmount = subject ? amountLabel(subject.amountMinor, show) : MASKED_AMOUNT;
-      const original = context.linkedTransaction?.merchantName ?? 'an expense';
+      const original = context.linkedTransaction
+        ? hideNames
+          ? REDACTED_TEXT
+          : context.linkedTransaction.merchantName
+        : 'an expense';
       sentence =
         event.eventType === 'refund_linked'
           ? `You linked a ${refundAmount} refund to ${original}`

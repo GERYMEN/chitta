@@ -8,6 +8,7 @@ import {
   requestSmsPermission,
 } from '../../../native/android/permissions/smsPermission';
 import { SmsReference } from '../../sms-sync/smsReference';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 /**
  * On-demand "source of truth" view: reads the exact SMS that produced a
@@ -29,6 +30,7 @@ export interface OriginalSmsViewProps {
 
 export function OriginalSmsView({ reference }: OriginalSmsViewProps) {
   const [state, setState] = useState<ViewState>({ kind: 'hidden' });
+  useRedacted(); // R4c: sender + body masked in the feedback screenshot
   // Incremented on every fetch/hide/unmount so a late native response can
   // never repopulate state after the user hid the box or left the screen.
   const requestToken = useRef(0);
@@ -114,10 +116,10 @@ export function OriginalSmsView({ reference }: OriginalSmsViewProps) {
             ORIGINAL SMS · read live from your inbox, not stored
           </Text>
           <Text style={styles.metaText}>
-            From {state.address} · {formatTransactionTimestamp(state.receivedAtIso)}
+            From {redactText(state.address)} · {formatTransactionTimestamp(state.receivedAtIso)}
           </Text>
           <Text style={styles.bodyText} selectable>
-            {state.body}
+            {redactText(state.body)}
           </Text>
         </View>
       ) : null}

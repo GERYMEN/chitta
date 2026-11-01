@@ -31,6 +31,8 @@ export interface ProfileSettingsSheetProps {
    * `onCompleted` (saves the new start) if the scan finished.
    */
   onScanGap: (window: SyncWindow, onCompleted: () => Promise<void>) => void;
+  /** R4c: "Replay tour" — shows the first-run coach marks again. */
+  onReplayTour?: () => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function ProfileSettingsSheet({
   onOpenActivity,
   onOpenCategories,
   onScanGap,
+  onReplayTour,
 }: ProfileSettingsSheetProps) {
   const { userName, approvalMode, autoApproveThreshold } = useTransactionsStore(
     useShallow(state => ({
@@ -149,6 +152,23 @@ export function ProfileSettingsSheet({
         </View>
         <Icon name="chevron-right" size={22} color={colors.outline} />
       </Pressable>
+      {onReplayTour ? (
+        <Pressable
+          onPress={onReplayTour}
+          accessibilityRole="button"
+          accessibilityLabel="Replay tour"
+          testID="settings-replay-tour-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="map-marker-path" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Replay tour</Text>
+            <Text style={styles.activityCaption}>Show the quick app tour again</Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
       <Pressable
         onPress={() => setEditingStart(open => !open)}
         accessibilityRole="button"

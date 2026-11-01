@@ -1,0 +1,149 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules"),
+ongoing/roadmap/STATE.md, ongoing/roadmap/R4b-sms-sync-start.md and
+R4-insights.md (latest phases), the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute privacy rules),
+docs/PROJECT.md + docs/DESIGN.md (tokens, spacing, components).
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R4c-feedback-tour (created from
+phase/R4b-sms-sync-start). Stay on it. Do not switch branches, do not
+commit.
+
+PHASE R4c — Floating feedback button (WhatsApp) + first-run tour.
+Goal: the owner is releasing the app to testers for feedback.
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+Verified current state (grep to confirm):
+- No react-native-reanimated / gesture-handler / svg. Use RN core
+  Animated (useNativeDriver for transform/opacity) + PanResponder.
+- Shared UI: src/shared/ui (AmountText, BottomSheet, Button, Card, Chip,
+  Dialog, HeaderBackButton, Snackbar, TransactionRow …); money format:
+  src/shared/utils/currency.ts formatRupeesFromMinor (≈14 callers).
+- Own native module code under android/app/src/main/java/com/tracker
+  (SmsReaderModule.kt pattern). Manifest: INTERNET + READ_SMS only.
+- App version: android/app/build.gradle versionName "1.0", versionCode 1.
+
+USER DECISIONS (2026-11-01) — the user's original spec was written for a
+web app (html2canvas, Tailwind, POST /api/v1/feedback); adapt it to RN:
+- Screenshot via OUR OWN native code (no new library). Share image +
+  text to WhatsApp, number +919656921869.
+- WhatsApp only: NO "Submit Feedback"/backend button.
+- Tour = coach-mark highlights on the real screens after setup.
+- Tour shown once for NEW installs; "Replay tour" in the Settings sheet;
+  existing installs (owner's phone) do NOT get it automatically.
+- NO new dependency, NO new permission (no VIBRATE → no haptics). A
+  FileProvider <provider> entry in the manifest is allowed (it is not a
+  permission). Put the phone number in one constant.
+
+PART A — Floating feedback widget (one widget, mounted once above the
+navigator so it floats over every main screen)
+A1 Visual: one circular button, diameter 52dp, feedback icon
+   (react-native-vector-icons), theme tokens, accessibilityLabel "Send
+   feedback". Never more than one trigger; no speed-dial.
+A2 State machine (pure reducer, unit-tested): DOCKED → (tap) EXPANDED →
+   (tap) CAPTURING_SCREENSHOT → FEEDBACK_MODAL_OPEN; EXPANDED → (3000 ms
+   no touch) SNAPPING → DOCKED; any → (drag) DRAGGING → (release)
+   SNAPPING → DOCKED. Tap on DOCKED only expands (does NOT open the
+   sheet).
+   - DOCKED: snapped to left or right edge, ~65% off-screen (~35%
+     visible), opacity 0.3, subtle border + shadow.
+   - EXPANDED: fully visible 16dp from the edge, opacity 1, spring.
+   - DRAGGING: movement ≥ 6dp turns a tap into a drag; scale 1.08,
+     stronger shadow, follows the finger (transform translate, native
+     driver), timer cleared.
+   - SNAPPING: spring to the nearest horizontal edge (x < width/2 → left,
+     else right), keeping the release Y.
+   - Y clamped between the top safe area + header (≈72dp + radius) and
+     the bottom tab bar + safe area (≈88dp + radius); use real insets.
+   - Persist side + Y locally across launches (settings key; not
+     audited).
+   - Accessibility: when a screen reader is on, a single tap opens the
+     sheet directly (two-tap pattern is hostile to TalkBack).
+   - Hidden during onboarding/setup screens, while the keyboard is open,
+     while the feedback sheet is open, and during the tour except the
+     tour step that points at it.
+A3 Screenshot capture (own Kotlin module, e.g. FeedbackModule):
+   - captureScreen(): capture the current Activity window to a PNG in
+     the app CACHE dir (cache/feedback/), PixelCopy on API 26+ (fallback
+     to drawing the decor view), return file uri/path + size. Delete old
+     feedback screenshots on each capture and on app start.
+   - Before capturing: hide the widget (excluded from the image) and
+     switch the app into REDACTED mode, wait for the frame to render,
+     capture, then restore. REDACTED mode masks: all money amounts
+     (route through formatRupeesFromMinor / AmountText — "₹ ••••"),
+     merchant/payee names and notes in rows/details (TransactionRow +
+     detail screens), SMS descriptions/original SMS, account last-4 and
+     the user's name. Implement as one global flag (store) read by the
+     shared components; list in the report any screen text that is NOT
+     covered.
+   - Never log, upload or keep the image anywhere except the cache file
+     until shared/removed.
+A4 "Share Feedback" bottom sheet (reuse BottomSheet): header "Share
+   Feedback" + version badge "v<versionName> (<versionCode>)" from the
+   native module + ✕; category pills "Bug 🪲" "Idea 💡" "Review 💬"
+   (single select, default Bug); multiline note, 500 max, live
+   "N/500", helpful placeholder; screenshot thumbnail with
+   "✓ Screenshot (auto-captured, amounts hidden)", [Retake] (closes sheet,
+   recaptures, reopens) and [Remove] (and [Add] to re-attach after
+   remove = recapture); primary button "Send on WhatsApp" (#25D366
+   token, ≥48dp). Disabled until a note or category is set (category
+   default counts as set — note may be empty; document).
+A5 WhatsApp share (native): ACTION_SEND with the PNG via FileProvider
+   (EXTRA_STREAM, FLAG_GRANT_READ_URI_PERMISSION) + EXTRA_TEXT, package
+   com.whatsapp with jid "919656921869@s.whatsapp.net"; if not
+   installed → com.whatsapp.w4b; if neither → if no screenshot:
+   Linking https://wa.me/919656921869?text=<encoded>; with screenshot:
+   generic share chooser. Text format:
+     "Tracker feedback — <Bug|Idea|Review>\n<note>\n\n— App v<x> (<n>)
+      · Android <release> · <brand model> · Screen: <route name> ·
+      <ISO time>"
+   Device info only — never transactions, amounts, merchants, SMS, the
+   user's name or account details. After returning: Snackbar "Thanks —
+   feedback ready in WhatsApp" and reset the sheet.
+A6 Tests: reducer transitions (tap/drag threshold/timer/snap side/Y
+   clamp/screen-reader path); message builder (format, encoding, no
+   user data); redaction flag masks AmountText/formatRupeesFromMinor/
+   TransactionRow; sheet validation + counter; fallback chain selection
+   (pure helper).
+
+PART B — First-run tour (coach marks)
+B1 Pure tour model: ordered steps {id, tab/screen, targetKey, title,
+   body}. Steps (adjust wording to the real UI):
+   1 Sync SMS (Home) — read bank SMS into Pending.
+   2 Pending tab — approve, edit or reject detected items.
+   3 Period chips + "Where it went" (Home) — see spending by period.
+   4 Transactions tab — search and filter.
+   5 Accounts tab — balances per account.
+   6 Feedback button — "Found a bug or have an idea? Tap here twice."
+   Missing target → skip that step.
+B2 Overlay: dim everything except the target's rounded rectangle
+   (measureInWindow via a small target registry: useTourTarget(key)),
+   tooltip card near the target with title, body, "n / 6", [Skip] and
+   [Next]/[Done]. Taps outside do nothing; the highlighted control is
+   NOT activated by the tour. Switch tabs as steps require; scroll Home
+   so the target is visible when possible. Respect safe areas;
+   accessible (tooltip announced, buttons ≥48dp).
+B3 Trigger: new installs — once, right after setup completes (settings
+   key tour_completed_at). Existing installs: on upgrade set it to now
+   silently (no auto-show). Settings sheet row "Replay tour". Skip/Done
+   sets the key. No audit rows.
+B4 Tests: step order + skip of missing targets; trigger logic (new vs
+   upgrade vs replay); overlay layout math (spotlight rect, tooltip
+   above/below placement within screen bounds).
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+
+OUTPUT: ongoing/roadmap/R4c-feedback-tour.md (files, state machine
+table, native API, redaction coverage list, WhatsApp fallback chain,
+tour steps + trigger rules, gates, decisions, and a DEVICE PLAN for
+later that: never opens or inspects WhatsApp or any other app (the
+owner tests the WhatsApp send by hand), never pulls/opens the captured
+image, only replays the tour from Settings, and checks the widget's
+dock/expand/drag/snap with grep-filtered bounds). Leak-scan the report
+with the pattern given in the dispatch message (shell only — never write
+it into a repo file). Do not commit.
+REPLY ONLY: gates yes/no; files changed count; redaction gaps; decisions
+you made.

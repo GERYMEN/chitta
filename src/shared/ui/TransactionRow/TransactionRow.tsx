@@ -4,6 +4,7 @@ import { colors, radii, spacing, typography } from '../../../theme';
 import { transactionStateColors } from '../../../theme/colors';
 import { AmountText } from '../AmountText';
 import { TransactionStatus, TransactionType } from '../../../domain/transactions/transaction.types';
+import { redactText, useRedacted } from '../../privacy/redaction';
 
 export interface TransactionRowProps {
   merchantName: string;
@@ -45,6 +46,8 @@ export function TransactionRow({
   testID,
   tag = null,
 }: TransactionRowProps) {
+  // R4c: merchant / payee masked (amount via AmountText) in the feedback screenshot.
+  useRedacted();
   return (
     <Pressable
       onPress={onPress}
@@ -54,7 +57,7 @@ export function TransactionRow({
       <View style={styles.middle}>
         <View style={styles.titleRow}>
           <Text style={styles.title} numberOfLines={1}>
-            {merchantName}
+            {redactText(merchantName)}
           </Text>
           {tag ? (
             <View style={styles.tag}>

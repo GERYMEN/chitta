@@ -29,6 +29,8 @@ import {
   MainTabParamList,
   RootStackParamList,
 } from '../../../app/navigation/routes';
+import { redactLast4, useRedacted } from '../../../shared/privacy/redaction';
+import { TourTarget } from '../../tour/components/TourTarget';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accounts'>,
@@ -53,6 +55,7 @@ const GROUP_LABEL: Record<AccountType, string> = {
 
 export function AccountsScreen() {
   const navigation = useNavigation<Nav>();
+  useRedacted(); // R4c: balances + last-4 masked in the feedback screenshot
   const transactions = useTransactionsStore(state => state.transactions);
   // D10: totals and main groups use ACTIVE accounts only; soft-deleted ones
   // are listed separately with Restore. Their transactions are untouched.
@@ -110,6 +113,8 @@ export function AccountsScreen() {
         <Text style={styles.title}>Accounts</Text>
         <Text style={styles.subtitle}>Your money sources</Text>
 
+        {/* R4c: tour step 5 spotlights the balance card. */}
+        <TourTarget targetKey="accounts.balance">
         <Card tone="obsidian" style={styles.balanceCard}>
           <View style={styles.balanceTopRow}>
             <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
@@ -137,6 +142,7 @@ export function AccountsScreen() {
             onPress={() => navigation.navigate('AddAccount')}
           />
         </Card>
+        </TourTarget>
 
         <View style={styles.flowBanner}>
           <Text style={styles.flowText}>
@@ -258,7 +264,7 @@ function AccountCard({
         <View style={styles.accountMeta}>
           <Text style={styles.accountName}>{account.name}</Text>
           <Text style={styles.accountSubtitle}>
-            {account.lastFour ? `•••• ${account.lastFour}` : 'Physical wallet'}
+            {account.lastFour ? `•••• ${redactLast4(account.lastFour)}` : 'Physical wallet'}
           </Text>
         </View>
       </View>

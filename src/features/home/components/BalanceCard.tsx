@@ -5,6 +5,7 @@ import { Icon } from '../../../shared/icons';
 import { colors, spacing, typography } from '../../../theme';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 import { scanProgressLabel } from '../../../domain/settings/smsSyncStart.rules';
+import { TourTarget } from '../../tour/components/TourTarget';
 
 /** R4b: a running SMS scan (counts only). */
 export interface SyncProgressView {
@@ -63,7 +64,10 @@ export function BalanceCard({
       ) : (
         <View style={styles.actions}>
           <Button label="Add Record" variant="brand" onPress={onAddRecord} fullWidth={false} style={styles.actionButton} />
-          <Button label="Sync SMS" variant="ghost" onPress={onSyncSms} fullWidth={false} style={styles.actionButton} />
+          {/* R4c: tour step 1 spotlights Sync SMS. */}
+          <TourTarget targetKey="home.sync" style={styles.actionSlot}>
+            <Button label="Sync SMS" variant="ghost" onPress={onSyncSms} fullWidth={false} style={styles.actionFill} />
+          </TourTarget>
         </View>
       )}
     </Card>
@@ -94,6 +98,12 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    height: 48,
+  },
+  actionSlot: {
+    flex: 1,
+  },
+  actionFill: {
     height: 48,
   },
   progressTextWrap: {

@@ -3,6 +3,7 @@ import { accountDisplayLabel } from '../../domain/accounts/account.rules';
 import { Transaction } from '../../domain/transactions/transaction.types';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
 import { formatTransactionTimestamp } from '../../shared/utils/date';
+import { redactText } from '../../shared/privacy/redaction';
 
 /** R3b pure display strings for duplicates and the combined review nudge. */
 
@@ -20,7 +21,7 @@ export function duplicatePairTitle(
 
 /** One side of a pair: "<merchant> · <when>". */
 export function duplicateRowLine(t: Pick<Transaction, 'merchantName' | 'occurredAt'>): string {
-  return `${t.merchantName} · ${formatTransactionTimestamp(t.occurredAt)}`;
+  return `${redactText(t.merchantName)} · ${formatTransactionTimestamp(t.occurredAt)}`;
 }
 
 /** Status word for one side of a pair. */

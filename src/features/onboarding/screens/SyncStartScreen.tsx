@@ -11,6 +11,7 @@ import {
   SmsSyncStartChoice,
   startForChoice,
 } from '../../../domain/settings/smsSyncStart.rules';
+import { requestTourAfterSetup } from '../../tour/tourStore';
 
 /**
  * R4b: save the onboarding choice (audited 'settings_changed', dates/mode
@@ -23,6 +24,8 @@ export async function saveOnboardingSyncStart(
   const store = useTransactionsStore.getState();
   await store.setSmsSyncStart(choice, startForChoice(choice, now));
   await store.completeOnboarding();
+  // R4c: a new install owes the first-run tour; it starts on the main tabs.
+  await requestTourAfterSetup().catch(() => undefined);
 }
 
 /** R4b onboarding step after Permissions: "Where should SMS sync start?" */

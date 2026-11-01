@@ -1,6 +1,7 @@
 import { Account, AccountType } from './account.types';
 import { Transaction } from '../transactions/transaction.types';
 import { affectsBalance } from '../transactions/transaction.rules';
+import { redactLast4 } from '../../shared/privacy/redaction';
 
 /**
  * calculated_balance = anchor + approved_income - approved_expense for
@@ -91,8 +92,9 @@ export function accountDisplayLabel(
   if (!account) return 'Unknown';
   if (isDeletedAccount(account)) {
     return account.lastFour
-      ? `Deleted account ••${account.lastFour} (${account.name})`
+      ? `Deleted account ••${redactLast4(account.lastFour)} (${account.name})`
       : `Deleted account (${account.name})`;
   }
-  return account.lastFour ? `${account.name} ••••${account.lastFour}` : account.name;
+  // R4c: last-4 masked while the feedback screenshot is taken.
+  return account.lastFour ? `${account.name} ••••${redactLast4(account.lastFour)}` : account.name;
 }

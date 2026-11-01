@@ -26,12 +26,14 @@ import {
 import { merchantFilterFor } from '../filters/transactionFilters';
 import { useSelectedPeriod } from '../../insights/hooks/usePeriod';
 import { merchantChipLabel } from '../../insights/insightLabels';
+import { useRedacted } from '../../../shared/privacy/redaction';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function TransactionDetailScreen() {
   const navigation = useNavigation<Nav>();
+  useRedacted(); // R4c: merchant chip label masked in the feedback screenshot
   const route = useRoute<DetailRoute>();
   const transaction = useTransactionsStore(state =>
     state.transactions.find(t => t.id === route.params.transactionId),
