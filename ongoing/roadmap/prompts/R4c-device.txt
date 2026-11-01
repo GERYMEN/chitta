@@ -1,0 +1,77 @@
+GROUND FACTS: read ongoing/roadmap/prompts/R4b-device.txt (R4b checks
+U/S/E/A/C + device-safety rules — all apply here), ongoing/roadmap/
+R4b-sms-sync-start.md and ongoing/roadmap/R4c-feedback-tour.md (both
+"DEVICE PLAN" sections), ongoing/roadmap/R4-device.md (leftovers), and the
+decisions log of ongoing/realtime-persistence/STATE.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker,
+branch phase/R4c-feedback-tour (committed 6b96299; contains R4b). Do not
+edit source, do not commit, do not switch branches.
+
+COMBINED DEVICE PASS — R4b (sync start) + R4c (feedback button + tour).
+Owner asked: commit, push, then test.
+
+STEP 0 BUILD (no phone): cd android && export JAVA_HOME=/opt/homebrew/
+opt/openjdk@17/libexec/openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/
+bin:$PATH; export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools;
+./gradlew assembleRelease. Confirm the bundle contains "SMS sync starts"
+and "Share Feedback".
+
+STEP 1 IDLE WAIT + STATE + INSTALL: wait until the phone is unlocked with
+the launcher or Tracker in front for 2 consecutive minutes (package name
++ lock state only; give up after 30 min). Record the installed build's
+lastUpdateTime (dumpsys package com.tracker | grep -E
+'lastUpdateTime|firstInstallTime' only). logcat -c; adb install -r
+app/build/outputs/apk/release/app-release.apk (INSTALL_FAILED_UPDATE_
+INCOMPATIBLE → STOP, never uninstall); firstInstallTime must be unchanged;
+am start -W -n com.tracker/.MainActivity.
+Leftover check (an earlier R4b run was killed mid-way): on Transactions
+search "QA-Merchant-2" — report the count of QA-Merchant-20/21 rows (QA
+labels only). If present, delete them in step C.
+
+R4b CHECKS: run U, S, E, A, C exactly as in prompts/R4b-device.txt
+(S = tap Sync SMS ONCE; large-scan dialog → Cancel). Do C's account
+cleanup at the very END (after the R4c checks), not before.
+
+R4c CHECKS: follow R4c-feedback-tour.md DEVICE PLAN steps 2–10, with:
+- Step 2 no auto-tour BEFORE anything else on first launch after install.
+- Steps 3–6 widget dock/expand/drag/snap/persistence: print only the
+  "Send feedback" bounds and the screen width/height.
+- Step 7 hidden states: AddRecord (back without saving) + keyboard open
+  on the Transactions search (type nothing, or only "QA").
+- Step 8: open the sheet, grep only the listed labels, NEVER tap Send,
+  never tap Retake/Add more than once, close with ✕. NEVER open WhatsApp,
+  the share chooser or any other app; NEVER list, pull or open
+  cache/feedback (no run-as). The owner tests the WhatsApp send by hand.
+- Step 9 Replay tour from Settings: counter per step, active tab, the
+  6/6 step shows the button fully on-screen, Done → 0 overlay; one tap
+  outside the tooltip changes nothing. Do NOT change any other setting in
+  that sheet (never touch the sync start or the name).
+- Do NOT turn TalkBack on (owner setting) — report the screen-reader path
+  as NOT RUN.
+- After step 6, drag the button back to the RIGHT edge so the owner sees
+  the default side.
+
+FINAL: step C cleanup (QA-Merchant-20/21, QA Wallet 8888, QA Delete Bank
+9999 confirmation — QA labels only), force-stop + relaunch, logcat since
+install: 0 FATAL com.tracker, 0 ANR, 0 "Maximum update depth", 0
+ReactNativeJS errors (counts only). Leave the release build installed;
+end with force-stop com.tracker.
+
+DEVICE SAFETY (absolute — owner's personal phone, real data): as in
+prompts/R4b-device.txt. In short: guard before EVERY tap/dump that ABORTS
+the chain unless both mCurrentFocus and mFocusedApp contain com.tracker;
+locked = stop (never a PIN); another app in front or anything you did not
+do = stop touching, never press HOME over it, never inspect it, watch
+package + lock state only up to 10 min, resume after Tracker is in front
+and idle 2 min; every dump grep-filtered to one QA element or one label,
+`adb shell rm /sdcard/u.xml` after; never print real merchants, amounts,
+previews or senders; never tracker.db / sqlite3 / run-as; no uninstall,
+clear-data or screenshots; never act on real items; never change the
+owner's settings.
+
+OUTPUT: ongoing/roadmap/R4c-device.md (build, leftovers found, each check
+PASS/FAIL/NOT RUN with QA-only evidence, counts or bounds, cleanup, what
+did not run and why). Leak-scan it with the pattern given in the dispatch
+message (shell only, never written to a file). Do not commit.
+REPLY ONLY: build yes/no; each check PASS/FAIL/NOT RUN; anything
+surprising.

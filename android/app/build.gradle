@@ -82,8 +82,8 @@ android {
         applicationId "com.tracker"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "0.9.0-beta"
     }
     signingConfigs {
         debug {
@@ -92,15 +92,30 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Private tester-release key. The keystore and its passwords live outside
+        // the repo (~/.tracker-release + ~/.gradle/gradle.properties TRACKER_RELEASE_*).
+        if (project.hasProperty('TRACKER_RELEASE_STORE_FILE')) {
+            release {
+                storeFile file(TRACKER_RELEASE_STORE_FILE)
+                storePassword TRACKER_RELEASE_STORE_PASSWORD
+                keyAlias TRACKER_RELEASE_KEY_ALIAS
+                keyPassword TRACKER_RELEASE_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Tester APKs use the private release key. Pass -PtrackerDebugSigning
+            // for a release build the owner's phone (debug-signed install) can update to.
+            if (project.hasProperty('trackerDebugSigning')) {
+                signingConfig signingConfigs.debug
+            } else if (project.hasProperty('TRACKER_RELEASE_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
+            // Neither set: the APK is left unsigned (app-release-unsigned.apk), never debug-signed by accident.
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
