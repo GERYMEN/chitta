@@ -15,6 +15,8 @@ import { CategoriesScreen } from '../../features/categories/screens/CategoriesSc
 import { UncategorisedScreen } from '../../features/categories/screens/UncategorisedScreen';
 import { ReviewScreen } from '../../features/review/screens/ReviewScreen';
 import { InsightsScreen } from '../../features/insights/screens/InsightsScreen';
+import { BackupScreen } from '../../features/backup/screens/BackupScreen';
+import { RestoreScreen } from '../../features/backup/screens/RestoreScreen';
 import { RootStackParamList } from './routes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -81,6 +83,8 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
         component={InsightsScreen}
         options={{ presentation: 'card' }}
       />
+      <Stack.Screen name="Backup" component={BackupScreen} options={{ presentation: 'card' }} />
+      <Stack.Screen name="Restore" component={RestoreScreen} options={{ presentation: 'card' }} />
     </Stack.Navigator>
   );
 }

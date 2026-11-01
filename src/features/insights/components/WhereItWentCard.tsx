@@ -4,13 +4,13 @@ import { Card } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
 import { Period } from '../../../domain/periods/period.types';
-import { CategoryBreakdownRow } from '../../../domain/insights/insights.types';
-import { CategoryBars } from './CategoryBars';
+import { CategorySpend } from '../../../domain/insights/insights.types';
+import { CategoryDonut } from './CategoryDonut';
 import { noSpendingLabel, PERIOD_CAPTION } from '../insightLabels';
 
 export interface WhereItWentCardProps {
-  /** topCategories(spendByCategory(...)) for the selected period. */
-  rows: ReadonlyArray<CategoryBreakdownRow>;
+  /** spendByCategory(...) for the selected period (the donut folds small ones). */
+  rows: ReadonlyArray<CategorySpend>;
   categories: ReadonlyArray<Category>;
   period: Period;
   onPressCategory: (categoryId: string) => void;
@@ -19,9 +19,11 @@ export interface WhereItWentCardProps {
 }
 
 /**
- * R4 Home card: top 5 categories + "Other" as horizontal bars (₹ amount,
- * item count, % of spend) for the selected period; an empty state when
- * nothing was spent. A category bar opens Transactions filtered to it.
+ * R4 Home card, R4e as a donut: one slice per category for the selected
+ * period (small ones folded into "Other"), the total spent in the centre and
+ * a legend (dot, name, %, amount); an empty state when nothing was spent. A
+ * category slice / legend row opens Transactions filtered to it; "Other"
+ * opens Insights (as the folded bar did).
  */
 export function WhereItWentCard({
   rows,
@@ -46,16 +48,16 @@ export function WhereItWentCard({
           <Text style={styles.seeAllText}>See all ›</Text>
         </Pressable>
       </View>
-      {rows.length === 0 ? (
+      {!rows.some(row => row.spendMinor > 0) ? (
         <Text style={styles.empty} testID="where-it-went-empty">
           {noSpendingLabel(period)}
         </Text>
       ) : (
-        <CategoryBars
+        <CategoryDonut
           rows={rows}
           categories={categories}
-          onPressRow={row => (row.categoryId === null ? onSeeAll() : onPressCategory(row.categoryId))}
-          testID="where-it-went-bars"
+          onPressSlice={categoryId => (categoryId === null ? onSeeAll() : onPressCategory(categoryId))}
+          testID="where-it-went-chart"
         />
       )}
     </Card>

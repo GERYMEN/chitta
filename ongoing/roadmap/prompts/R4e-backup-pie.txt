@@ -1,0 +1,141 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules"),
+ongoing/roadmap/STATE.md, ongoing/roadmap/R4c-feedback-tour.md (own Kotlin
+module + FileProvider pattern, REDACTED mode), ongoing/roadmap/
+R4b-sms-sync-start.md (settings keys), R4-insights.md (Where it went,
+ChartBars), the decisions log of ongoing/realtime-persistence/STATE.md
+(absolute privacy rules), docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R4e-backup-pie (created from phase/R4d-release-apk; the
+R4d build.gradle/STATE.md changes are uncommitted in the tree — leave
+them as they are). Stay on it. Do not switch branches, do not commit.
+
+PHASE R4e — Encrypted backup/restore + "Where it went" pie chart.
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+WHY: testers get updates by installing a newer APK over the old one
+(same private key, higher versionCode). The owner's phone has a
+debug-signed install and must move to the release-signed build:
+back up → uninstall → install the tester APK → restore. Backup must make
+that move lossless.
+
+USER DECISIONS (2026-11-01):
+- Backup file is PASSWORD-ENCRYPTED. Restore REPLACES everything (after
+  confirmation). No merge.
+- Pie chart via react-native-svg (owner approved this ONE new native
+  dependency). No other new dependency, no new permission.
+- No in-app update check (no network calls).
+
+PART A — Backup / restore
+A1 Native (own Kotlin module, e.g. BackupModule; SmsReaderModule /
+   FeedbackModule pattern; register in MainApplication):
+   - saveBackup(json, password, suggestedName): Storage Access Framework
+     ACTION_CREATE_DOCUMENT (no permission; user picks Downloads, Drive,
+     etc.), encrypt, write to the chosen URI. Resolve
+     {saved: true, name, bytes} or {saved: false} when cancelled.
+   - openBackup(password): ACTION_OPEN_DOCUMENT, read, decrypt, resolve
+     the JSON string; distinct reject codes: E_CANCELLED, E_NOT_BACKUP
+     (bad magic/format), E_BAD_PASSWORD (GCM tag fail — same message for
+     damaged file: "Wrong password or damaged file"), E_TOO_NEW (format
+     version newer than this app).
+     (If two-step is cleaner — pick file, then ask password, then decrypt
+     — do that: pickBackup() returns a handle/uri, decryptBackup(uri,
+     password); document.)
+   - Crypto (javax.crypto only): PBKDF2WithHmacSHA256, random 16-byte
+     salt, ≥210,000 iterations (store the count in the header),
+     AES-256-GCM, random 12-byte IV, 128-bit tag. File = magic
+     "TRKBK" + format version byte + iterations + salt + IV + ciphertext.
+     Run crypto + IO off the UI thread. Never log the password, JSON,
+     key or file contents; zero the password char array after use.
+   - If JVM unit tests are already wired (android/app/src/test + junit on
+     the test classpath), add a crypto round-trip + wrong-password test;
+     otherwise extract the crypto into a small pure Kotlin object and
+     document that it is untested on JVM.
+A2 JS backup payload (pure, zod-validated):
+   {format: 1, app: {versionName, versionCode}, schemaVersion (current DB
+   migration number), createdAt ISO, tables: {<name>: rows[]}} — every
+   user-data table (accounts, transactions, categories, settings,
+   audit/activity, links, duplicate_pair_dismissals, sms_sync_runs, any
+   others — enumerate from schema/migrations; list them in the report).
+   Raw SMS bodies are never stored, so none are exported (only what the
+   DB already holds). Read via the repositories / one read transaction.
+A3 Restore (replace everything):
+   - Validate payload; refuse schemaVersion > current ("Backup is from a
+     newer app — update Tracker first"). Older schemaVersion: load into
+     the schema of that version then run migrations forward, OR document
+     a mapping approach — must be correct and tested for at least
+     version N-1 → N.
+   - ONE DB transaction: delete all user-data rows, insert backup rows;
+     any failure rolls back fully (app data unchanged).
+   - After success: audit row 'backup_restored' (counts per table only),
+     reload every store (accounts, transactions, settings, tour,
+     feedback widget position, sync start/cursor) so the UI reflects the
+     restore without an app restart; navigate to Home.
+   - Restored data from another phone: keep sms sync settings as backed
+     up (document; dedup by sourceReferenceHash prevents doubles).
+A4 UI:
+   - Settings sheet: "Back up data" → screen/sheet: password + confirm
+     (min 8 chars, show/hide, strength hint not required), warning
+     "If you forget this password the backup can't be opened", [Save
+     backup file] → SAF → Snackbar "Backup saved".
+     Default file name tracker-backup-YYYY-MM-DD.trkbak.
+   - Settings sheet: "Restore from backup" → pick file → password →
+     confirm Dialog "Replace all data in Tracker with this backup
+     (<date>, N transactions, M accounts)?" → restore → Snackbar
+     "Backup restored".
+   - Onboarding first screen: "Restore from a backup" link (new phone /
+     reinstall). After a successful restore, onboarding completes (the
+     backup carries onboarding/profile settings) and the tour is NOT
+     shown if the backup has tour_completed_at.
+   - Show the last backup date under "Back up data" (settings key
+     last_backup_at; device-local, not restored over — document).
+   - ≥48dp, accessibility labels, password fields secureTextEntry,
+     no autofill of the password into logs.
+A5 Tests: payload round-trip (export → restore → identical rows for
+   every table); validation errors (bad format, newer schema, missing
+   table); restore rollback on mid-way failure; older-schema restore;
+   store reload after restore; onboarding restore path skips tour;
+   password rules (min length, confirm match); no password/JSON in
+   console/audit.
+
+PART B — "Where it went" as a pie (donut) chart
+B1 Install react-native-svg (latest version compatible with RN 0.87 New
+   Architecture; exact version pinned in package.json; autolinking).
+   Confirm assembleDebug + jest (mock if needed via jest setup).
+B2 Replace the bars in WhereItWentCard (Home, and Insights if it uses
+   the same card) with a donut: one slice per category for the selected
+   period, largest first, categories under ~3% merged into "Other"
+   (max ~6 slices + Other), category colours from the existing tokens/
+   palette (distinct, readable in light + dark), gap between slices,
+   centre label = total spent (AmountText — masked in REDACTED mode).
+   Legend list below: colour dot, category name, %, amount; tapping a
+   slice OR a legend row keeps the existing behaviour (filtered
+   transactions list). Empty state unchanged. Accessibility: each
+   legend row has a label "<category>, <percent>, <amount>"; the chart
+   itself has a summary label.
+B3 Keep the math pure (domain/insights): slice angles, % rounding that
+   sums to 100, small-slice merge, sort order. Keep ChartBars for other
+   charts (Trends) unchanged.
+B4 Tests: slice math (sum 100, merge threshold, single category = full
+   ring, zero total), legend tap → same navigation as before, REDACTED
+   masks the centre + legend amounts.
+B5 Tour step 3 still targets the period chips (unchanged) — verify.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease (release signing needs the owner's private key props;
+not needed here).
+
+OUTPUT: ongoing/roadmap/R4e-backup-pie.md (files, dependency + version,
+native API, file format, tables exported, restore rules, UI, pie math,
+gates, decisions, and a DEVICE PLAN for later: back up on the owner's
+phone ONLY when the owner does it by hand — the device agent never types
+a password into the owner's backup, never opens the backup file, never
+restores on the owner's phone; agent checks = pie renders + legend tap,
+backup/restore screens render and validate input, cancel paths).
+Leak-scan the report with the pattern given in the dispatch message
+(shell only — never write it into a repo file). Do not commit.
+REPLY ONLY: gates yes/no; files changed count; svg version; tables
+exported; decisions you made.

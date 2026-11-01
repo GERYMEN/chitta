@@ -171,3 +171,23 @@ export function trendCaption(period: Period): string {
 }
 
 export const PARTIAL_MONTH_FOOTNOTE = '* Partial month — still in progress, or only part of it is in this period.';
+
+/** R4e donut legend: whole percent from the pie model; "<1%" for a sliver. */
+export function piePercentLabel(percent: number, share: number): string {
+  if (percent > 0) return `${percent}%`;
+  return share > 0 ? '<1%' : '0%';
+}
+
+/** R4e legend row a11y: "QA Food, 60%, ₹300". */
+export function pieLegendA11yLabel(name: string, percentLabel: string, spendMinor: number): string {
+  return `${name}, ${percentLabel}, ${formatRupeesFromMinor(spendMinor)}`;
+}
+
+/** R4e donut summary: "Spending by category, ₹500 in total: QA Food 60%, QA Shopping 40%". */
+export function pieSummaryA11yLabel(
+  totalMinor: number,
+  parts: ReadonlyArray<{ name: string; percentLabel: string }>,
+): string {
+  const list = parts.map(part => `${part.name} ${part.percentLabel}`).join(', ');
+  return `Spending by category, ${formatRupeesFromMinor(totalMinor)} in total: ${list}`;
+}

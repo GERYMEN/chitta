@@ -100,3 +100,22 @@ export const transactionStateColors = {
 } as const;
 
 export type ColorToken = keyof typeof colors;
+
+/**
+ * R4e: "Where it went" donut slice colours, by rank (largest first). Every
+ * value is an existing token; neighbours around the ring (including last →
+ * first) differ in hue or lightness. Checked against the light cards only —
+ * there is no dark theme yet (R12 must re-check the two darkest: primary,
+ * onTertiaryContainer). "Other" uses the muted outline-variant.
+ */
+export const chartSeriesColors: ReadonlyArray<string> = [
+  colors.primary,
+  colors.tertiaryContainer,
+  colors.primaryContainer,
+  colors.error,
+  colors.onTertiaryContainer,
+  colors.secondary,
+  colors.tertiaryFixedDim,
+];
+
+export const chartOtherColor: string = colors.outlineVariant;

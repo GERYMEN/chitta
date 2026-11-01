@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
@@ -13,6 +13,8 @@ export interface OnboardingShellProps {
   onNext: () => void;
   onBack?: () => void;
   onSkip: () => void;
+  /** R4e: an extra text link under the CTA (first slide: "Restore from a backup"). */
+  footerLink?: { label: string; onPress: () => void; testID?: string };
   children: React.ReactNode;
 }
 
@@ -30,6 +32,7 @@ export function OnboardingShell({
   onNext,
   onBack,
   onSkip,
+  footerLink,
   children,
 }: OnboardingShellProps) {
   return (
@@ -63,6 +66,16 @@ export function OnboardingShell({
           <Text style={styles.back} onPress={onBack}>
             Back
           </Text>
+        ) : null}
+        {footerLink ? (
+          <Pressable
+            onPress={footerLink.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={footerLink.label}
+            testID={footerLink.testID}
+            style={({ pressed }) => [styles.footerLink, pressed && styles.pressed]}>
+            <Text style={styles.footerLinkText}>{footerLink.label}</Text>
+          </Pressable>
         ) : null}
       </View>
     </SafeAreaView>
@@ -129,5 +142,17 @@ const styles = StyleSheet.create({
     ...typography.labelLg,
     color: colors.outline,
     textAlign: 'center',
+  },
+  footerLink: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerLinkText: {
+    ...typography.labelLg,
+    color: colors.primary,
+  },
+  pressed: {
+    opacity: 0.6,
   },
 });

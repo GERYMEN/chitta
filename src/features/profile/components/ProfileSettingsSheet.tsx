@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { BottomSheet, confirmDialog, showDialog } from '../../../shared/ui';
@@ -18,6 +18,8 @@ import {
   SyncWindow,
   syncStartLabel,
 } from '../../../domain/settings/smsSyncStart.rules';
+import { useBackupStore } from '../../backup/backupStore';
+import { lastBackupLabel } from '../../backup/backupLabels';
 
 export interface ProfileSettingsSheetProps {
   visible: boolean;
@@ -33,6 +35,10 @@ export interface ProfileSettingsSheetProps {
   onScanGap: (window: SyncWindow, onCompleted: () => Promise<void>) => void;
   /** R4c: "Replay tour" — shows the first-run coach marks again. */
   onReplayTour?: () => void;
+  /** R4e: "Back up data" (password-encrypted file). */
+  onOpenBackup?: () => void;
+  /** R4e: "Restore from backup" (replaces everything). */
+  onOpenRestore?: () => void;
 }
 
 /**
@@ -47,6 +53,8 @@ export function ProfileSettingsSheet({
   onOpenCategories,
   onScanGap,
   onReplayTour,
+  onOpenBackup,
+  onOpenRestore,
 }: ProfileSettingsSheetProps) {
   const { userName, approvalMode, autoApproveThreshold } = useTransactionsStore(
     useShallow(state => ({
@@ -60,6 +68,11 @@ export function ProfileSettingsSheet({
   const smsSyncStartAt = useTransactionsStore(state => state.smsSyncStartAt);
   const [editingStart, setEditingStart] = useState(false);
   const [savingStart, setSavingStart] = useState(false);
+  const lastBackupAt = useBackupStore(state => state.lastBackupAt);
+
+  useEffect(() => {
+    if (visible) useBackupStore.getState().load();
+  }, [visible]);
 
   /**
    * R4b: earlier → confirm "Scan SMS from <new> to <old>? About N SMS." and
@@ -165,6 +178,42 @@ export function ProfileSettingsSheet({
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Replay tour</Text>
             <Text style={styles.activityCaption}>Show the quick app tour again</Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      {onOpenBackup ? (
+        <Pressable
+          onPress={onOpenBackup}
+          accessibilityRole="button"
+          accessibilityLabel={`Back up data. ${lastBackupLabel(lastBackupAt)}`}
+          testID="settings-backup-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="shield-lock-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Back up data</Text>
+            <Text style={styles.activityCaption} testID="settings-last-backup">
+              {lastBackupLabel(lastBackupAt)}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      {onOpenRestore ? (
+        <Pressable
+          onPress={onOpenRestore}
+          accessibilityRole="button"
+          accessibilityLabel="Restore from backup"
+          testID="settings-restore-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="database-import-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Restore from backup</Text>
+            <Text style={styles.activityCaption}>Replace all data with a backup file</Text>
           </View>
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>

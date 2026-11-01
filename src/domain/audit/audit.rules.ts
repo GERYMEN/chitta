@@ -115,9 +115,22 @@ export function sanitizeAuditMetadata(
         kept_id: String(metadata.kept_id),
         duplicate_id: String(metadata.duplicate_id),
       };
+    case 'backup_restored':
+      return { kind: 'backup_restored', counts: sanitizeCounts(metadata.counts) };
     default:
       return null;
   }
+}
+
+/** R4e: table-name → non-negative integer count; anything else is dropped. */
+function sanitizeCounts(counts: Record<string, number> | null | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!counts || typeof counts !== 'object') return out;
+  for (const [key, value] of Object.entries(counts)) {
+    const n = Number(value);
+    if (/^[a-z_]{1,64}$/.test(key) && Number.isInteger(n) && n >= 0) out[key] = n;
+  }
+  return out;
 }
 
 /** Whitelist the enum/id/timestamp fields of a transfer row snapshot. */

@@ -94,6 +94,7 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   duplicate_marked: 'content-duplicate',
   duplicate_restored: 'backup-restore',
   approval_undone: 'undo-variant',
+  backup_restored: 'database-import-outline',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -461,6 +462,16 @@ export function describeActivity(
       sentence = `You archived category ${context.category?.name ?? 'a category'}`;
       impact = { text: 'Hidden from pickers · items keep their label', tone: 'neutral' };
       break;
+    case 'backup_restored': {
+      const counts = event.metadata?.kind === 'backup_restored' ? event.metadata.counts : {};
+      const n = counts.transactions ?? 0;
+      sentence = 'You restored Tracker from a backup';
+      impact = {
+        text: `All data replaced · ${n} transaction${n === 1 ? '' : 's'}`,
+        tone: 'neutral',
+      };
+      break;
+    }
     default:
       sentence = 'Something changed';
   }

@@ -180,6 +180,11 @@ interface TransactionsState {
   /** R4b: Undo of "Approve all" — back to pending, audited 'approval_undone'. */
   undoApprovals: (snapshots: ReadonlyArray<ApprovalSnapshot>) => Promise<number>;
   hydrate: () => Promise<void>;
+  /**
+   * R4e: re-read everything from SQLite (after a backup restore): rows,
+   * settings, sync start/cursor; session filters + period back to defaults.
+   */
+  reloadFromDatabase: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
   updateProfile: (patch: ProfilePatch) => Promise<void>;
   /** Transactions-list filters (R1); kept here so they survive tab switches. */
@@ -323,6 +328,11 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   hydrate: async () => {
     await runMigrations();
+    await get().reloadFromDatabase();
+    set({ isHydrated: true });
+  },
+
+  reloadFromDatabase: async () => {
     const [
       data,
       hasOnboardedValue,
@@ -351,13 +361,14 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       smsSyncStartMode: parseStartMode(startModeValue),
       smsSyncStartAt: parseIsoOrNull(startAtValue),
       smsLastSyncedAt: parseIsoOrNull(lastSyncedValue),
+      transactionFilters: DEFAULT_TRANSACTION_FILTERS,
+      selectedPeriod: DEFAULT_PERIOD,
     });
     // R4b: existing installs get a start without seeing the setup step again.
     // A failure here must never block the app from opening.
     await get()
       .applySmsSyncStartUpgrade()
       .catch(() => false);
-    set({ isHydrated: true });
   },
 
   applySmsSyncStartUpgrade: async (now = new Date()) => {

@@ -21,6 +21,8 @@ export const Routes = {
   ProfileSetup: 'ProfileSetup',
   Permissions: 'Permissions',
   SyncStart: 'SyncStart',
+  Backup: 'Backup',
+  Restore: 'Restore',
 } as const;
 
 export type MainTabParamList = {
@@ -57,4 +59,8 @@ export type RootStackParamList = {
   Permissions: undefined;
   /** R4b: onboarding "Where should SMS sync start?" */
   SyncStart: undefined;
+  /** R4e: Settings → "Back up data" (password + SAF save). */
+  Backup: undefined;
+  /** R4e: Settings → "Restore from backup", or the onboarding link. */
+  Restore: { fromOnboarding?: boolean } | undefined;
 };

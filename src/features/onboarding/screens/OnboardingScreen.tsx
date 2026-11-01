@@ -15,6 +15,8 @@ export function OnboardingScreen() {
   const isLast = index === TOUR_STEPS.length - 1;
 
   // Tour (finished or skipped) -> ProfileSetup -> Permissions -> Tabs.
+  // R4e: first slide also offers "Restore from a backup" (new phone /
+  // reinstall); a successful restore completes setup and lands on Home.
   function goToProfileSetup() {
     navigation.replace('ProfileSetup');
   }
@@ -28,7 +30,16 @@ export function OnboardingScreen() {
       ctaLabel={step.ctaLabel}
       onNext={() => (isLast ? goToProfileSetup() : setIndex(i => i + 1))}
       onBack={index > 0 ? () => setIndex(i => i - 1) : undefined}
-      onSkip={goToProfileSetup}>
+      onSkip={goToProfileSetup}
+      footerLink={
+        index === 0
+          ? {
+              label: 'Restore from a backup',
+              onPress: () => navigation.navigate('Restore', { fromOnboarding: true }),
+              testID: 'onboarding-restore-link',
+            }
+          : undefined
+      }>
       <TourIllustration stepId={step.id} />
     </OnboardingShell>
   );

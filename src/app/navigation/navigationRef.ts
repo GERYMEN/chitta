@@ -15,3 +15,9 @@ export function openPendingForAccount(accountId: string): void {
     params: { accountId, focusKey: Date.now() },
   });
 }
+
+/** R4e: after a restore — a fresh stack with Home on top (no way "back" into old data). */
+export function resetToHome(): void {
+  if (!navigationRef.isReady()) return;
+  navigationRef.reset({ index: 0, routes: [{ name: 'Tabs', params: { screen: 'Home' } }] });
+}

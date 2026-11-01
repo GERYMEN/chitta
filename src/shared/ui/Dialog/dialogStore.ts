@@ -71,6 +71,8 @@ export interface ConfirmOptions {
   icon?: string;
   confirmLabel: string;
   cancelLabel?: string;
+  /** R4e: destructive confirm (red button, no scrim-tap dismissal). */
+  destructive?: boolean;
 }
 
 /**
@@ -94,7 +96,11 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
       icon: options.icon,
       actions: [
         { label: options.cancelLabel ?? 'Cancel', variant: 'ghost', onPress: () => settle(false) },
-        { label: options.confirmLabel, variant: 'primary', onPress: () => settle(true) },
+        {
+          label: options.confirmLabel,
+          variant: options.destructive ? 'destructive' : 'primary',
+          onPress: () => settle(true),
+        },
       ],
     });
     const shown = useDialogStore.getState().current;

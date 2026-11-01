@@ -34,7 +34,6 @@ import { MainTabParamList, RootStackParamList } from '../../../app/navigation/ro
 import {
   periodTotals,
   spendByCategory,
-  topCategories,
 } from '../../../domain/insights/insights.rules';
 import { categoryFilterFor } from '../../transactions/filters/transactionFilters';
 import { PeriodSelector } from '../../insights/components/PeriodSelector';
@@ -106,10 +105,8 @@ export function HomeScreen() {
     () => periodTotals(transactions, range),
     [transactions, range],
   );
-  const breakdown = useMemo(
-    () => topCategories(spendByCategory(transactions, range)),
-    [transactions, range],
-  );
+  // R4e: all categories — the donut folds the small ones into "Other".
+  const breakdown = useMemo(() => spendByCategory(transactions, range), [transactions, range]);
   const periodCaption = PERIOD_CAPTION[period];
 
   function openCategory(categoryId: string) {
@@ -335,6 +332,14 @@ export function HomeScreen() {
         onScanGap={(window, onCompleted) => {
           setSettingsOpen(false);
           handleSyncSms({ window, onCompleted });
+        }}
+        onOpenBackup={() => {
+          setSettingsOpen(false);
+          navigation.navigate('Backup');
+        }}
+        onOpenRestore={() => {
+          setSettingsOpen(false);
+          navigation.navigate('Restore');
         }}
         onReplayTour={() => {
           setSettingsOpen(false);

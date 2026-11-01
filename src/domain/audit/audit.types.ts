@@ -34,7 +34,9 @@ export type AuditEventType =
   | 'duplicate_marked'
   | 'duplicate_restored'
   /** R4b: Pending "Approve all" → Undo put an approved item back to pending. */
-  | 'approval_undone';
+  | 'approval_undone'
+  /** R4e: all data replaced from a backup file (row counts per table only). */
+  | 'backup_restored';
 
 export type AuditActor = 'system' | 'user';
 
@@ -123,7 +125,12 @@ export type AuditMetadata =
       duplicate_id: string;
       previous: DuplicateRowSnapshot;
     }
-  | { kind: 'duplicate_restored'; kept_id: string; duplicate_id: string };
+  | { kind: 'duplicate_restored'; kept_id: string; duplicate_id: string }
+  /**
+   * R4e: restored from a backup — row counts per table name only. Never
+   * the password, the file name, the JSON or any row content.
+   */
+  | { kind: 'backup_restored'; counts: Record<string, number> };
 
 export interface AuditEvent {
   id: string;

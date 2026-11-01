@@ -207,24 +207,33 @@ describe('Home tiles follow the selected period (B5)', () => {
 });
 
 describe('Home "Where it went" card', () => {
-  it('category bars for the period; they add up to the EXPENSES tile', async () => {
+  it('R4e donut: legend rows for the period; the centre total equals the EXPENSES tile', async () => {
     const r = await renderHome();
+    const legend = r.root.findAll(
+      n =>
+        typeof n.type !== 'string' &&
+        typeof n.props.testID === 'string' &&
+        n.props.testID.startsWith('where-it-went-legend-') &&
+        n.props.accessibilityRole === 'button',
+    );
     const seen = new Set<string>();
-    const bars = r.root
-      .findAll(
-        n => typeof n.type !== 'string' && typeof n.props.testID === 'string' && n.props.testID.startsWith('chart-bar-'),
-      )
-      .filter(n => (seen.has(n.props.testID) ? false : (seen.add(n.props.testID), true)));
-    expect(bars.map(b => b.props.accessibilityLabel)).toEqual([
-      'QA Food: ₹300, 1 item, 60% of spend',
-      'QA Shopping: ₹200, 1 item, 40% of spend',
-    ]);
+    const labels = legend
+      .filter(n => (seen.has(n.props.testID) ? false : (seen.add(n.props.testID), true)))
+      .map(n => n.props.accessibilityLabel);
+    expect(labels).toEqual(['QA Food, 60%, ₹300', 'QA Shopping, 40%, ₹200']);
+    const donut = byTestId(r, 'where-it-went-donut')[0];
+    expect(donut.props.accessibilityLabel).toBe(
+      'Spending by category, ₹500 in total: QA Food 60%, QA Shopping 40%',
+    );
+    const expenseTile = tiles(r).find(t => t[0] === 'EXPENSES');
+    expect(expenseTile?.[1]).toBe(50000);
+    expect(texts(r)).toContain('₹500');
   });
 
-  it('a bar opens Transactions filtered by that category (period unchanged); See all opens Insights', async () => {
+  it('a legend row AND a slice open Transactions filtered by that category (period unchanged); See all opens Insights', async () => {
     const r = await renderHome();
     await ReactTestRenderer.act(async () => {
-      byTestId(r, 'chart-bar-cat-food')[0].props.onPress();
+      byTestId(r, 'where-it-went-legend-cat-food')[0].props.onPress();
     });
     expect(useTransactionsStore.getState().transactionFilters).toEqual({
       ...DEFAULT_TRANSACTION_FILTERS,
@@ -232,6 +241,18 @@ describe('Home "Where it went" card', () => {
     });
     expect(useTransactionsStore.getState().selectedPeriod).toBe('1M');
     expect(mockNavigate).toHaveBeenCalledWith('Transactions');
+
+    mockNavigate.mockReset();
+    useTransactionsStore.getState().resetTransactionFilters();
+    await ReactTestRenderer.act(async () => {
+      byTestId(r, 'chart-donut-slice-cat-shopping')[0].props.onPress();
+    });
+    expect(useTransactionsStore.getState().transactionFilters).toEqual({
+      ...DEFAULT_TRANSACTION_FILTERS,
+      categoryId: 'cat-shopping',
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('Transactions');
+
     await ReactTestRenderer.act(async () => {
       byTestId(r, 'where-it-went-see-all')[0].props.onPress();
     });

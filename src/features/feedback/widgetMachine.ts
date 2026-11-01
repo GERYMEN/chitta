@@ -161,6 +161,9 @@ export const WIDGET_HIDDEN_ROUTES: ReadonlySet<string> = new Set([
   'AddRecord',
   'EditTransaction',
   'AddAccount',
+  // R4e: password screens — never captured into a feedback screenshot.
+  'Backup',
+  'Restore',
 ]);
 
 export function isWidgetVisible(input: {

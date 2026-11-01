@@ -15,6 +15,7 @@ import { colors } from '../../../theme';
 import { showSnackbar } from '../../../shared/ui';
 import { navigationRef } from '../../../app/navigation/navigationRef';
 import { settingsRepository } from '../../../data/repositories/settings.repository';
+import { useDataEpoch } from '../../../shared/state/dataEpoch';
 import {
   deleteFeedbackScreenshot,
   FeedbackScreenshot,
@@ -150,6 +151,8 @@ export function FeedbackWidget() {
     return () => sub.remove();
   }, []);
 
+  // R4e: re-read after a backup restore (the epoch changes) — no restart needed.
+  const dataEpoch = useDataEpoch();
   useEffect(() => {
     let cancelled = false;
     settingsRepository
@@ -168,7 +171,7 @@ export function FeedbackWidget() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dataEpoch]);
 
   // Keep Y inside the band when the screen size / insets change.
   useEffect(() => {
