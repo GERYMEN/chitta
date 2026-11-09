@@ -1,0 +1,176 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules"),
+ongoing/roadmap/STATE.md (latest decision lines), ongoing/roadmap/
+R5-sms-reading-v2.md (reader v2 as built), the R5-fix report (when it
+exists), R3a/R3b reports (transfer + duplicate pairs, dismissals),
+R2b report (account_suggestion_decisions: 'added'/'linked'/'ignored'/
+'deleted'), R4e-backup-pie.md (BACKUP_TABLES + completeness test), the
+decisions log of ongoing/realtime-persistence/STATE.md (absolute privacy
+rules), docs/PROJECT.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: PRECONDITION — R5 + R5-fix are reviewed and committed on
+phase/R5-sms-reading-v2. Create phase/R5d-identity-aliases from it.
+Stay on it. Do not switch branches, do not commit.
+
+PHASE R5d — stable SMS identity, persisted reference dedupe, account
+aliases (+ 5 parser fixes found by the 2026-11-08 review).
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+WHY (review 2026-11-08, orchestrator ran the compiled reader v2 on 30
+synthetic bank SMS: 27 pass / 3 fail; plus a code read compared against
+how chitta-ref-app's pipeline orders the same jobs — reference only, NO
+third-party code or rules are copied; write everything from scratch):
+- Identity: sourceReferenceHash = `sms-<_id>-<date>` (readSms.ts ~468).
+  _id is a content-provider row id; a new phone / SMS-backup restore /
+  default-SMS-app switch gives new ids → the whole history re-imports
+  as new pending items. R4e restore makes this likely.
+- Reference dedupe is in-run only (syncSms.ts ~284 `seenRefs`); refDigest
+  is never stored (smsSyncLogic.ts buildSmsPendingRow drops it). Two
+  alerts with the same UPI ref arriving in different runs (auto-read vs
+  manual) both insert. refDigest is FNV-1a 32-bit: too weak to use as a
+  persisted identity (birthday collisions at ~10^4 refs would DROP a
+  real transaction).
+- Accounts: matching is exact type + last-4 only. A debit card spend
+  carries the CARD's last-4 (≠ account's), ICICI masks accounts with 3
+  digits ("Acct XX888" → lastFour null → never matches), SBI long masks
+  ("A/C XXXXX123456") → lastFour null.
+- Parser money errors: (1) "Rs X debited on <d> for UPI Ref N has been
+  reversed to your A/c XX1234" → EXPENSE (should be refund); (2) "Rs X
+  debited from A/c XX1234 … towards <bank> Credit Card XX9999 payment"
+  → accountKind credit_card + lastFour 1234 (bank digits with card
+  kind = matches nothing, fake "new credit card 1234"); (3) "Rs X added
+  to your Paytm Wallet from HDFC Bank A/c XX1234" → INCOME on HDFC 1234
+  (the SOURCE account gets credited; HDFC nets to 0).
+
+USER DECISIONS: no new permission, no new dependency. DECIDED by owner
+2026-11-08:
+- O1 Content-hash salt: per-install random salt stored in settings AND
+  included in backups (so restore on a new phone still dedupes) — YES.
+- O2 Suggest "Link debit card XXXX to <account>" when the bank has
+  exactly one active bank account — YES, suggestion only, never auto.
+
+PRIVACY (absolute, unchanged): never store raw SMS bodies or sender
+numbers. Hashes are one-way and salted; the salt never leaves the app
+except inside the encrypted backup. Nothing logs bodies, senders,
+merchants, amounts, refs or hashes. Fixtures SYNTHETIC only (QA names,
+XX1234/XX9999, refs 000000000xxx, qa.x@okqa).
+
+METHOD for every task: failing test with synthetic input first, confirm
+it fails, fix, confirm it passes.
+
+T0 Parser fixes (readSms.ts / extract.ts / normalizeAccountKey.ts; keep
+   PARSER_VERSION and ACCOUNT_KEY_NORMALIZER_VERSION rules: bump only if
+   a v2 key changes; new fallbacks only fill keys v2 left '' / null):
+   a) Reversal of a debit: "debited … (has been|is|was) (reversed|
+      refunded) (to|in|into) your a/c" → label 'refund', type income.
+      Must stay compatible with R5-fix C6 (a debit that merely mentions
+      "reversal of credit" stays a debit). Add both directions as
+      fixtures.
+   b) Receiving account on credits: for direction credit, ignore account
+      mentions inside "from <words> a/c XX…" when another account is
+      named, and when the sender is a wallet (institutionKind 'wallet')
+      the account is the wallet: accountKind 'other', bank canonical =
+      the wallet institution, lastFour ''. The bank a/c digits become
+      `counterpartyLastFour` (new optional field, never used for
+      matching in this phase).
+   c) Long masks: "[x*]+ then 5+ digits" → last 4 of the digit run
+      (SBI "XXXXX123456" → 3456). Add after existing patterns.
+   d) 3-digit masks: "Acct XX888" → new optional `lastDigits: '888'`
+      (lastFour stays null). Used by T3 suffix matching only.
+   e) Card bill payment from a bank a/c: a debit verb bound to "from a/c
+      XX1234" plus "credit card [XX]9999 … payment" → accountKind 'bank',
+      lastFour 1234, counterpartyLastFour 9999, new optional
+      `moneyHint: 'card_payment'`. Such items are HELD from auto-approve
+      (same mechanism as transfer/duplicate holds) — the transfer
+      conversion itself is R5e, not this phase.
+   Fixture table: add the review's 30 bodies (synthetic, rewritten with
+   QA names) to smsReader.fixture.ts with expected class/type/amount/
+   last4/kind.
+
+T1 Stable SMS identity:
+   - smsContentHash = hex(SHA-256(salt + ":" + DLT header ID (or
+     "<NUMBER>") + ":" + floor(date/1000) + ":" + normalizedBody))
+     truncated to 32 hex chars. Pure-TS SHA-256 (no dependency) with a
+     test against published SHA-256 vectors. normalizedBody = the same
+     whitespace collapse readSms uses (NOT the footer cut — identity is
+     of the whole message).
+   - Salt (O1): 32 random bytes from the existing native module (add a
+     tiny `randomBytes(n)` to BackupModule.kt using SecureRandom — no new
+     module, no permission), generated once, settings key
+     `sms_identity_salt`, included in backup, restored before any sync.
+   - New column transactions.sms_content_hash (TEXT, nullable) + index.
+     The R5-fix tombstone table gets the same column.
+   - Dedupe = skip a candidate when EITHER its sourceReferenceHash OR its
+     smsContentHash exists on any row (any status) or tombstone.
+     sourceReferenceHash format is UNCHANGED (old rows keep deduping).
+   - Lazy backfill: when a sync sees a candidate whose old key matches a
+     row that has no content hash, write the hash to that row (no audit
+     row, no other field changes). Same for tombstones.
+   - Tests: same SMS with a different _id dedupes; same body+date from a
+     different sender does not; restore-on-new-phone simulation (rows +
+     salt restored, ids changed) imports 0 new items.
+
+T2 Persisted reference dedupe:
+   - New column transactions.ref_digest (TEXT, nullable) + index; value =
+     SHA-256(salt + ":" + upper(ref)) truncated to 32 hex. Replace the
+     FNV refDigest everywhere it is used (the in-run guard too).
+   - At insert: if a live or rejected row (or tombstone) has the same
+     ref_digest AND type AND amount → skip (counted as skipped). A
+     reversal (income) never collides with its debit (type differs).
+   - duplicate.rules.ts: a pair with equal ref_digest + type + amount is
+     a duplicate suggestion regardless of DUPLICATE_WINDOW_MINUTES and
+     account (still a suggestion — user confirms; dismissals respected).
+   - Refund ranker (R3b): an income with the same ref_digest as an
+     expense ranks that expense first.
+   - Backup: both new columns included; completeness test updated.
+
+T3 Account aliases (REUSE account_suggestion_decisions 'linked' rows —
+   they already route a key to an account; NO new alias table):
+   a) Suffix match: a candidate with lastDigits (3) and no lastFour
+      matches an active account when bank canonical is equal AND the
+      account's last_four ends with those digits AND exactly one account
+      qualifies; otherwise it stays unmatched (never guess).
+   b) Debit-card link suggestion (O2): in "New accounts found", a group
+      with accountKind 'bank' whose institution has exactly one active
+      bank account shows the existing "Link to existing account" action
+      pre-selected on that account with copy "Looks like your debit
+      card for <account>". User confirms; the existing link path writes
+      the 'linked' decision (audit 'account_linked' as today).
+   c) Account detail: "Linked card / account numbers" list read from
+      'linked' decisions (bank · kind · ••last4), each with Unlink
+      (existing undoLink semantics + audit). No SMS content shown.
+   d) Duplicate + transfer rules need no change (they compare accountId,
+      which routed items already carry) — add tests proving a debit-card
+      alert and the account alert for one spend (linked) become a
+      duplicate pair, and before linking they do not.
+
+MIGRATION: next free numbered migration after R5-fix (R5-fix C4 may
+fold its tombstone table into 8 or add 9 — read migrations.ts; never edit
+an applied migration). Statements: ALTER transactions ADD sms_content_hash
+TEXT; ALTER transactions ADD ref_digest TEXT; ALTER <tombstone table> ADD
+sms_content_hash TEXT; CREATE INDEX ix_transactions_sms_content_hash;
+CREATE INDEX ix_transactions_ref_digest. ROADMAP R6 "migration 9" moves
+to the next number — update its text.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUT OF SCOPE (later phases): converting card payments / ATM / wallet
+top-ups / EMI into transfers (R5e); balance reconciliation (R6); bills
+(R5b/R8); the rules.json overlay engine (R5g —
+src/features/sms-sync/rules/rules.json exists as data + samples only;
+do not wire it in this phase, do not edit it).
+
+OUTPUT: ongoing/roadmap/R5d-sms-identity-aliases.md (files, T0 fixture
+results table, hash design + salt lifecycle, dedupe order, migration,
+alias rules, backup changes, gates, decisions, and a DEVICE PLAN for
+later that prints COUNTS ONLY: items before/after a re-scan (must be +0),
+rows backfilled with a content hash, linked numbers per account — never
+opens/prints real SMS, never links/unlinks real accounts without the
+owner). Leak-scan the report with the pattern given in the dispatch
+message (shell only — never write it into a repo file). Do not commit.
+REPLY ONLY: gates yes/no; files changed count; fixtures added; migration
+number; decisions you made.

@@ -1,6 +1,6 @@
 # Tracker roadmap — all competitor features, phase by phase
 
-Source: ongoing/competitor-research/01-axio-splitwise-tour.md (P0/P1/P2 list),
+Source: ongoing/competitor-research/01-chitta-ref-app-splitwise-tour.md (P0/P1/P2 list),
 plus unfinished sms-sync-v2 build-order steps (3, 4-UI, 5, 6, 7-UI, 8).
 Phases are numbered R1–R12. Order follows dependencies: trust/correctness
 first, then categories, then insights built on correct data, then extras.

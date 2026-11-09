@@ -3,8 +3,8 @@ owner's personal phone in VIEW-ONLY mode, screenshot each screen, and turn
 what you see into a feature inventory + prioritized suggestions for Tracker.
 
 USER APPROVAL (explicit, this task only): the owner approved opening these
-two apps over adb and taking screenshots: Axio (package
-com.daamitt.walnut.app) and Splitwise (package com.Splitwise.SplitwiseMobile).
+two apps over adb and taking screenshots: chitta-ref-app and
+Splitwise (package com.Splitwise.SplitwiseMobile).
 Scope = every main/bottom tab + one level deep (one detail screen and one
 settings/menu screen per app), ~10–15 screens per app. No other apps.
 
@@ -51,10 +51,10 @@ people/friend/group names, phone numbers, emails, bank last-4 digits or
 SMS text. Use placeholders ("Friend A", "₹X", "Group 1"). No screenshots
 or image content embedded in the report.
 
-OUTPUT: ongoing/competitor-research/01-axio-splitwise-tour.md with:
+OUTPUT: ongoing/competitor-research/01-chitta-ref-app-splitwise-tour.md with:
  1. Screen inventory per app: table # | screenshot filename | screen name |
     what it shows / key features / notable UX.
- 2. Feature comparison matrix: feature | Axio | Splitwise | Tracker today
+ 2. Feature comparison matrix: feature | chitta-ref-app | Splitwise | Tracker today
     (yes/partial/no).
  3. Suggestions for Tracker next phase, prioritized P0/P1/P2, each with:
     what, why (which app inspired it + user value), effort S/M/L, fit with

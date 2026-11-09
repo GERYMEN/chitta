@@ -1,4 +1,4 @@
-# 01 — Competitor tour: Axio + Splitwise (view-only)
+# 01 — Competitor tour: chitta-ref-app + Splitwise (view-only)
 
 Date: 2026-10-28. Device: owner's phone over USB. Mode: view-only. The only taps
 were on tabs, menus, one list item, settings pages and Back, plus scrolling.
@@ -21,25 +21,25 @@ Tracker baseline, from docs/PROJECT.md, docs/DESIGN.md, ongoing/realtime-persist
 
 ## 1. Screen inventory
 
-### Axio (15 screens)
+### chitta-ref-app (15 screens)
 
 | # | Screenshot | Screen | What it shows / key features / notable UX |
 |---|---|---|---|
-| 1 | axio-01-home.png | Home (top) | Greeting with avatar (opens Profile). A full-width **personal-loan promo hero** takes the top third. Below it, a "Money Manager › <Month>" card shows this month's spends (₹X), last month's income (₹X), and a horizontal carousel of recent transactions: category icon, merchant, ₹X, ↗/↙ direction arrow, time • date. A Pay Later credit card starts below. Bottom nav has 4 **icon-only** tabs with no labels. A floating edge widget sits on the left. |
-| 2 | axio-02-home-scrolled.png | Home (mid) | Pay Later limit card (Available ₹X / Total ₹X). "Deposits" fixed-deposit promo. **Accounts carousel**: per account, the bank logo, masked number (••XXXX), this month's spend from that account with ↗, last-updated time, an **SMS-reported available balance** and a refresh icon. |
-| 3 | axio-03-home-scrolled2.png | Home (lower) | "Splits" card in its empty state ("Create group & split expenses…") with + and › actions. A third-party BNPL "check balance" ad card. |
-| 4 | axio-04-home-bottom.png | Home (bottom) | The feed ends in another sponsored banner (device financing). About half of Home's vertical space is ads or cross-sell. |
-| 5 | axio-05-money-manager.png | Money Manager tab (top) | Search icon. "Spent in <Month>" with a big ₹X inside a **ring**: an empty budget-progress ring because no budget is set. Previous-month income, and a **"Set monthly budget"** CTA. Pill buttons for **Trends** and **Categories**. A dismissible investment promo. A dismissible "needs permissions → Check now" warning. "Recent transactions" with an **Add** pill. |
-| 6 | axio-06-mm-transactions.png | Money Manager (list) | Recent transactions. Each row has a category icon, merchant, an auto **tag chip (e.g. "#Online")**, ₹X with a direction arrow, and the date. "›" opens the full list. **Dues & Reminders** carousel: auto-detected recurring payments to people, each card showing "Repeats Yearly", next date, payee (Friend A), ₹X and an inline "Set reminder? No / Yes". |
-| 7 | axio-07-mm-categories.png | Money Manager (categories) | **Categories grid**, 2 columns and horizontally scrollable. Each tile has the category icon, name, "N spends" and ₹X, plus an inline **"Set budget ›"**. An **"Unknown" bucket** (the biggest by count) shows **"Categorise ›"** instead. The Accounts carousel and Deposits promo repeat below. |
-| 8 | axio-08-txn-detail.png | Transaction detail (the one list item opened) | "Debit transaction" header with an overflow menu. A hero card with the merchant name (underlined link), a **"N visits" chip** with a chart icon (merchant history), a big ₹X, a category pill (tap to change), date/time and a category-themed photo background. Account row: bank logo, masked number, and an **"Expense" switch** (counts toward spend or not). Notes ("Tap to add"). Two tiles: **Split** with friends, **Attach** receipt/warranty photo. Tags with +. |
-| 9 | axio-09-txn-detail-scrolled.png | Transaction detail (bottom) | "Other info": the UPI reference number and the **full raw SMS text shown inline by default** (including the account balance). |
-| 10 | axio-10-txn-overflow-menu.png | Detail overflow sheet | Bottom sheet "Menu options": **Link refund**, **Link duplicate**, then a divider and a red **Delete transaction**. Closed with Back; nothing was selected. |
-| 11 | axio-11-splits-tab.png | Splits tab | Two summary tiles: **You get ₹X ↙ / You pay ₹X ↗**. "No groups" empty state. + and search in the header. |
-| 12 | axio-12-credit-tab.png | Credit tab | Top tabs: Pay Later / Personal Loan / partner BNPL. Limit hero. "Purchases": EMI plans with merchant, ₹X/month, a progress bar and a "FULLY PAID" status. |
-| 13 | axio-13-profile-menu.png | Profile / Account (settings menu) | Name, verified phone, "Add Email ID". Pay Later section (Bills & Dues, FAQ). **Expense tracking**: Preferences, **Weekly summary**, **Export statement**, **Report undetected SMS**, Help & FAQ. |
-| 14 | axio-14-profile-menu-scrolled.png | Profile (bottom) | Deposits FAQ. General: Theme, Rate us, Invite friends, Blog, Chat with us, Logout, About/version. |
-| 15 | axio-15-preferences.png | Preferences (one level deep) | "Launch in Money Manager" switch (pick the default start screen). Manage accounts. **Link accounts ("fix duplicate or redundant accounts and cards")**. Manage reminders. **Spend categories / Credit categories (create/delete)**. **Tags (create/delete)**. **"Mark as transfer amount" (a ₹X threshold)**. Notifications & Reminders. **Backup**. **Security**. **Rescan SMS inbox**. |
+| 1 | chitta-ref-app-01-home.png | Home (top) | Greeting with avatar (opens Profile). A full-width **personal-loan promo hero** takes the top third. Below it, a "Money Manager › <Month>" card shows this month's spends (₹X), last month's income (₹X), and a horizontal carousel of recent transactions: category icon, merchant, ₹X, ↗/↙ direction arrow, time • date. A Pay Later credit card starts below. Bottom nav has 4 **icon-only** tabs with no labels. A floating edge widget sits on the left. |
+| 2 | chitta-ref-app-02-home-scrolled.png | Home (mid) | Pay Later limit card (Available ₹X / Total ₹X). "Deposits" fixed-deposit promo. **Accounts carousel**: per account, the bank logo, masked number (••XXXX), this month's spend from that account with ↗, last-updated time, an **SMS-reported available balance** and a refresh icon. |
+| 3 | chitta-ref-app-03-home-scrolled2.png | Home (lower) | "Splits" card in its empty state ("Create group & split expenses…") with + and › actions. A third-party BNPL "check balance" ad card. |
+| 4 | chitta-ref-app-04-home-bottom.png | Home (bottom) | The feed ends in another sponsored banner (device financing). About half of Home's vertical space is ads or cross-sell. |
+| 5 | chitta-ref-app-05-money-manager.png | Money Manager tab (top) | Search icon. "Spent in <Month>" with a big ₹X inside a **ring**: an empty budget-progress ring because no budget is set. Previous-month income, and a **"Set monthly budget"** CTA. Pill buttons for **Trends** and **Categories**. A dismissible investment promo. A dismissible "needs permissions → Check now" warning. "Recent transactions" with an **Add** pill. |
+| 6 | chitta-ref-app-06-mm-transactions.png | Money Manager (list) | Recent transactions. Each row has a category icon, merchant, an auto **tag chip (e.g. "#Online")**, ₹X with a direction arrow, and the date. "›" opens the full list. **Dues & Reminders** carousel: auto-detected recurring payments to people, each card showing "Repeats Yearly", next date, payee (Friend A), ₹X and an inline "Set reminder? No / Yes". |
+| 7 | chitta-ref-app-07-mm-categories.png | Money Manager (categories) | **Categories grid**, 2 columns and horizontally scrollable. Each tile has the category icon, name, "N spends" and ₹X, plus an inline **"Set budget ›"**. An **"Unknown" bucket** (the biggest by count) shows **"Categorise ›"** instead. The Accounts carousel and Deposits promo repeat below. |
+| 8 | chitta-ref-app-08-txn-detail.png | Transaction detail (the one list item opened) | "Debit transaction" header with an overflow menu. A hero card with the merchant name (underlined link), a **"N visits" chip** with a chart icon (merchant history), a big ₹X, a category pill (tap to change), date/time and a category-themed photo background. Account row: bank logo, masked number, and an **"Expense" switch** (counts toward spend or not). Notes ("Tap to add"). Two tiles: **Split** with friends, **Attach** receipt/warranty photo. Tags with +. |
+| 9 | chitta-ref-app-09-txn-detail-scrolled.png | Transaction detail (bottom) | "Other info": the UPI reference number and the **full raw SMS text shown inline by default** (including the account balance). |
+| 10 | chitta-ref-app-10-txn-overflow-menu.png | Detail overflow sheet | Bottom sheet "Menu options": **Link refund**, **Link duplicate**, then a divider and a red **Delete transaction**. Closed with Back; nothing was selected. |
+| 11 | chitta-ref-app-11-splits-tab.png | Splits tab | Two summary tiles: **You get ₹X ↙ / You pay ₹X ↗**. "No groups" empty state. + and search in the header. |
+| 12 | chitta-ref-app-12-credit-tab.png | Credit tab | Top tabs: Pay Later / Personal Loan / partner BNPL. Limit hero. "Purchases": EMI plans with merchant, ₹X/month, a progress bar and a "FULLY PAID" status. |
+| 13 | chitta-ref-app-13-profile-menu.png | Profile / Account (settings menu) | Name, verified phone, "Add Email ID". Pay Later section (Bills & Dues, FAQ). **Expense tracking**: Preferences, **Weekly summary**, **Export statement**, **Report undetected SMS**, Help & FAQ. |
+| 14 | chitta-ref-app-14-profile-menu-scrolled.png | Profile (bottom) | Deposits FAQ. General: Theme, Rate us, Invite friends, Blog, Chat with us, Logout, About/version. |
+| 15 | chitta-ref-app-15-preferences.png | Preferences (one level deep) | "Launch in Money Manager" switch (pick the default start screen). Manage accounts. **Link accounts ("fix duplicate or redundant accounts and cards")**. Manage reminders. **Spend categories / Credit categories (create/delete)**. **Tags (create/delete)**. **"Mark as transfer amount" (a ₹X threshold)**. Notifications & Reminders. **Backup**. **Security**. **Rescan SMS inbox**. |
 
 ### Splitwise (10 screens)
 
@@ -60,7 +60,7 @@ Tracker baseline, from docs/PROJECT.md, docs/DESIGN.md, ongoing/realtime-persist
 
 ## 2. Feature comparison matrix
 
-| Feature | Axio | Splitwise | Tracker today |
+| Feature | chitta-ref-app | Splitwise | Tracker today |
 |---|---|---|---|
 | Auto-detect transactions from SMS | yes | no | yes |
 | Pending queue: user approves before recording | no (records automatically) | no | **yes** |
@@ -111,28 +111,28 @@ surfaces go inside Home, Transactions or Accounts, or behind a header icon or sh
 
 **P0-1. Merchant → category memory, plus an "Uncategorised" nudge**
 - **What:** When the user changes the category on a pending or approved item, offer "Always use <Category> for <merchant>". Store it in a local `merchant_rules` table and apply it in `syncSms` before the current default. Show uncategorised or defaulted items as a bucket with a "Categorise ›" action.
-- **Why:** Inspired by Axio's "Unknown — N spends — Categorise ›" tile. Today every SMS expense lands in "Shopping", so any category view would be wrong. This is the precondition for P0-3 and P1-1.
+- **Why:** Inspired by chitta-ref-app's "Unknown — N spends — Categorise ›" tile. Today every SMS expense lands in "Shopping", so any category view would be wrong. This is the precondition for P0-3 and P1-1.
 - **Effort:** M.
 - **Fit:** Fully offline. Rules are keyed on the parsed merchant string, never on raw SMS. It also strengthens the approve flow, because the user corrects once and the next items arrive right.
 - **Depends on:** the categories repo (exists) and a new migration.
 
 **P0-2. Self-transfers, refunds and duplicates (correct balances)**
 - **What:** Add a third transaction kind, `transfer`, between two own accounts. It moves balances but is excluded from income and expense. Add "Link refund" (a credit offsets a prior debit and nets out of spend) and "Mark as duplicate" (reject one of two near-identical items, with an audit note). Suggest a transfer automatically when a debit on one own account and a credit of the same ₹X on another arrive close together.
-- **Why:** Axio has Link refund, Link duplicate, "Mark as transfer amount" and the "Expense" switch. Without these, moving money between your own accounts inflates both income and expense, and Home's totals are wrong. PROJECT.md §24 already names refund, reversal and duplicate rules.
+- **Why:** chitta-ref-app has Link refund, Link duplicate, "Mark as transfer amount" and the "Expense" switch. Without these, moving money between your own accounts inflates both income and expense, and Home's totals are wrong. PROJECT.md §24 already names refund, reversal and duplicate rules.
 - **Effort:** L.
 - **Fit:** Offline. The detection-then-approval model fits well: suggest a link, the user approves it.
 - **Depends on:** changing the `TransactionType` union; `calculateBalance` and the Home and Transactions totals; a migration.
 
 **P0-3. Category breakdown for the month**
 - **What:** A "Where it went" card on Home, or a Transactions header, with ₹X per category and a count, for the selected period. Tapping a category gives a filtered list.
-- **Why:** Axio's Categories grid and Trends/Categories pills. It is the single most useful insight after "how much did I spend". The `period.rules` 1M–1Y ranges already exist.
+- **Why:** chitta-ref-app's Categories grid and Trends/Categories pills. It is the single most useful insight after "how much did I spend". The `period.rules` 1M–1Y ranges already exist.
 - **Effort:** M.
 - **Fit:** Pure local query over approved rows. Pending items are never counted.
 - **Depends on:** P0-1, or the numbers mislead.
 
 **P0-4. Make the Transactions filters real**
 - **What:** Make the All/Expenses/Income chips actually filter. Add account and category filter chips. Search notes as well, as the placeholder already promises.
-- **Why:** Splitwise's radio filter menu and Axio's search. The chips that show counts but do nothing are a credibility bug.
+- **Why:** Splitwise's radio filter menu and chitta-ref-app's search. The chips that show counts but do nothing are a credibility bug.
 - **Effort:** S.
 - **Fit:** Local.
 - **Depends on:** none.
@@ -141,14 +141,14 @@ surfaces go inside Home, Transactions or Accounts, or behind a header icon or sh
 
 **P1-1. Monthly budget, overall and per category**
 - **What:** Fill a progress ring on the Home spend tile against the budget. "Set budget ›" on each category, with an amber warning at 80% and red over budget.
-- **Why:** Axio's budget ring and per-category "Set budget".
+- **Why:** chitta-ref-app's budget ring and per-category "Set budget".
 - **Effort:** M.
 - **Fit:** Local `app_settings` and budget rows. Fits the DESIGN.md amber/red state tokens.
 - **Depends on:** P0-1 and P0-3.
 
 **P1-2. "Missed a transaction?" from the SMS inbox**
 - **What:** A screen that lists recent financial-looking SMS the parser rejected, showing only sender and date until tapped. The user picks one, which pre-fills Add Record as a pending item. Optionally store a local "parser miss" counter to improve rules. **Nothing is uploaded.**
-- **Why:** Axio's "Report undetected SMS" and "Rescan SMS inbox". Closes the gap when the regex parser misses a format.
+- **Why:** chitta-ref-app's "Report undetected SMS" and "Rescan SMS inbox". Closes the gap when the regex parser misses a format.
 - **Effort:** M.
 - **Fit:** Uses the existing native `SmsReader`. Message text is held in memory only, like `OriginalSmsView`.
 - **Depends on:** the SmsReader list API.
@@ -162,14 +162,14 @@ surfaces go inside Home, Transactions or Accounts, or behind a header icon or sh
 
 **P1-4. Bank-reported vs tracked balance**
 - **What:** When an SMS carries "Avl bal", store only that number and its timestamp on the matched account. On Accounts, show "Bank SMS: ₹X as of <time>" next to the calculated balance, with a "Difference ₹X" hint.
-- **Why:** Axio's account cards show the SMS balance and last-updated time. Tracker never edits balance directly, so this is a reconciliation signal, not an override.
+- **Why:** chitta-ref-app's account cards show the SMS balance and last-updated time. Tracker never edits balance directly, so this is a reconciliation signal, not an override.
 - **Effort:** M.
 - **Fit:** Stores a parsed number, never the SMS text. Respects the calculated-balance rule.
 - **Depends on:** a parser extension and an account column.
 
 **P1-5. Recurring payment detection + local reminders**
 - **What:** Detect the same payee and similar ₹X repeating monthly or yearly. Show it on Home as a "Upcoming: <payee> ₹X on <date>" card with "Remind me?". Schedule local notifications.
-- **Why:** Axio's Dues & Reminders "Repeats Yearly" cards.
+- **Why:** chitta-ref-app's Dues & Reminders "Repeats Yearly" cards.
 - **Effort:** L.
 - **Fit:** Offline. Needs a notifications permission, which is a new permission and should be asked for in context, not at onboarding.
 - **Depends on:** P0-1 merchant normalisation; a local notification lib.
@@ -185,35 +185,35 @@ surfaces go inside Home, Transactions or Accounts, or behind a header icon or sh
 
 **P2-1. Personal IOUs, a lightweight split**
 - **What:** On an approved expense, "Split" marks a share owed by Friend A, entered as free text with no contacts permission. A "You get ₹X / You owe ₹X" tile on Home. Rows say "you lent ₹X" / "you borrowed ₹X" in Splitwise's language. Settled IOUs hide after 30 days.
-- **Why:** Axio's Split tile and Splitwise's core model. Explicitly a **personal ledger, not multi-user sync**.
+- **Why:** chitta-ref-app's Split tile and Splitwise's core model. Explicitly a **personal ledger, not multi-user sync**.
 - **Effort:** L.
 - **Fit:** Offline-only is fine for a personal IOU list. No server.
 - **Depends on:** a new table; P0-2 so a repayment credit can be linked.
 
 **P2-2. Tags + receipt photo**
 - **What:** Free-form tags, with an auto "#UPI"/"#Card" from the payment method. Attach a receipt photo stored in the app sandbox.
-- **Why:** Axio's Tags and Attach tiles.
+- **Why:** chitta-ref-app's Tags and Attach tiles.
 - **Effort:** M.
 - **Fit:** Local files. Exclude them from any future export by default.
 - **Depends on:** a file-picker or camera permission, requested only when used.
 
 **P2-3. Weekly summary notification**
 - **What:** A local notification, "This week: spent ₹X, N items pending".
-- **Why:** Axio's Weekly summary. The pending count nudges the approval habit.
+- **Why:** chitta-ref-app's Weekly summary. The pending count nudges the approval habit.
 - **Effort:** S–M.
 - **Fit:** Local.
 - **Depends on:** P1-5's notification infrastructure.
 
 **P2-4. Export CSV and local backup/restore**
 - **What:** A user-initiated CSV of approved transactions through the share sheet. Backup to an encrypted file the user saves; restore from file.
-- **Why:** Axio's Export statement and Backup. Protects against the kind of data loss that `adb uninstall` caused during QA.
+- **Why:** chitta-ref-app's Export statement and Backup. Protects against the kind of data loss that `adb uninstall` caused during QA.
 - **Effort:** M (export) / L (backup).
 - **Fit:** Must be explicit and user-triggered. Never include original SMS.
 - **Depends on:** none.
 
 **P2-5. Merchant history chip**
 - **What:** "N visits · ₹X this month" on the detail screen, opening a list filtered to that merchant.
-- **Why:** Axio's "N visits" chip.
+- **Why:** chitta-ref-app's "N visits" chip.
 - **Effort:** S.
 - **Fit:** Local.
 - **Depends on:** P0-4 filters.
@@ -229,12 +229,12 @@ surfaces go inside Home, Transactions or Accounts, or behind a header icon or sh
 
 ## 4. Things NOT to copy
 
-- **Ad- and lending-heavy home (Axio).** A loan hero, FD promos, partner BNPL and device-financing banners take about half of Home and push real data below the fold. Tracker's charter excludes lending and investment. Keep Home data-first.
-- **Full raw SMS shown inline by default (Axio).** It exposes balance and reference numbers on every detail view. Tracker's on-demand, not-stored original-SMS view is the better pattern. Keep it.
-- **Icon-only bottom navigation (Axio).** Four unlabeled glyphs are ambiguous. Splitwise's labeled tabs read instantly.
+- **Ad- and lending-heavy home (chitta-ref-app).** A loan hero, FD promos, partner BNPL and device-financing banners take about half of Home and push real data below the fold. Tracker's charter excludes lending and investment. Keep Home data-first.
+- **Full raw SMS shown inline by default (chitta-ref-app).** It exposes balance and reference numbers on every detail view. Tracker's on-demand, not-stored original-SMS view is the better pattern. Keep it.
+- **Icon-only bottom navigation (chitta-ref-app).** Four unlabeled glyphs are ambiguous. Splitwise's labeled tabs read instantly.
 - **Paywalled chips inside core flows (Splitwise).** "Convert to USD", "Charts" and "Default split PRO" sit next to Settle up, along with a large upsell card on Account.
-- **Persistent permission nag cards (Axio).** "Needs certain permissions → Check now" sits in the main feed. Ask in context when a feature needs a permission.
+- **Persistent permission nag cards (chitta-ref-app).** "Needs certain permissions → Check now" sits in the main feed. Ask in context when a feature needs a permission.
 - **Showing every member's email address in group settings (Splitwise).** Unnecessary personal data on screen. Show names only.
-- **An unexplained bare switch on the detail screen (Axio "Expense" toggle).** It silently changes totals. Use an explicit "Mark as transfer" action that is audited.
+- **An unexplained bare switch on the detail screen (chitta-ref-app "Expense" toggle).** It silently changes totals. Use an explicit "Mark as transfer" action that is audited.
 
 Good patterns worth keeping: Splitwise's disabled "Leave group" with an inline reason, auto-hiding settled items, and the plain-language "you lent / you borrowed" net-effect column.
