@@ -3,6 +3,7 @@ import { useSuggestionSession } from '../sms-sync/suggestionSession';
 import { initTourOnLaunch, useTourStore } from '../tour/tourStore';
 import { bumpDataEpoch } from '../../shared/state/dataEpoch';
 import { useBackupStore } from './backupStore';
+import { useNewAccountsStore } from '../sms-sync/newAccountsStore';
 
 /**
  * R4e: after a restore replaced every row, bring every in-memory store back
@@ -25,4 +26,6 @@ export async function reloadAfterRestore(): Promise<void> {
   bumpDataEpoch();
   await initTourOnLaunch(useTransactionsStore.getState().hasOnboarded).catch(() => undefined);
   await useBackupStore.getState().load();
+  // R5-fix C2: the restored "new accounts found" summary.
+  await useNewAccountsStore.getState().refresh();
 }

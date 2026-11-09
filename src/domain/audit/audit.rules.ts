@@ -1,6 +1,6 @@
 import { Transaction, TransactionType } from '../transactions/transaction.types';
-import { Account } from '../accounts/account.types';
-import { AuditMetadata } from './audit.types';
+import { Account, AccountType } from '../accounts/account.types';
+import { AuditMetadata, SmsRunCounts } from './audit.types';
 import { TransferRowSnapshot } from '../transfers/transfer.rules';
 
 /**
@@ -20,6 +20,7 @@ export function sanitizeAuditMetadata(
         ...typeField('transactionType', metadata.transactionType),
       };
     case 'created':
+    case 'added':
     case 'approved':
     case 'rejected':
     case 'approval_undone': {
@@ -117,6 +118,21 @@ export function sanitizeAuditMetadata(
       };
     case 'backup_restored':
       return { kind: 'backup_restored', counts: sanitizeCounts(metadata.counts) };
+    case 'sms_rescan':
+    case 'auto_read':
+      return { kind: metadata.kind, counts: sanitizeRunCounts(metadata.counts) };
+    case 'account_linked':
+    case 'account_unlinked': {
+      const items = Number(metadata.items);
+      return {
+        kind: metadata.kind,
+        bankCanonical: /^[a-z]{1,20}$/.test(String(metadata.bankCanonical)) ? String(metadata.bankCanonical) : 'unknown',
+        accountKind: ACCOUNT_KINDS.has(String(metadata.accountKind))
+          ? (metadata.accountKind as AccountType)
+          : 'other',
+        items: Number.isInteger(items) && items >= 0 ? items : 0,
+      };
+    }
     default:
       return null;
   }
@@ -133,6 +149,20 @@ function sanitizeCounts(counts: Record<string, number> | null | undefined): Reco
   return out;
 }
 
+/** R5: exactly the four run counters, each a non-negative integer (else 0). */
+function sanitizeRunCounts(counts: Partial<SmsRunCounts> | null | undefined): SmsRunCounts {
+  const n = (value: unknown) => {
+    const v = Number(value);
+    return Number.isInteger(v) && v >= 0 ? v : 0;
+  };
+  return {
+    scanned: n(counts?.scanned),
+    created: n(counts?.created),
+    notUnderstood: n(counts?.notUnderstood),
+    autoApproved: n(counts?.autoApproved),
+  };
+}
+
 /** Whitelist the enum/id/timestamp fields of a transfer row snapshot. */
 function sanitizeRowSnapshot(snapshot: TransferRowSnapshot): TransferRowSnapshot {
   return {
@@ -146,6 +176,8 @@ function sanitizeRowSnapshot(snapshot: TransferRowSnapshot): TransferRowSnapshot
     linkKind: snapshot.linkKind ?? null,
   };
 }
+
+const ACCOUNT_KINDS: ReadonlySet<string> = new Set(['bank', 'cash', 'credit_card', 'upi', 'other']);
 
 const TRANSACTION_TYPES: ReadonlySet<string> = new Set(['income', 'expense', 'transfer']);
 

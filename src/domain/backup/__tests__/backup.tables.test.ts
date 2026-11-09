@@ -3,7 +3,7 @@
  * (except schema_migrations) and every column, with the migration that added
  * it. Fails when a future migration adds a table/column that is not listed.
  */
-import { BACKUP_TABLES, columnsAt } from '../backup.tables';
+import { BACKUP_TABLES, columnsAt, DEVICE_LOCAL_TABLES } from '../backup.tables';
 import { CURRENT_SCHEMA_VERSION } from '../../../data/db/restoreUpgrade';
 import { migrateTo, openTestSqlite, sqliteAvailable } from '../../../test/sqliteDb';
 
@@ -19,7 +19,7 @@ function schemaAt(version: number): Record<string, string[]> {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .all()
       .map(r => String(r.name))
-      .filter(name => name !== 'schema_migrations');
+      .filter(name => name !== 'schema_migrations' && !DEVICE_LOCAL_TABLES.includes(name));
     return Object.fromEntries(
       tables.map(name => [
         name,
@@ -45,6 +45,27 @@ describeSql('backup table catalogue', () => {
       expect(listed).toEqual(real);
     },
   );
+
+  it('R5: sms_unparsed exists at version 8 but is device-local (never backed up)', () => {
+    const t = openTestSqlite();
+    try {
+      migrateTo(t, 8);
+      const tables = t.raw
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all()
+        .map(r => String(r.name));
+      expect(tables).toContain('sms_unparsed');
+      const columns = t.raw.prepare('PRAGMA table_info(sms_unparsed)').all().map(c => String(c.name));
+      // No body / sender column — ever.
+      expect(columns.sort()).toEqual(
+        ['detected_at', 'dismissed_at', 'institution', 'parser_version', 'reason_code', 'resolved_at', 'sms_date', 'sms_id'].sort(),
+      );
+    } finally {
+      t.close();
+    }
+    expect(DEVICE_LOCAL_TABLES).toContain('sms_unparsed');
+    expect(BACKUP_TABLES.map(spec => spec.name)).not.toContain('sms_unparsed');
+  });
 
   it('lists parents before children (categories/accounts → transactions → audit_events)', () => {
     const names = BACKUP_TABLES.map(t => t.name);

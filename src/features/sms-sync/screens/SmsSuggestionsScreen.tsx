@@ -28,6 +28,7 @@ import { ParsedSmsTransaction } from '../smsParser';
 import {
   formatShortDateRange,
   linkableAccounts,
+  linkCompatibility,
   proposedAccountBaseName,
   proposedAccountTitle,
   suggestionsSummaryLine,
@@ -40,7 +41,9 @@ import {
   ignoreSuggestionGroup,
   linkSuggestion,
   showImportSnackbar,
+  undoLinkSuggestion,
 } from '../importSuggestion';
+import { showSnackbar } from '../../../shared/ui/Snackbar';
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -102,20 +105,35 @@ export function SmsSuggestionsScreen() {
   function confirmLink(group: SuggestionGroup, account: Account) {
     setLinking(null);
     const count = group.items.length;
+    const fit = linkCompatibility(account, group.suggestion);
+    // R5: a kind / last-4 mismatch (e.g. a card's SMS onto a bank account) is
+    // allowed, but only after a clear warning.
+    const warning = fit.ok
+      ? ''
+      : fit.reason === 'kind'
+      ? `These SMS look like a ${TYPE_LABEL[group.suggestion.accountKind]}, but ${accountDisplayLabel(account)} is a ${TYPE_LABEL[account.type]}. `
+      : `These SMS name a different last 4 digits than ${accountDisplayLabel(account)}. `;
     showDialog({
       title: `Link to ${accountDisplayLabel(account)}?`,
-      message: `${count} waiting transaction${count === 1 ? '' : 's'} will be added to Pending on this account, and future SMS for ${proposedAccountTitle(group.suggestion)} will go there too.`,
-      icon: 'link-variant',
+      message: `${warning}${count} waiting transaction${count === 1 ? '' : 's'} will be added to Pending on this account, and future SMS for ${proposedAccountTitle(group.suggestion)} will go there too.`,
+      icon: fit.ok ? 'link-variant' : 'alert-outline',
       actions: [
         { label: 'Cancel', variant: 'ghost' },
         {
-          label: 'Link',
+          label: fit.ok ? 'Link' : 'Link anyway',
           variant: 'primary',
           onPress: async () => {
             setBusyKey(group.key);
             try {
               const outcome = await linkSuggestion(runId, group.key, account.id);
-              if (outcome) showImportSnackbar(outcome, true);
+              if (outcome) {
+                showImportSnackbar(outcome, true, async () => {
+                  const removed = await undoLinkSuggestion(runId, group, outcome);
+                  showSnackbar({
+                    message: `Link undone · ${removed} item${removed === 1 ? '' : 's'} removed`,
+                  });
+                });
+              }
             } finally {
               setBusyKey(null);
             }
@@ -308,7 +326,7 @@ function LinkPicker({
   return (
     <View style={styles.picker}>
       <Text style={styles.pickerTitle}>Link to an existing account</Text>
-      <Text style={styles.meta}>Same type, no last 4 set.</Text>
+      <Text style={styles.meta}>Best matches first. Future SMS for this account will go there.</Text>
       {accounts.map(account => (
         <Pressable
           key={account.id}

@@ -1,0 +1,138 @@
+GROUND FACTS: read ongoing/roadmap/prompts/R5-sms-reading-v2.txt (spec +
+owner additions A/B/C are summarised in ongoing/roadmap/R5-sms-reading-v2.md),
+ongoing/roadmap/R5-sms-reading-v2.md (what was built), and the review
+results JSON (full details: synthetic failing inputs, file:line, suggested
+fixes, verifier notes):
+/private/tmp/claude-501/-Users-mohammedsiraj-Downloads-projects-experiment/7a5ecb0e-0287-4dbc-b368-ead5c275af23/tasks/wf93edxjr.output
+(key "result" → "confirmed" and "refuted"; entries in "refuted" with an
+empty "why" were NOT verified because the reviewer ran out of quota —
+treat them as UNVERIFIED, not as refuted).
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker, branch
+phase/R5-sms-reading-v2 (R5 is uncommitted in the tree). Stay on it, do
+not commit.
+
+PHASE R5-FIX — fix the review findings before R5 is committed.
+CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+METHOD for every item: first add a failing test with SYNTHETIC input (QA
+names, XX1234, refs 000000000123, qa.x@okqa), confirm it fails, then fix,
+then confirm it passes. For UNVERIFIED items: if your test shows the
+behaviour is actually correct, keep the test as a regression guard and mark
+the item "not reproduced" in the report.
+
+CONFIRMED (fix all):
+C1 HIGH — Legacy (v1) decision keys: smsSyncLogic.ts ~217 adds bank
+   'unknown' to every SMS and misses v1's real bank + last-4. The owner's
+   phone has v1 account links/ignores; after upgrade every SMS must route
+   exactly as v1 did for keys v1 produced. Keep a frozen copy of the v1
+   normalizer (or its exact key derivation) and derive the legacy key from
+   the same body with it; never invent 'unknown' keys. Tests: table of v1
+   inputs → identical v1 keys; linked/ignored v1 decisions still apply
+   (also covers UNVERIFIED "two kinds of v1 key fall outside the legacy
+   key set" and "v1 legacy routing untested").
+C2 HIGH — Auto-read moves the cursor past SMS for unknown accounts and
+   their "New accounts found" suggestions are never shown (syncSms.ts
+   ~411). Fix: auto-read persists suggestions (existing
+   account_suggestion_candidates cache) and the app surfaces them (Home /
+   Pending "N new accounts found" entry → existing screen) — nothing is
+   lost once the cursor moves.
+C3 MEDIUM — Auto-read (and any sync) REPLACES an open "New accounts
+   found" session mid-review (syncSms.ts ~442; found twice). Merge new
+   groups into the existing session; never drop groups the user has not
+   acted on.
+C4 MEDIUM — Re-scan and every 1-day overlap bring back SMS items the user
+   DELETED (syncSms.ts ~265). Add tombstones: when an SMS-sourced
+   transaction is deleted, keep its sourceReferenceHash (hash only, no
+   content) in a small table (migration 9 or fold into 8 if 8 is not yet
+   released — it is not released; prefer folding into 8 and document) so
+   dedupe skips it. Include it in the backup (the owner will back up and
+   restore on the SAME phone, where SMS ids match); update the backup
+   completeness test.
+C5 MEDIUM — Future / pre-debit notices recorded as real expenses
+   (readSms.ts ~320): 'to be debited', 'due to be debited', 'pre-debit',
+   'will be presented', 'is scheduled', 'upcoming', 'is due on' near a
+   bound 'debit' noun → mandate_future. Use all 9 synthetic bodies from
+   the review as negative fixtures.
+C6 MEDIUM — Refund override flips a debit that mentions 'reversal of
+   credit' into income (readSms.ts ~377). Refund only when the bound verb
+   is a credit (or explicit "refund of Rs X credited").
+C7 MEDIUM — Salary credits imported from "New accounts found" go to
+   Uncategorised (importSuggestion.ts ~34) — apply the salary category
+   there too.
+C8 MEDIUM/LOW — Dismissed "Not a transaction" rows are counted as new
+   not-understood on every sync → repeated empty auto_read Activity rows
+   (syncSms.ts ~339). Count only genuinely new rows; no audit row when
+   nothing was added.
+C9 LOW — Confidence change vs production auto-approve: default threshold
+   is 90 (DEFAULT_AUTO_APPROVE_THRESHOLD) but tests were moved to 70.
+   Restore those tests to the production default and calibrate: a clean
+   known-sender parse (known sender + bound verb + amount + account +
+   payee) reaches 90; anything uncertain stays below. Document the table.
+C10 LOW — Background auto-read can overlap a full store reload
+   (hydrate on launch, backup restore) → stale store / orphan rows
+   (autoReadRunner.ts ~30). Make auto-read wait for hydrate and skip while
+   a restore runs; restore must also block/serialise auto-read.
+C11 LOW — Link Undo deletes the link's rows + decision even when the card
+   cannot come back (left the screen) and, in auto-approve mode, leaves
+   auto-approved rows on the wrong account while the restored card still
+   lists them (importSuggestion.ts ~176/181). Make Undo exact: restore the
+   card from persisted candidates and move/remove exactly the rows the
+   link created (approved ones included, with audit), or only offer Undo
+   while it can be exact.
+C12 LOW — Masker lets names through when they are vocabulary words
+   (brands, bank names, months, initials) (maskSmsPattern.ts ~55). Remove
+   brand/bank/month/single-letter words from the keep-vocabulary (months
+   → <DATE>), keep the institution only via the DLT header. Property test
+   over all fixtures + the review's examples.
+
+UNVERIFIED (reproduce with a test first; fix if real):
+U1 Any 'OTP' / promo / failed / collect wording ANYWHERE drops a
+   completed transaction — e.g. a debit SMS ending "Never share your OTP"
+   or "pay via collect request"/"payment request"/"on approval" text in a
+   completed message. Classification must prefer a bound completed
+   transaction over footer/marketing words.
+U2 Real bounce / return-charge debits dropped as 'failed'.
+U3 HDFC credit-card vs debit-card kinds swapped; HDFC "Txn Rs.X On HDFC
+   Bank Card NNNN At <merchant/VPA>" format not understood.
+U4 'Available credit' figure bound as an income transaction; number +
+   unit word (reward points, miles, coins) becomes income.
+U5 A VPA containing a 'sal' segment tagged as salary (word-boundary on
+   tokens, not substrings of VPAs).
+U6 Any 'ATM' word ('ATM card', 'ATM cum Debit Card') turns a shop
+   purchase into a cash withdrawal.
+U7 Payee fallbacks return junk: 'be debited', 'date 01Nov26', 'Nov 01',
+   'Refno' → return no payee (Unknown) instead.
+U8 Every numeric sender dropped before classification — spec drops plain
+   PERSONAL numbers; keep that, but document; if some bank long-codes
+   (e.g. 5–6 digit short codes) are financial, let them through with a
+   low prior.
+U9 "Add as transaction" then switching to Transfer drops the SMS
+   reference, so the row stays not-understood.
+U10 Not-understood screen: permission-denied state is a dead end (add a
+   grant button / explain); row accessibility label must include the
+   date; add screen tests incl. the guard against reused SMS ids.
+U11 Tests: auto-read runner path (runner, kind mapping, setAutoRead) has
+   no tests; fixture table checks accountKind/bankName on only 2
+   fixtures — assert them on EVERY transaction fixture.
+
+ANDROID (orchestrator read SmsReceivedReceiver/SmsAutoReadService): no
+change required; keep startTask on the UI thread, keep the 4 s delay and
+30 s timeout.
+
+PRIVACY (absolute, unchanged): never store/log raw SMS bodies or sender
+numbers; tombstones store the hash only; synthetic fixtures only.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: append a "R5 review fixes" section to ongoing/roadmap/
+R5-sms-reading-v2.md: per item C1–C12 / U1–U11 → fixed / not reproduced,
+test names, any behaviour change. Leak-scan the report with the pattern
+given in the dispatch message (shell only — never write it into a repo
+file). Do not commit.
+REPLY ONLY: gates yes/no; per item fixed / not reproduced (one line
+each); anything surprising.

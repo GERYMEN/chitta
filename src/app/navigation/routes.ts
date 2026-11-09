@@ -23,7 +23,20 @@ export const Routes = {
   SyncStart: 'SyncStart',
   Backup: 'Backup',
   Restore: 'Restore',
+  NotUnderstood: 'NotUnderstood',
 } as const;
+
+/**
+ * R5: "Add as transaction" from Messages not understood — the SMS reference
+ * (id + date) plus the reader's best guess. Derived values only, in memory.
+ */
+export interface FromSmsPrefill {
+  smsId: string;
+  smsDate: number;
+  type: 'expense' | 'income' | null;
+  amountMinor: number | null;
+  lastFour: string | null;
+}
 
 export type MainTabParamList = {
   Home: undefined;
@@ -36,7 +49,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList> | undefined;
   TransactionDetail: { transactionId: string };
-  AddRecord: undefined;
+  AddRecord: { fromSms?: FromSmsPrefill } | undefined;
   EditTransaction: { transactionId: string };
   AddAccount:
     | {
@@ -63,4 +76,6 @@ export type RootStackParamList = {
   Backup: undefined;
   /** R4e: Settings → "Restore from backup", or the onboarding link. */
   Restore: { fromOnboarding?: boolean } | undefined;
+  /** R5: Pending header link / Settings row. */
+  NotUnderstood: undefined;
 };

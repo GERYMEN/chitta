@@ -8,7 +8,8 @@
  * order and inserts in this order.
  *
  * Not exported: `schema_migrations` (bookkeeping of the DB itself — the
- * backup records its number as `schemaVersion` instead).
+ * backup records its number as `schemaVersion` instead) and the
+ * DEVICE_LOCAL_TABLES below.
  *
  * A test (backup.tables.test.ts) builds the real schema in SQLite and fails
  * when a migration adds a table or column that is missing here — update this
@@ -152,7 +153,21 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
     sinceVersion: 7,
     columns: { a_id: 7, b_id: 7, dismissed_at: 7 },
   },
+  {
+    // R5-fix C4: tombstones of deleted SMS items (reference hash only). Backed
+    // up so a restore on the same phone keeps deleted items deleted.
+    name: 'sms_deleted_refs',
+    sinceVersion: 8,
+    columns: { source_reference_hash: 8, deleted_at: 8 },
+  },
 ];
+
+/**
+ * R5: tables that describe THIS phone's inbox, not the user's data — never
+ * written into a backup and never touched by a restore. `sms_unparsed` holds
+ * SMS content-provider ids, which mean nothing on another phone.
+ */
+export const DEVICE_LOCAL_TABLES: ReadonlyArray<string> = ['sms_unparsed'];
 
 export const BACKUP_TABLE_NAMES: ReadonlyArray<string> = BACKUP_TABLES.map(t => t.name);
 
@@ -160,7 +175,13 @@ export const BACKUP_TABLE_NAMES: ReadonlyArray<string> = BACKUP_TABLES.map(t => 
  * app_settings keys that describe THIS phone, not the user's data: never
  * written into a backup and never overwritten by a restore.
  */
-export const DEVICE_LOCAL_SETTING_KEYS: ReadonlyArray<string> = ['last_backup_at'];
+export const DEVICE_LOCAL_SETTING_KEYS: ReadonlyArray<string> = [
+  'last_backup_at',
+  // R5: auto-read follows this phone's RECEIVE_SMS grant; the reader-version
+  // hint is about this phone's inbox.
+  'sms_auto_read',
+  'sms_reader_version_seen',
+];
 
 export function backupTableSpec(name: string): BackupTableSpec | undefined {
   return BACKUP_TABLES.find(t => t.name === name);

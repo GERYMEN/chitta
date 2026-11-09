@@ -88,23 +88,28 @@ describe('syncSms suggestion session (R2b T1)', () => {
       { bankName: 'HDFC', accountKind: 'bank', lastFour: '4242', messageCount: 3 },
     ]);
     // Nothing about the waiting items is written to the DB — only the R4b
-    // sync cursor (a date, no SMS content).
+    // sync cursor (a date) and (R5-fix C2) the counts-only "new accounts
+    // found" summary: public bank id, kind, last-4, count, first/last date.
     const inserts = db.calls.filter(c => /^INSERT/.test(c.sql));
-    expect(inserts.filter(c => c.params[0] !== 'sms_last_synced_at')).toHaveLength(0);
-    for (const c of inserts) {
+    const cursor = inserts.filter(c => c.params[0] === 'sms_last_synced_at');
+    const summary = inserts.filter(c => /account_suggestion_candidates/.test(c.sql));
+    expect(cursor.length + summary.length).toBe(inserts.length);
+    for (const c of cursor) {
       expect(c.params).toHaveLength(2);
       expect(Number.isFinite(Date.parse(String(c.params[1])))).toBe(true);
     }
+    expect(summary).toHaveLength(1);
+    expect(summary[0].params).toEqual(['hdfc', 'bank', '4242', 3, 1700000000000, 1700000000002, 2]);
     // No raw SMS body / sender in the session.
     const json = JSON.stringify(session.groups);
     expect(json).not.toContain('AD-QASNDR');
     expect(json).not.toContain('debited from');
   });
 
-  it('a re-run rebuilds the session (new run id) and dedup by hash is unchanged', async () => {
+  it('R5-fix C3: a re-run merges into the same session (same run id), no duplicate items', async () => {
     const first = await syncSms();
     const second = await syncSms();
-    expect(second.suggestionRunId).not.toBe(first.suggestionRunId);
+    expect(second.suggestionRunId).toBe(first.suggestionRunId);
     expect(useSuggestionSession.getState().runId).toBe(second.suggestionRunId);
     expect(useSuggestionSession.getState().groups[0].items).toHaveLength(3);
   });

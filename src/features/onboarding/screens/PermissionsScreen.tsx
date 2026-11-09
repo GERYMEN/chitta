@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
-import { requestSmsPermission } from '../../../native/android/permissions/smsPermission';
+import { requestSmsPermissions } from '../../../native/android/permissions/smsPermission';
+import { useSmsReaderStore } from '../../sms-sync/smsReaderStore';
 import { saveOnboardingSyncStart } from './SyncStartScreen';
 import { DEFAULT_SMS_SYNC_START_CHOICE } from '../../../domain/settings/smsSyncStart.rules';
 
@@ -73,7 +74,10 @@ export function PermissionsScreen() {
     // result so a denial never blocks onboarding (user can grant it later via
     // the Sync SMS button's request-on-demand flow).
     try {
-      await requestSmsPermission();
+      // R5: READ_SMS + RECEIVE_SMS (auto-read) in one system dialog — both
+      // are in the SMS permission group. Auto-read defaults ON once granted.
+      await requestSmsPermissions();
+      await useSmsReaderStore.getState().load();
     } catch {
       // Ignore request failures — onboarding still proceeds.
     }

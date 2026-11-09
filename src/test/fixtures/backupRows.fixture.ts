@@ -94,6 +94,8 @@ export const FULL_BACKUP_ROWS: BackupTables = {
   ],
   transfer_pair_dismissals: [{ debit_id: 'qa-t1', credit_id: 'qa-t4', dismissed_at: T1 }],
   duplicate_pair_dismissals: [{ a_id: 'qa-t1', b_id: 'qa-t2', dismissed_at: T1 }],
+  // R5-fix C4: a deleted SMS item's reference hash (synthetic id/date).
+  sms_deleted_refs: [{ source_reference_hash: 'sms-900-1759300000000', deleted_at: T1 }],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

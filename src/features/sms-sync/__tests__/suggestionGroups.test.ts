@@ -9,6 +9,7 @@ import {
   formatShortDateRange,
   groupUnmatchedCandidates,
   linkableAccounts,
+  linkCompatibility,
   proposedAccountBaseName,
   proposedAccountTitle,
   suggestionsSummaryLine,
@@ -173,8 +174,8 @@ describe('card summary', () => {
   });
 });
 
-describe('linkableAccounts', () => {
-  it('active accounts of the same kind without a last four', () => {
+describe('linkableAccounts (R5: any active account, compatible first)', () => {
+  it('lists every active account; same kind + empty/same last-4 first', () => {
     const accounts = [
       account({ id: 'a', type: 'bank', lastFour: null }),
       account({ id: 'b', type: 'bank', lastFour: '9999' }),
@@ -182,7 +183,19 @@ describe('linkableAccounts', () => {
       account({ id: 'd', type: 'bank', lastFour: null, deletedAt: '2026-10-20T00:00:00.000Z' }),
       account({ id: 'e', type: 'bank', lastFour: '  ' }),
     ];
-    expect(linkableAccounts(accounts, { accountKind: 'bank' }).map(a => a.id)).toEqual(['a', 'e']);
+    expect(linkableAccounts(accounts, { accountKind: 'bank', lastFour: '1234' }).map(a => a.id)).toEqual([
+      'a',
+      'e',
+      'b',
+      'c',
+    ]);
+  });
+
+  it('linkCompatibility: kind and last-4 mismatches need confirmation', () => {
+    expect(linkCompatibility({ type: 'bank', lastFour: null }, { accountKind: 'bank', lastFour: '1234' })).toEqual({ ok: true });
+    expect(linkCompatibility({ type: 'bank', lastFour: '1234' }, { accountKind: 'bank', lastFour: '1234' })).toEqual({ ok: true });
+    expect(linkCompatibility({ type: 'bank', lastFour: '9999' }, { accountKind: 'bank', lastFour: '1234' })).toEqual({ ok: false, reason: 'last_four' });
+    expect(linkCompatibility({ type: 'bank', lastFour: null }, { accountKind: 'credit_card', lastFour: '1234' })).toEqual({ ok: false, reason: 'kind' });
   });
 });
 

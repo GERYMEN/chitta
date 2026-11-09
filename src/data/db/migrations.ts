@@ -135,6 +135,37 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
   )`,
     ],
   },
+  {
+    // R5 "Messages not understood": one row per inbox SMS the reader could
+    // not turn into a transaction or a known non-transaction class. NO body,
+    // NO sender number — only the SMS content-provider id + date (to read it
+    // live on tap), a reason code and the public institution id. Device-local:
+    // excluded from backups (backup.tables.ts DEVICE_LOCAL_TABLES).
+    version: 8,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS sms_unparsed (
+    sms_id TEXT NOT NULL,
+    sms_date INTEGER NOT NULL,
+    reason_code TEXT NOT NULL,
+    institution TEXT NOT NULL,
+    parser_version INTEGER NOT NULL,
+    detected_at TEXT NOT NULL,
+    dismissed_at TEXT,
+    resolved_at TEXT,
+    PRIMARY KEY (sms_id, sms_date)
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_sms_unparsed_open ON sms_unparsed(dismissed_at, resolved_at)',
+      // R5-fix C4 (folded into 8 — migration 8 was never released): tombstones
+      // of DELETED SMS-sourced transactions, so a re-scan / the 1-day overlap
+      // never brings them back. Holds the `sms-<id>-<date>` reference hash
+      // only (no SMS content). Backed up: a restore on the same phone keeps
+      // deleted items deleted.
+      `CREATE TABLE IF NOT EXISTS sms_deleted_refs (
+    source_reference_hash TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL
+  )`,
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

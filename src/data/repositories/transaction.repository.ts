@@ -157,9 +157,18 @@ async function remove(
   id: string,
   audit: ReadonlyArray<AuditEventDraft> = [],
   accountId: string | null = null,
+  smsTombstoneHash: string | null = null,
 ): Promise<void> {
   await getDatabase().transaction(async tx => {
     await tx.execute('DELETE FROM transactions WHERE id = ?', [id]);
+    // R5-fix C4: a deleted SMS item leaves its reference hash (no content) so
+    // a re-scan / the 1-day overlap never recreates it.
+    if (smsTombstoneHash) {
+      await tx.execute(
+        'INSERT OR IGNORE INTO sms_deleted_refs (source_reference_hash, deleted_at) VALUES (?, ?)',
+        [smsTombstoneHash, new Date().toISOString()],
+      );
+    }
     for (const draft of audit) {
       await auditRepository.insert(tx, { ...draft, transactionId: id, accountId });
     }

@@ -1,3 +1,4 @@
+import { DEFAULT_AUTO_APPROVE_THRESHOLD } from '../../../domain/settings/approval.rules';
 import { syncSms } from '../syncSms';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { getDatabase } from '../../../data/db/connection';
@@ -14,7 +15,8 @@ jest.mock('../../../native/android/permissions/smsPermission', () => ({
   requestSmsPermission: jest.fn(async () => 'granted'),
 }));
 
-const SENDER = 'AD-QASNDR';
+// R5-fix C9: a known bank sender — clean parses reach the production default (90).
+const SENDER = 'AD-HDFCBK-S';
 const mockReadInbox = jest.fn();
 // R4b: paged native API, served from the synthetic inbox `mockReadInbox` returns.
 jest.mock('../../../native/android/sms/smsReader', () =>
@@ -52,8 +54,8 @@ const ACCOUNT_ROW = {
 };
 
 const BODIES = [
-  'Rs.250.00 debited from your account at QA-Shop on 25-Oct-2026. Avl bal Rs.1,000.00',
-  'Rs.500.00 received from QA-Payer on 26-Oct-2026.',
+  'Rs.250.00 debited from your A/c XX9999 at QA-Shop on 25-Oct-2026. Avl bal Rs.1,000.00',
+  'Rs.500.00 received in your A/c XX9999 from QA-Payer on 26-Oct-2026.',
 ];
 
 let db: FakeDb;
@@ -109,7 +111,8 @@ describe('syncSms audit', () => {
   });
 
   it('auto mode: detected per item, then auto_approved (system, confidence + threshold) per item', async () => {
-    useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: 90 });
+    // R5-fix C9: the production default threshold (DEFAULT_AUTO_APPROVE_THRESHOLD).
+    useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: DEFAULT_AUTO_APPROVE_THRESHOLD });
     const result = await syncSms();
 
     expect(result.autoApproved).toBe(2);
@@ -127,6 +130,16 @@ describe('syncSms audit', () => {
       });
     }
     expectNoSmsTextInAudit();
+  });
+
+  it('R5-fix C9: the same bodies from an unknown sender stay pending at the default 90', async () => {
+    mockReadInbox.mockResolvedValue(
+      BODIES.map((body, i) => ({ id: String(i + 1), address: 'AD-QASNDR', body, date: 1700000000000 + i })),
+    );
+    useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: DEFAULT_AUTO_APPROVE_THRESHOLD });
+    const result = await syncSms();
+    expect(result.created).toBe(2);
+    expect(result.autoApproved).toBe(0);
   });
 
   it('re-sync of the same inbox writes no new audit rows', async () => {

@@ -81,15 +81,23 @@ export async function openBackup(picked: PickedBackup, password: string): Promis
  * (rolled back) and the stores untouched.
  */
 export async function restoreBackup(opened: OpenedBackup, now: Date = new Date()): Promise<void> {
-  if (useSyncRunStore.getState().running) throw new BackupError('busy');
+  const runStore = useSyncRunStore.getState();
+  if (runStore.running || runStore.restoring) throw new BackupError('busy');
+  // R5-fix C10: hold the sync guard for the whole restore + reload, so an
+  // auto-read (new SMS) cannot sync against the pre-restore store.
+  useSyncRunStore.setState({ restoring: true });
   try {
-    await backupRepository.replaceAllData(opened.payload, { counts: opened.summary.counts, now });
-  } catch (error) {
-    if (error instanceof BackupError) throw error;
-    throw new BackupError('incomplete', 'The backup could not be restored. Your data was not changed.');
+    try {
+      await backupRepository.replaceAllData(opened.payload, { counts: opened.summary.counts, now });
+    } catch (error) {
+      if (error instanceof BackupError) throw error;
+      throw new BackupError('incomplete', 'The backup could not be restored. Your data was not changed.');
+    }
+    await forgetPickedBackup();
+    await reloadAfterRestore();
+  } finally {
+    useSyncRunStore.setState({ restoring: false });
   }
-  await forgetPickedBackup();
-  await reloadAfterRestore();
 }
 
 /** Restore abandoned (Back / Cancel). */

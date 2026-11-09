@@ -240,7 +240,7 @@ describe('runMigrations versioning', () => {
     expect(appliedVersions.has(7)).toBe(true);
   });
 
-  it('R3b: migration 7 only creates the dismissals table (a_id < b_id), rewrites nothing, and is the last migration', () => {
+  it('R3b: migration 7 only creates the dismissals table (a_id < b_id) and rewrites nothing', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m7 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 7);
     const sqls: string[] = m7.statements.map((st: string | { sql: string }) =>
@@ -253,7 +253,33 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/a_id TEXT NOT NULL,\s+b_id TEXT NOT NULL,\s+dismissed_at TEXT NOT NULL/);
     expect(joined).toMatch(/PRIMARY KEY \(a_id, b_id\)/);
     expect(joined).toMatch(/CHECK \(a_id < b_id\)/);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(7);
+  });
+
+  it('R5: migration 8 only creates sms_unparsed + sms_deleted_refs (no body / sender column), rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m8 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 8);
+    const sqls: string[] = m8.statements.map((st: string | { sql: string }) =>
+      typeof st === 'string' ? st : st.sql,
+    );
+    const joined = sqls.join('\n');
+    expect(joined).toMatch(/^CREATE TABLE IF NOT EXISTS sms_unparsed/);
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b|\bALTER\b|\bINSERT\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
+    expect(joined).toMatch(/PRIMARY KEY \(sms_id, sms_date\)/);
+    // R5-fix C4: the tombstone table holds the reference hash only.
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS sms_deleted_refs \(\s*source_reference_hash TEXT PRIMARY KEY,\s*deleted_at TEXT NOT NULL\s*\)/);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(8);
+  });
+
+  it('R5: runs migration 8 exactly once and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+    const { runMigrations } = require('../connection');
+    await runMigrations();
+    await runMigrations();
+    expect(executed.filter(sql => /CREATE TABLE IF NOT EXISTS sms_unparsed/.test(sql))).toHaveLength(1);
+    expect(appliedVersions.has(8)).toBe(true);
   });
 
   it('a fresh install seeds the six base categories BEFORE migration 5 adds Uncategorised', async () => {

@@ -10,10 +10,17 @@ import {
   addSuggestedAccount,
   ignoreSuggestionGroup,
   importSnackbarMessage,
+  undoLinkSuggestion,
   linkSuggestion,
   preparePendingRows,
 } from '../importSuggestion';
 import { useSnackbarStore } from '../../../shared/ui/Snackbar';
+import { accountRepository } from '../../../data/repositories/account.repository';
+import { rowToAccount } from '../../../data/mappers/account.mapper';
+import { partitionCandidates } from '../smsSyncLogic';
+import { toSuggestionDecisions } from '../syncSms';
+
+const accountRepositoryForTest = () => accountRepository;
 
 jest.mock('../../../data/db/connection', () => ({
   getDatabase: jest.fn(),
@@ -316,15 +323,85 @@ describe('linkSuggestion', () => {
     expect(db.transactionCount()).toBe(1);
     const decision = Array.from(db.tables.get('account_suggestion_decisions')!.values());
     expect(decision[0]).toMatchObject({ decision: 'linked', account_id: 'acc-cash' });
+    // R5: the link itself is audited — bank id, kind, count; no SMS text, no last-4.
     expect(db.auditInserts().map(a => a.row.event_type)).toEqual([
+      'account_linked',
       'detected',
       'detected',
       'detected',
     ]);
+    const linked = db.auditInserts().find(a => a.row.event_type === 'account_linked')!;
+    expect(linked.row).toMatchObject({ actor: 'user', account_id: 'acc-cash' });
+    expect(JSON.parse(String(linked.row.metadata_json))).toEqual({
+      kind: 'account_linked',
+      bankCanonical: 'hdfc',
+      accountKind: 'bank',
+      items: 3,
+    });
+    expect(String(linked.row.metadata_json)).not.toContain('4242');
+    expectNoSmsTextInAudit();
     expect(
       useTransactionsStore.getState().transactions.every(t => t.accountId === 'acc-cash'),
     ).toBe(true);
+    expect(outcome!.transactionIds).toHaveLength(3);
     expect(importSnackbarMessage(outcome!, true)).toBe('3 transactions added to Pending');
+  });
+
+  it('R5: the card disappears; another group is untouched', async () => {
+    const other = parsed('sms-9-1700000000009', { bankCanonical: 'sbi', bankName: 'SBI', lastFour: '9999' });
+    runId = useSuggestionSession.getState().start(groupUnmatchedCandidates([...ITEMS, other]));
+    expect(useSuggestionSession.getState().groups).toHaveLength(2);
+    await linkSuggestion(runId, KEY, 'acc-cash');
+    const left = useSuggestionSession.getState().groups;
+    expect(left).toHaveLength(1);
+    expect(left[0].items.map(i => i.sourceReferenceHash)).toEqual(['sms-9-1700000000009']);
+    // Only the linked group's rows were inserted.
+    expect(useTransactionsStore.getState().transactions.map(t => t.sourceReferenceHash)).not.toContain(
+      'sms-9-1700000000009',
+    );
+  });
+
+  it('R5: the mapping persists — the next sync routes that key to the account', async () => {
+    await linkSuggestion(runId, KEY, 'acc-cash');
+    const rows = await accountRepositoryForTest().listSuggestionDecisions();
+    const decisions = toSuggestionDecisions(rows);
+    const later = parsed('sms-5-1700000000005');
+    const { matched, unmatched } = partitionCandidates(
+      [later],
+      [rowToAccount(EXISTING_ACCOUNT_ROW)],
+      new Set(),
+      decisions,
+    );
+    expect(unmatched).toEqual([]);
+    expect(matched).toEqual([{ parsed: later, accountId: 'acc-cash' }]);
+  });
+
+  it('R5: Undo removes the decision + the still-pending rows and puts the card back', async () => {
+    const group = useSuggestionSession.getState().groups.find(g => g.key === KEY)!;
+    const outcome = (await linkSuggestion(runId, KEY, 'acc-cash'))!;
+    expect(useSuggestionSession.getState().groups).toHaveLength(0);
+    const removed = await undoLinkSuggestion(runId, group, outcome);
+    expect(removed).toBe(3);
+    expect(useTransactionsStore.getState().transactions).toHaveLength(0);
+    expect(useSuggestionSession.getState().groups.map(g => g.key)).toEqual([KEY]);
+    const undoCall = db.calls.find(c => c.sql.startsWith('DELETE FROM account_suggestion_decisions'))!;
+    expect(undoCall.sql).toContain("decision = 'linked' AND account_id = ?");
+    expect(undoCall.params).toEqual(['hdfc', 'bank', '4242', 'acc-cash']);
+    const types = db.auditInserts().map(a => a.row.event_type);
+    expect(types.filter(t => t === 'deleted')).toHaveLength(3);
+    expect(types[types.length - 1]).toBe('account_unlinked');
+    // 'deleted' keeps the usual R1 snapshot (merchant + amount, never SMS
+    // text); the unlink row itself carries only bank id, kind and a count.
+    const unlinked = db.auditInserts().find(a => a.row.event_type === 'account_unlinked')!;
+    expect(JSON.parse(String(unlinked.row.metadata_json))).toEqual({
+      kind: 'account_unlinked',
+      bankCanonical: 'hdfc',
+      accountKind: 'bank',
+      items: 3,
+    });
+    for (const { row } of db.auditInserts()) {
+      expect(String(row.metadata_json ?? '')).not.toMatch(/Debited|Credited|4242/);
+    }
   });
 });
 
@@ -350,7 +427,98 @@ describe('ignoreSuggestionGroup', () => {
 describe('importSnackbarMessage', () => {
   it('nothing new', () => {
     expect(
-      importSnackbarMessage({ accountId: 'a', created: 0, autoApproved: 0, uncategorised: 0 }, false),
+      importSnackbarMessage(
+        { accountId: 'a', transactionIds: [], created: 0, autoApproved: 0, uncategorised: 0 },
+        false,
+      ),
     ).toBe('Account added — nothing new to add');
+  });
+});
+
+describe('R5-fix C7 — salary from New Accounts Found', () => {
+  it('a salary credit imported via Add account goes to Salary, not Uncategorised', async () => {
+    useTransactionsStore.setState({
+      categories: [...CATEGORIES, category('cat-salary', 'income')],
+    });
+    const salaryItem = parsed('sms-9-1700000000009', {
+      type: 'income',
+      amountMinor: 5000000,
+      merchantName: 'QA EMPLOYER PVT LTD',
+      salary: true,
+    });
+    const id = useSuggestionSession.getState().start(groupUnmatchedCandidates([salaryItem]));
+    const outcome = await addSuggestedAccount(id, KEY, ACCOUNT_INPUT);
+    const row = useTransactionsStore.getState().transactions.find(t => t.id === outcome!.transactionIds[0])!;
+    expect(row.categoryId).toBe('cat-salary');
+  });
+
+  it('preparePendingRows applies the salary flag (merchant rule still wins)', () => {
+    const cats = [...CATEGORIES, category('cat-salary', 'income')];
+    const item = parsed('sms-9-1', { type: 'income', merchantName: 'QA EMPLOYER', salary: true });
+    expect(preparePendingRows([item], cats, {}, new Set(), 'now').rows[0].categoryId).toBe('cat-salary');
+    expect(
+      preparePendingRows([{ ...item, salary: false }], cats, {}, new Set(), 'now').rows[0].categoryId,
+    ).toBe('cat-uncategorised');
+  });
+});
+
+describe('R5-fix C4 — deleted items are not re-imported from a card', () => {
+  it('a tombstoned hash is skipped on Add account', async () => {
+    db = createFakeDb({
+      accounts: [EXISTING_ACCOUNT_ROW],
+      sms_deleted_refs: [{ source_reference_hash: 'sms-1-1700000000001', deleted_at: 'x' }],
+    });
+    mockGetDatabase.mockReturnValue(db as never);
+    const outcome = await addSuggestedAccount(runId, KEY, ACCOUNT_INPUT);
+    expect(outcome!.created).toBe(2);
+  });
+});
+
+describe('R5-fix C11 — Link Undo is exact', () => {
+  it('auto mode: Undo also removes the rows auto-approved by the link (audited), card restored with every item', async () => {
+    useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: 90 });
+    const group = useSuggestionSession.getState().groups.find(g => g.key === KEY)!;
+    const outcome = (await linkSuggestion(runId, KEY, 'acc-cash'))!;
+    expect(outcome.autoApproved).toBe(2);
+    const removed = await undoLinkSuggestion(runId, group, outcome);
+    expect(removed).toBe(3);
+    expect(useTransactionsStore.getState().transactions).toHaveLength(0);
+    expect(db.tables.get('transactions')?.size ?? 0).toBe(0);
+    const deleted = db.auditInserts().filter(a => a.row.event_type === 'deleted');
+    expect(deleted.map(d => JSON.parse(String(d.row.metadata_json)).status).sort()).toEqual([
+      'approved',
+      'approved',
+      'pending',
+    ]);
+    const card = useSuggestionSession.getState().groups.find(g => g.key === KEY)!;
+    expect(card.items).toHaveLength(3);
+    // No tombstones: the restored card must be importable again.
+    expect(db.calls.some(c => /sms_deleted_refs/.test(c.sql) && /^INSERT/.test(c.sql))).toBe(false);
+  });
+
+  it('Undo after a sync replaced the run / after leaving the screen: the card comes back and Home can reopen it', async () => {
+    const group = useSuggestionSession.getState().groups.find(g => g.key === KEY)!;
+    const outcome = (await linkSuggestion(runId, KEY, 'acc-cash'))!;
+    // Another session took over (e.g. app restart + new sync with other groups).
+    const otherRun = useSuggestionSession.getState().start([]);
+    await undoLinkSuggestion(runId, group, outcome);
+    const session = useSuggestionSession.getState();
+    expect(session.runId).toBe(otherRun);
+    expect(session.groups.map(g => g.key)).toEqual([KEY]);
+    expect(session.groups[0].items).toHaveLength(3);
+    // The persisted summary is back, so Home shows "1 new account found".
+    const { useNewAccountsStore } = require('../newAccountsStore');
+    expect(useNewAccountsStore.getState().rows.map((r: { lastFour: string }) => r.lastFour)).toEqual(['4242']);
+    // Re-linking from the restored card imports everything again.
+    const again = await linkSuggestion(otherRun, KEY, 'acc-cash');
+    expect(again!.created).toBe(3);
+  });
+
+  it('Add / Link / Ignore drop the stored summary row in the decision transaction', async () => {
+    await ignoreSuggestionGroup(runId, KEY);
+    const del = db.calls.find(c => c.sql.startsWith('DELETE FROM account_suggestion_candidates'))!;
+    const dec = db.calls.find(c => /INTO account_suggestion_decisions/.test(c.sql))!;
+    expect(del.transactionNo).toBe(dec.transactionNo);
+    expect(del.params).toEqual(['hdfc', 'bank', '4242']);
   });
 });

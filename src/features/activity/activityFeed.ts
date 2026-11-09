@@ -1,10 +1,11 @@
-import { AuditFeedEvent } from '../../domain/audit/audit.types';
+import { AuditFeedEvent, SmsRunCounts } from '../../domain/audit/audit.types';
 import { Transaction, TransactionType } from '../../domain/transactions/transaction.types';
 import { Account } from '../../domain/accounts/account.types';
 import { Category } from '../../domain/categories/category.types';
 import { categoryLabel } from '../../domain/categories/category.rules';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
 import { REDACTED_TEXT, redactLast4 } from '../../shared/privacy/redaction';
+import { institutionDisplayName } from '../sms-sync/parser/institutions';
 import {
   SmsSyncStartMode,
   START_MODE_LABEL,
@@ -72,6 +73,7 @@ export const MASKED_AMOUNT = '₹ ••••';
 const ICON: Record<AuditFeedEvent['eventType'], string> = {
   detected: 'message-text-outline',
   created: 'plus-circle-outline',
+  added: 'plus-circle-outline',
   auto_approved: 'lightning-bolt',
   approved: 'check-circle-outline',
   edited: 'pencil-outline',
@@ -95,6 +97,10 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   duplicate_restored: 'backup-restore',
   approval_undone: 'undo-variant',
   backup_restored: 'database-import-outline',
+  sms_rescan: 'message-text-clock-outline',
+  account_linked: 'link-variant',
+  account_unlinked: 'link-variant-off',
+  auto_read: 'message-badge-outline',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -202,6 +208,7 @@ function recordedType(event: AuditFeedEvent): TransactionType | null {
   if (!metadata) return null;
   switch (metadata.kind) {
     case 'created':
+    case 'added':
     case 'approved':
     case 'rejected':
     case 'approval_undone':
@@ -318,6 +325,11 @@ export function describeActivity(
       }
       sentence = `You added ${what}`;
       impact = { text: 'Waiting for approval', tone: 'pending' };
+      break;
+    case 'added':
+      // R5: a record the user typed is recorded straight away.
+      sentence = `You added ${what}`;
+      impact = { text: 'Recorded · counts in your totals', tone: 'neutral' };
       break;
     case 'transfer_paired':
       sentence = moved;
@@ -472,6 +484,34 @@ export function describeActivity(
       };
       break;
     }
+    case 'account_linked':
+    case 'account_unlinked': {
+      const md =
+        event.metadata?.kind === 'account_linked' || event.metadata?.kind === 'account_unlinked'
+          ? event.metadata
+          : null;
+      const from = md ? `${institutionDisplayName(md.bankCanonical)} SMS` : 'SMS';
+      const n = md?.items ?? 0;
+      if (event.eventType === 'account_linked') {
+        sentence = `You linked ${from} to ${accountLabel}`;
+        impact = { text: `${n} item${n === 1 ? '' : 's'} added to Pending · future SMS go there`, tone: 'neutral' };
+      } else {
+        sentence = `You undid linking ${from} to ${accountLabel}`;
+        impact = { text: `${n} pending item${n === 1 ? '' : 's'} removed`, tone: 'neutral' };
+      }
+      break;
+    }
+    case 'sms_rescan':
+    case 'auto_read': {
+      const counts =
+        event.metadata?.kind === 'sms_rescan' || event.metadata?.kind === 'auto_read'
+          ? event.metadata.counts
+          : { scanned: 0, created: 0, notUnderstood: 0, autoApproved: 0 };
+      const described = describeSmsRun(event.eventType, counts);
+      sentence = described.sentence;
+      impact = described.impact;
+      break;
+    }
     default:
       sentence = 'Something changed';
   }
@@ -488,6 +528,26 @@ export function describeActivity(
   };
 }
 
+/** R5: reader runs — counts only. */
+export function describeSmsRun(
+  type: 'sms_rescan' | 'auto_read',
+  counts: SmsRunCounts,
+): Pick<ActivityItem, 'sentence' | 'impact'> {
+  const parts = [`${counts.created} new`];
+  if (counts.notUnderstood > 0) parts.push(`${counts.notUnderstood} not understood`);
+  if (counts.autoApproved > 0) parts.push(`${counts.autoApproved} auto-approved`);
+  if (type === 'auto_read') {
+    return {
+      sentence: `Read automatically: ${parts.join(' · ')}`,
+      impact: { text: 'New SMS arrived · new items wait in Pending', tone: 'pending' },
+    };
+  }
+  return {
+    sentence: `You re-read your messages with the new reader: ${parts.join(' · ')}`,
+    impact: { text: `Scanned ${counts.scanned} SMS · existing items unchanged`, tone: 'neutral' },
+  };
+}
+
 function describeSettingsChange(
   event: AuditFeedEvent,
 ): Pick<ActivityItem, 'sentence' | 'impact'> {
@@ -497,6 +557,15 @@ function describeSettingsChange(
   }
   if (metadata.key === 'sms_sync_start_at' || metadata.key === 'sms_sync_start_mode') {
     return describeSyncStartChange(event.actor, metadata.key, metadata.from, metadata.to);
+  }
+  if (metadata.key === 'sms_auto_read') {
+    return {
+      sentence:
+        metadata.to === 'on'
+          ? 'You turned on reading new SMS automatically'
+          : 'You turned off reading new SMS automatically',
+      impact: { text: 'Sync SMS still works by hand', tone: 'neutral' },
+    };
   }
   if (metadata.key === 'approval_mode') {
     return {

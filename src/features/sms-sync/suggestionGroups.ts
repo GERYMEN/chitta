@@ -158,13 +158,36 @@ export function waitingLabel(count: number): string {
  */
 export function linkableAccounts(
   accounts: ReadonlyArray<Account>,
-  suggestion: Pick<SmsAccountSuggestion, 'accountKind'>,
+  suggestion: Pick<SmsAccountSuggestion, 'accountKind' | 'lastFour'>,
 ): Account[] {
-  return activeAccounts(accounts).filter(
-    account =>
-      account.type === suggestion.accountKind &&
-      (account.lastFour == null || account.lastFour.trim() === ''),
-  );
+  // R5 (owner, 2026-11-06): every active account can be picked; compatible
+  // ones first. An incompatible pick asks for confirmation (linkCompatibility).
+  const rank = (account: Account) => (linkCompatibility(account, suggestion).ok ? 0 : 1);
+  return activeAccounts(accounts)
+    .map((account, index) => ({ account, index }))
+    .sort((a, b) => rank(a.account) - rank(b.account) || a.index - b.index)
+    .map(({ account }) => account);
+}
+
+export type LinkCompatibility =
+  | { ok: true }
+  /** Different kind (e.g. a card key onto a bank account) or a different last-4. */
+  | { ok: false; reason: 'kind' | 'last_four' };
+
+/**
+ * R5: a detected key fits an account when the kinds match and the account's
+ * last-4 is empty or the same. Anything else needs a confirmation.
+ */
+export function linkCompatibility(
+  account: Pick<Account, 'type' | 'lastFour'>,
+  suggestion: Pick<SmsAccountSuggestion, 'accountKind' | 'lastFour'>,
+): LinkCompatibility {
+  if (account.type !== suggestion.accountKind) return { ok: false, reason: 'kind' };
+  const own = (account.lastFour ?? '').trim();
+  if (own !== '' && suggestion.lastFour && own !== suggestion.lastFour) {
+    return { ok: false, reason: 'last_four' };
+  }
+  return { ok: true };
 }
 
 function shortDate(iso: string, withYear: boolean): string {

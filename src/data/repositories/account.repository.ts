@@ -117,6 +117,11 @@ export async function writeDecisionTx(
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [key.bankCanonical, key.accountKind, key.lastFour, decision, accountId, key.normalizerVersion, Date.now()],
   );
+  // R5-fix C2: a decided key is no longer a "new account found".
+  await tx.execute(
+    'DELETE FROM account_suggestion_candidates WHERE bank_canonical = ? AND account_kind = ? AND last_four = ?',
+    [key.bankCanonical, key.accountKind, key.lastFour],
+  );
 }
 
 async function create(

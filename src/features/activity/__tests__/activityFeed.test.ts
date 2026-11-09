@@ -60,6 +60,31 @@ describe('describeActivity sentences', () => {
     expect(item.sentence).toBe('Auto-approved QA-Merchant-07 ₹50.00 at 90% match');
   });
 
+  it('R5: added (Add Record) is recorded at once', () => {
+    expect(
+      describeActivity(
+        event({ eventType: 'added', metadata: { kind: 'added', transactionType: 'expense' } }),
+        { transaction: EXPENSE },
+      ),
+    ).toMatchObject({
+      sentence: 'You added QA-Merchant-07 ₹50.00',
+      impact: { text: 'Recorded · counts in your totals', tone: 'neutral' },
+    });
+  });
+
+  it('R5: link / unlink of a detected SMS account (no last-4, no SMS text)', () => {
+    const linked = describeActivity(
+      event({
+        eventType: 'account_linked',
+        transactionId: null,
+        metadata: { kind: 'account_linked', bankCanonical: 'hdfc', accountKind: 'bank', items: 3 },
+      }),
+      { account: { name: 'QA Wallet', lastFour: null } },
+    );
+    expect(linked.sentence).toBe('You linked HDFC SMS to QA Wallet');
+    expect(linked.impact?.text).toBe('3 items added to Pending · future SMS go there');
+  });
+
   it('created (manual) and detected (SMS) wait for approval', () => {
     expect(describeActivity(event({ eventType: 'created' }), { transaction: EXPENSE })).toMatchObject({
       sentence: 'You added QA-Merchant-07 ₹50.00',

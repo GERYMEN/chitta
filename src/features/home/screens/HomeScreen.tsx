@@ -44,6 +44,11 @@ import { formatMonthYear, PERIOD_CAPTION } from '../../insights/insightLabels';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { registerTourScroller, useTourTarget } from '../../tour/tourTargets';
 import { replayTour } from '../../tour/tourStore';
+import { readerHintVisible, rescanWindow, useSmsReaderStore } from '../../sms-sync/smsReaderStore';
+import { ReaderUpgradeHint } from '../components/ReaderUpgradeHint';
+import { NewAccountsEntry } from '../components/NewAccountsEntry';
+import { newAccountsWindow, useNewAccountsStore } from '../../sms-sync/newAccountsStore';
+import { useSuggestionSession } from '../../sms-sync/suggestionSession';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -61,6 +66,25 @@ export function HomeScreen() {
   const userName = useTransactionsStore(state => state.userName);
   const categories = useTransactionsStore(state => state.categories);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // R5: one-time "re-read with the new reader" hint (phones where v1 recorded SMS).
+  const hasOnboarded = useTransactionsStore(state => state.hasOnboarded);
+  const readerLoaded = useSmsReaderStore(state => state.loaded);
+  const readerVersionSeen = useSmsReaderStore(state => state.readerVersionSeen);
+  // R5-fix C2: undecided "new accounts found" (kept across auto-read runs).
+  const newAccountRows = useNewAccountsStore(state => state.rows);
+  useEffect(() => {
+    useNewAccountsStore.getState().refresh().catch(() => undefined);
+  }, []);
+  const showReaderHint = useMemo(
+    () =>
+      readerHintVisible({
+        loaded: readerLoaded,
+        hasOnboarded,
+        readerVersionSeen,
+        transactions,
+      }),
+    [readerLoaded, hasOnboarded, readerVersionSeen, transactions],
+  );
   // R4c: the tour scrolls Home so a target is visible, and spotlights the
   // period chips.
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -121,9 +145,43 @@ export function HomeScreen() {
    * Normal Sync, or (R4b) a Settings gap scan: `gap.window` is scanned and
    * `gap.onCompleted` (save the new start) runs only if the scan finished.
    */
-  async function handleSyncSms(gap?: { window: SyncWindow; onCompleted: () => Promise<void> }) {
+  /**
+   * R5: re-read the whole R4b window (sync start → now) with reader v2.
+   * Dedup by sourceReferenceHash: items already recorded are never touched;
+   * new ones land in Pending. The sync cursor does not move.
+   */
+  async function handleRescan() {
+    const start = useTransactionsStore.getState().smsSyncStartAt;
+    await handleSyncSms({
+      window: rescanWindow(start, Date.now()),
+      kind: 'rescan',
+      onCompleted: () => useSmsReaderStore.getState().markReaderSeen(),
+    });
+  }
+
+  /**
+   * R5-fix C2: open the stored "New accounts found". The in-memory cards are
+   * used when present; otherwise [earliest first-seen → now] is re-read (a
+   * gap scan: the cursor does not move) to rebuild them.
+   */
+  async function openNewAccounts() {
+    const session = useSuggestionSession.getState();
+    if (session.runId && session.groups.length > 0) {
+      navigation.navigate('SmsSuggestions', { runId: session.runId });
+      return;
+    }
+    const window = newAccountsWindow(useNewAccountsStore.getState().rows, Date.now());
+    if (!window) return;
+    await handleSyncSms({ window, kind: 'gap', onCompleted: async () => undefined });
+  }
+
+  async function handleSyncSms(gap?: {
+    window: SyncWindow;
+    onCompleted: () => Promise<void>;
+    kind?: 'rescan' | 'gap';
+  }) {
     try {
-      const result = await runSmsSync(gap ? { window: gap.window } : {});
+      const result = await runSmsSync(gap ? { window: gap.window, kind: gap.kind } : {});
       if (!result) {
         ToastAndroid.show('A scan is already running.', ToastAndroid.SHORT);
         return;
@@ -132,7 +190,9 @@ export function HomeScreen() {
       if (gap) {
         if (result.cancelled) {
           ToastAndroid.show(
-            `${formatSyncToast(result)} · start date not changed`,
+            gap.kind === 'rescan' || gap.kind === 'gap'
+              ? formatSyncToast(result)
+              : `${formatSyncToast(result)} · start date not changed`,
             ToastAndroid.LONG,
           );
         } else {
@@ -241,6 +301,15 @@ export function HomeScreen() {
         <StatTile label="EXPENSES" amountMinor={periodExpense} caption={periodCaption} tone="expense" />
       </View>
 
+      {showReaderHint ? (
+        <ReaderUpgradeHint
+          onReread={() => handleRescan()}
+          onDismiss={() => useSmsReaderStore.getState().markReaderSeen().catch(() => undefined)}
+        />
+      ) : null}
+
+      <NewAccountsEntry count={newAccountRows.length} onPress={() => openNewAccounts()} />
+
       <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
 
       <ReviewCard onPress={() => navigation.navigate('Review')} />
@@ -340,6 +409,14 @@ export function HomeScreen() {
         onOpenRestore={() => {
           setSettingsOpen(false);
           navigation.navigate('Restore');
+        }}
+        onRescan={() => {
+          setSettingsOpen(false);
+          handleRescan();
+        }}
+        onOpenNotUnderstood={() => {
+          setSettingsOpen(false);
+          navigation.navigate('NotUnderstood');
         }}
         onReplayTour={() => {
           setSettingsOpen(false);

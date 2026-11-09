@@ -14,7 +14,14 @@ import { AccountType } from '../../domain/accounts/account.types';
  * to re-canonicalize existing rows.
  */
 
-export const ACCOUNT_KEY_NORMALIZER_VERSION = 1;
+/**
+ * v2 (R5): more banks in the alias map (appended — every v1 alias keeps its
+ * v1 result, except "Central Bank of India" and "South Indian Bank", which v1
+ * misread as Bank of India / unknown), plus two last-four fallbacks
+ * ("ending 1234" without a keyword, and a 5-digit masked card tail → its last
+ * 4). Both only fill keys v1 left 'unknown' / ''.
+ */
+export const ACCOUNT_KEY_NORMALIZER_VERSION = 2;
 
 export interface AccountKey {
   /** Canonical lowercase bank id, e.g. 'hdfc' | 'federal' | 'sbi' | 'unknown'. */
@@ -38,6 +45,10 @@ export interface AccountKey {
  * checked first.
  */
 const BANK_ALIASES: ReadonlyArray<readonly [string, string]> = [
+  // v2: must precede 'Bank of India' / 'Indian Bank' (overlapping substrings).
+  ['Central Bank of India', 'central'],
+  ['South Indian Bank', 'sib'],
+  ['Indian Overseas Bank', 'iob'],
   ['State Bank of India', 'sbi'],
   ['Union Bank of India', 'union'],
   ['Punjab National Bank', 'pnb'],
@@ -70,6 +81,28 @@ const BANK_ALIASES: ReadonlyArray<readonly [string, string]> = [
   ['BOI', 'boi'],
   ['Canara', 'canara'],
   ['IDFC', 'idfc'],
+  // v2 additions (after every v1 alias, so v1 results are unchanged).
+  ['Bank of Baroda', 'bob'],
+  ['BoB', 'bob'],
+  ['Indian Bank', 'indian'],
+  ['IOB', 'iob'],
+  ['IndusInd Bank', 'indusind'],
+  ['IndusInd', 'indusind'],
+  ['CSB Bank', 'csb'],
+  ['Kerala Gramin Bank', 'kgb'],
+  ['Kerala Gramin', 'kgb'],
+  ['AU Small Finance Bank', 'au'],
+  ['AU Bank', 'au'],
+  ['RBL Bank', 'rbl'],
+  ['Bandhan Bank', 'bandhan'],
+  ['DBS Bank', 'dbs'],
+  ['Paytm Payments Bank', 'paytm'],
+  ['Paytm', 'paytm'],
+  ['Airtel Payments Bank', 'airtel'],
+  ['American Express', 'amex'],
+  ['Amex', 'amex'],
+  ['OneCard', 'onecard'],
+  ['Amazon Pay', 'amazonpay'],
 ];
 
 function escapeRegExp(text: string): string {
@@ -112,11 +145,47 @@ function matchBankCanonical(body: string): string {
   return 'unknown';
 }
 
-function extractAccountKind(body: string): AccountType {
+/**
+ * v2 (R5, owner report 2026-11-06): "… Bank Card XX1234 …" (a masked card
+ * number with no "credit card" / "card ending" wording) is a card, not UPI.
+ * A "Debit Card XX1234" stays with the v1 rules (bank a/c wording → bank,
+ * otherwise upi) — v1 never called a debit card a credit card unless it said
+ * "card ending".
+ */
+const MASKED_CARD_PATTERN = /\bcard\s*(?:no\.?\s*)?[x*]{1,8}\s*\d{3,5}\b/i;
+const DEBIT_CARD_PATTERN = /\bdebit\s*card\b/i;
+
+/** The v1 account-kind rule, unchanged (legacy decision keys use it). */
+export function accountKindV1(body: string): AccountType {
   if (CREDIT_CARD_PATTERN.test(body)) return 'credit_card';
   if (BANK_ACCOUNT_PATTERN.test(body)) return 'bank';
   return 'upi';
 }
+
+/** U11: "Acct XX1234" or "A/cX1234" — an account word glued to its mask. */
+const V2_BANK_ACCOUNT_PATTERN = /\bacct\b|\ba\/?c\s*[x*#.]+\s*\d{3,4}\b/i;
+
+/** U3: HDFC "On HDFC Bank Card 1234" (an unmasked 4-digit card tail). */
+const BANK_CARD_PATTERN = /\bbank\s+card\s*(?:no\.?\s*)?[x*]{0,8}\s*\d{4}\b/i;
+
+function extractAccountKind(body: string): AccountType {
+  // U3: a debit card draws on a bank account — never a credit card, even
+  // when it says "card ending 1234" (v1's credit-card wording).
+  if (DEBIT_CARD_PATTERN.test(body) && !/\bcredit\s*card\b/i.test(body)) return 'bank';
+  const v1 = accountKindV1(body);
+  if (v1 === 'upi' && (MASKED_CARD_PATTERN.test(body) || BANK_CARD_PATTERN.test(body))) {
+    return 'credit_card';
+  }
+  // U11: "Acct XX1234" / "A/cX1234" (v1 missed both) is a bank account.
+  if (v1 === 'upi' && V2_BANK_ACCOUNT_PATTERN.test(body)) return 'bank';
+  return v1;
+}
+
+/** v2: "ending 1234" / "ending with XX1234" without an account/card keyword. */
+const ENDING_LAST_FOUR_PATTERN = /\bending\s*(?:with\s*)?[x*]{0,6}\s*(\d{4})\b/i;
+
+/** v2: a 5-digit masked card tail ("card ** 12345") → its last 4 digits. */
+const MASKED_FIVE_PATTERN = /[x*]{2,}\s*\d(\d{4})(?![A-Za-z0-9])/i;
 
 function extractLastFour(body: string): string {
   const keywordMatch = body.match(LAST_FOUR_PATTERN);
@@ -124,6 +193,12 @@ function extractLastFour(body: string): string {
 
   const maskMatch = body.match(MASKED_LAST_FOUR_PATTERN);
   if (maskMatch) return maskMatch[1];
+
+  const endingMatch = body.match(ENDING_LAST_FOUR_PATTERN);
+  if (endingMatch) return endingMatch[1];
+
+  const fiveMatch = body.match(MASKED_FIVE_PATTERN);
+  if (fiveMatch) return fiveMatch[1];
 
   return '';
 }

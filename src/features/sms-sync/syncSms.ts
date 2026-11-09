@@ -8,7 +8,15 @@ import {
   checkSmsPermission,
   requestSmsPermission,
 } from '../../native/android/permissions/smsPermission';
-import { parseSmsMessage } from './smsParser';
+import { PARSER_VERSION, readSmsMessage } from './smsParser';
+import {
+  SmsUnparsedInput,
+  smsUnparsedRepository,
+  unparsedKey,
+} from '../../data/repositories/smsUnparsed.repository';
+import { settingsRepository } from '../../data/repositories/settings.repository';
+import { smsDeletedRefsRepository } from '../../data/repositories/smsDeletedRefs.repository';
+import { suggestionCandidatesRepository } from '../../data/repositories/suggestionCandidates.repository';
 import { Transaction } from '../../domain/transactions/transaction.types';
 import {
   autoApproveAfterSync,
@@ -27,6 +35,7 @@ import { activeAccounts } from '../../domain/accounts/account.rules';
 import { UNCATEGORISED_ID } from '../../domain/categories/category.rules';
 import { groupUnmatchedCandidates } from './suggestionGroups';
 import { useSuggestionSession } from './suggestionSession';
+import { useNewAccountsStore } from './newAccountsStore';
 import { ParsedSmsTransaction } from './smsParser';
 import {
   computeSyncWindow,
@@ -56,6 +65,8 @@ export interface SmsSyncResult {
   cancelled: boolean;
   /** R4b: the user said no to the large-scan warning — nothing was read. */
   declined: boolean;
+  /** R5: messages recorded in "Messages not understood" by THIS run. */
+  notUnderstood: number;
   suggestions: SmsAccountSuggestion[];
   /**
    * R2b: id of this run's in-memory suggestion session (the groups with
@@ -107,7 +118,21 @@ export interface CancelToken {
   cancelled: boolean;
 }
 
+/**
+ * R5: what started the run. 'manual' = Sync SMS, 'gap' = Settings start moved
+ * earlier, 'rescan' = "Re-read messages with the new reader", 'auto' = a new
+ * SMS arrived (RECEIVE_SMS). Only 'rescan' and 'auto' write a run audit row.
+ */
+export type SyncKind = 'manual' | 'gap' | 'rescan' | 'auto';
+
 export interface SyncOptions {
+  /** R5: default 'manual' (or 'gap' when `window` is given). */
+  kind?: SyncKind;
+  /**
+   * R5: ask for READ_SMS when missing (default true). Auto-read passes false:
+   * a background run never shows a permission prompt.
+   */
+  requestPermission?: boolean;
   /**
    * Explicit window (Settings "start moved earlier" gap scan). A gap scan
    * never moves `sms_last_synced_at`. Default: the normal sync window.
@@ -156,15 +181,16 @@ function emptyResult(declined: boolean): SmsSyncResult {
     heldForDuplicate: 0,
     cancelled: false,
     declined,
+    notUnderstood: 0,
     suggestions: [],
     suggestionRunId: '',
   };
 }
 
 /**
- * User-triggered SMS sync. Reads the existing inbox (no background listening)
- * inside a date window, page by page (R4b: no 200-message cap), parses each
- * message with the v1 heuristic parser, dedupes against existing
+ * SMS sync. Reads the existing inbox inside a date window, page by page
+ * (R4b: no 200-message cap), reads each message with the R5 reader v2
+ * (classes; not-understood messages recorded by id/date/reason only), dedupes against existing
  * `sourceReferenceHash` values, and creates `pending` transactions. Nothing is
  * auto-approved by default (same Detect -> Review -> Approve -> Record principle
  * as manual entry).
@@ -196,6 +222,9 @@ function emptyResult(declined: boolean): SmsSyncResult {
  */
 export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult> {
   const granted = await checkSmsPermission();
+  if (!granted && options.requestPermission === false) {
+    throw new SmsSyncError('permission-denied', 'SMS permission was not granted');
+  }
   if (!granted) {
     const requested = await requestSmsPermission();
     if (requested === 'never_ask_again') {
@@ -216,6 +245,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
 
   const now = options.now ?? Date.now;
   const isGapScan = options.window != null;
+  const kind: SyncKind = options.kind ?? (isGapScan ? 'gap' : 'manual');
   const window = options.window ?? currentSyncWindow(now());
   const pageSize = Math.max(1, options.pageSize ?? SMS_PAGE_SIZE);
   const cancel = options.cancel ?? { cancelled: false };
@@ -240,6 +270,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       .map(transaction => transaction.sourceReferenceHash)
       .filter((hash): hash is string => hash != null),
   );
+  // R5-fix C4: SMS items the user DELETED never come back (hash tombstones).
+  const deletedRefs = await smsDeletedRefsRepository.listHashes().catch(() => new Set<string>());
+  for (const hash of deletedRefs) existingHashes.add(hash);
 
   // D10: SMS owned by a soft-deleted account (exact type+lastFour match, or
   // a 'deleted' decision for its normalized key) are dropped — not imported,
@@ -247,6 +280,14 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   // R2b: explicit Add/Link decisions route a key to its account; Ignore drops it.
   const deletedDecisionKeys = await accountRepository.listDeletedDecisionKeys();
   const decisions = toSuggestionDecisions(await accountRepository.listSuggestionDecisions());
+
+  // R5: open "not understood" rows — resolved when this reader understands them.
+  const openUnparsed = await smsUnparsedRepository.openKeys().catch(() => new Set<string>());
+  const resolvedUnparsed: Array<{ smsId: string; smsDate: number }> = [];
+  let notUnderstood = 0;
+  // R5: in-run duplicate guard — two SMS with the same reference, type and
+  // amount are one transaction (the reference is only ever held hashed).
+  const seenRefs = new Set<string>();
 
   // Snapshot the policy once so a settings change mid-sync can't mix modes.
   const { approvalMode, autoApproveThreshold } = store;
@@ -271,9 +312,40 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     }
     if (newestSeenMs == null && page.length > 0) newestSeenMs = page[0].date;
 
-    const candidates = page
-      .map(message => parseSmsMessage(message))
-      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null);
+    const candidates: ParsedSmsTransaction[] = [];
+    const unparsed: SmsUnparsedInput[] = [];
+    for (const message of page) {
+      const read = readSmsMessage(message);
+      const key = unparsedKey(message.id, message.date);
+      if (read.notUnderstood) {
+        if (!existingHashes.has(`sms-${message.id}-${message.date}`)) {
+          unparsed.push({
+            smsId: message.id,
+            smsDate: message.date,
+            reasonCode: read.notUnderstood.reason,
+            institution: read.institution,
+            parserVersion: PARSER_VERSION,
+          });
+        }
+        continue;
+      }
+      if (openUnparsed.has(key) && read.label !== 'not_financial') {
+        resolvedUnparsed.push({ smsId: message.id, smsDate: message.date });
+      }
+      const candidate = read.transaction;
+      if (!candidate) continue;
+      if (candidate.refDigest) {
+        const refKey = `${candidate.refDigest}:${candidate.type}:${candidate.amountMinor}`;
+        if (seenRefs.has(refKey)) continue;
+        seenRefs.add(refKey);
+      }
+      candidates.push(candidate);
+    }
+    if (unparsed.length > 0) {
+      // R5-fix C8: only rows really inserted count (a dismissed or resolved
+      // row seen again in the overlap is ignored by INSERT OR IGNORE).
+      notUnderstood += await smsUnparsedRepository.recordMany(unparsed).catch(() => 0);
+    }
     const fresh = filterNewCandidates(candidates, existingHashes);
     for (const candidate of fresh) existingHashes.add(candidate.sourceReferenceHash);
 
@@ -293,6 +365,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
         parsed.type,
         parsed.merchantName,
         latestStore.merchantRules,
+        parsed.salary === true,
       );
       if (categoryId == null) continue;
 
@@ -348,11 +421,56 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     }
   }
 
+  if (resolvedUnparsed.length > 0) {
+    await smsUnparsedRepository.resolveMany(resolvedUnparsed).catch(() => undefined);
+  }
+
+  // R5 T5: re-scan and auto-read runs are audited — counts only.
+  if (kind === 'rescan' || (kind === 'auto' && (created > 0 || notUnderstood > 0))) {
+    await settingsRepository
+      .setMany([], [
+        {
+          eventType: kind === 'rescan' ? 'sms_rescan' : 'auto_read',
+          actor: kind === 'rescan' ? 'user' : 'system',
+          metadata: {
+            kind: kind === 'rescan' ? 'sms_rescan' : 'auto_read',
+            counts: { scanned, created, notUnderstood, autoApproved },
+          },
+        },
+      ])
+      .catch(() => undefined);
+  }
+
   // R2b: keep each suggestion's waiting candidates in the in-memory session
   // (not nav params, not the DB) so New Accounts Found can show them.
+  // R5-fix C3: MERGE into the current session — an open review keeps its run
+  // id and every group the user has not acted on.
   const groups = groupUnmatchedCandidates(unmatchedAll);
-  const suggestionRunId = useSuggestionSession.getState().start(groups);
-  const suggestions = groups.map(group => ({ ...group.suggestion }));
+  const recorded = new Set(
+    useTransactionsStore
+      .getState()
+      .transactions.map(t => t.sourceReferenceHash)
+      .filter((hash): hash is string => hash != null),
+  );
+  for (const hash of deletedRefs) recorded.add(hash);
+  const suggestionRunId = useSuggestionSession.getState().merge(groups, recorded);
+  const suggestions = useSuggestionSession.getState().groups.map(group => ({ ...group.suggestion }));
+
+  // R5-fix C2: persist a counts-only summary of undecided keys so "New
+  // accounts found" survives the cursor moving (auto-read) and app restarts.
+  await suggestionCandidatesRepository
+    .recordRun(
+      groups.map(group => ({
+        bankCanonical: group.bankCanonical,
+        accountKind: group.suggestion.accountKind,
+        lastFour: group.suggestion.lastFour ?? '',
+        dates: group.items.map(item => Date.parse(item.occurredAt)),
+      })),
+      window,
+      completed,
+    )
+    .catch(() => undefined);
+  await useNewAccountsStore.getState().refresh();
   return {
     scanned,
     created,
@@ -363,6 +481,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     heldForDuplicate: heldForDuplicate.length,
     cancelled: !completed,
     declined: false,
+    notUnderstood,
     suggestions,
     suggestionRunId,
   };

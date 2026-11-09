@@ -7,7 +7,7 @@ import {
   pairedTransactionIds,
   TransferDismissal,
 } from '../../domain/transfers/transfer.rules';
-import { ParsedSmsTransaction } from './smsParser';
+import { ParsedSmsTransaction, PARSER_VERSION } from './smsParser';
 import {
   DuplicateDismissal,
   duplicatePairIds,
@@ -15,12 +15,23 @@ import {
 } from '../../domain/duplicates/duplicate.rules';
 import { activeAccounts, deletedAccounts } from '../../domain/accounts/account.rules';
 import { accountKeyToString, ACCOUNT_KEY_NORMALIZER_VERSION } from './normalizeAccountKey';
+import { legacyKeyString } from './legacy/normalizeAccountKeyV1';
 import { normalizeMerchant } from '../../domain/merchants/normalizeMerchant';
 import { categoryFitsType, UNCATEGORISED_ID } from '../../domain/categories/category.rules';
 import type { CreateTransactionInput } from '../../data/repositories/transaction.repository';
 
-/** Parser version stamped on every SMS-derived transaction. */
-export const SMS_PARSER_VERSION = 'sms-heuristic-v1';
+/** Parser version stamped on every SMS-derived transaction (R5: reader v2). */
+export const SMS_PARSER_VERSION = `sms-reader-v${PARSER_VERSION}`;
+
+/**
+ * R5: stamped on an item the USER added from "Messages not understood". The
+ * row keeps the SMS reference (dedupe + "View original SMS"); its audit is
+ * 'created' by the user, not 'detected'.
+ */
+export const SMS_USER_ADDED_PARSER_VERSION = 'sms-user-added';
+
+/** R5: the seeded "Salary & Wages" category (connection.ts seed). */
+export const SALARY_CATEGORY_ID = 'cat-salary';
 
 /**
  * Pure, dependency-free helpers for SMS sync so the account/category fallback
@@ -72,6 +83,7 @@ export function resolveCategoryIdForSms(
   type: TransactionType,
   merchantName: string = '',
   rules: Readonly<Record<string, string>> = {},
+  salary: boolean = false,
 ): string | null {
   const key = normalizeMerchant(merchantName);
   const ruleCategoryId = key !== '' ? rules[key] : undefined;
@@ -79,6 +91,15 @@ export function resolveCategoryIdForSms(
     const ruled = categories.find(category => category.id === ruleCategoryId);
     if (ruled && ruled.archivedAt === null && categoryFitsType(ruled.type, type)) {
       return ruled.id;
+    }
+  }
+
+  // R5: a salary credit goes to the seeded Salary category (if it still
+  // exists, is not archived and fits income). A merchant rule still wins.
+  if (salary && type === 'income') {
+    const salaryCategory = categories.find(category => category.id === SALARY_CATEGORY_ID);
+    if (salaryCategory && salaryCategory.archivedAt === null && categoryFitsType(salaryCategory.type, type)) {
+      return salaryCategory.id;
     }
   }
 
@@ -184,6 +205,27 @@ export function decisionKeyFor(
   });
 }
 
+/**
+ * R5-fix C1: the decision key parser v1 produced for this candidate — computed
+ * from the same body by the frozen v1 normalizer (`legacyKey`), never guessed.
+ * Null when it equals the primary key or is unknown (row built outside the reader).
+ */
+export function legacyDecisionKeyFor(
+  candidate: Pick<ParsedSmsTransaction, 'bankCanonical' | 'accountKind' | 'lastFour' | 'legacyKey'>,
+): string | null {
+  if (!candidate.legacyKey) return null;
+  const legacy = legacyKeyString(candidate.legacyKey);
+  return legacy === decisionKeyFor(candidate) ? null : legacy;
+}
+
+/** v1's account match for this SMS: v1 kind + v1 last-4 (exact, like v1). */
+function legacyAccountMatch(active: Account[], parsed: ParsedSmsTransaction): string | null {
+  const legacy = parsed.legacyKey;
+  if (!legacy || legacy.lastFour === '') return null;
+  if (legacy.accountKind === parsed.accountKind && legacy.lastFour === parsed.lastFour) return null;
+  return resolveAccountIdForSms(active, { accountKind: legacy.accountKind, lastFour: legacy.lastFour });
+}
+
 export interface PartitionedCandidates {
   matched: Array<{ parsed: ParsedSmsTransaction; accountId: string }>;
   /** Owned by a soft-deleted account or an ignored key — counted into skipped. */
@@ -213,13 +255,18 @@ export function partitionCandidates(
   const result: PartitionedCandidates = { matched: [], dropped: [], unmatched: [] };
 
   for (const parsed of candidates) {
-    const accountId = resolveAccountIdForSms(active, parsed);
+    // R5-fix C1: an account v1 matched for this SMS (v1 kind + v1 last-4) keeps matching.
+    const accountId = resolveAccountIdForSms(active, parsed) ?? legacyAccountMatch(active, parsed);
     if (accountId != null) {
       result.matched.push({ parsed, accountId });
       continue;
     }
     const key = decisionKeyFor(parsed);
-    const routedId = decisions.routes.get(key);
+    // R5-fix C1: decisions saved under v1 apply under v1's EXACT key for this
+    // body (frozen v1 normalizer) — never a guessed 'unknown' variant.
+    const legacyKey = legacyDecisionKeyFor(parsed);
+    const routedId =
+      decisions.routes.get(key) ?? (legacyKey != null ? decisions.routes.get(legacyKey) : undefined);
     if (routedId !== undefined) {
       if (active.some(account => account.id === routedId)) {
         result.matched.push({ parsed, accountId: routedId });
@@ -232,6 +279,7 @@ export function partitionCandidates(
     }
     if (
       decisions.ignored.has(key) ||
+      (legacyKey != null && (decisions.ignored.has(legacyKey) || deletedDecisionKeys.has(legacyKey))) ||
       isOwnedByDeletedAccount(deleted, deletedDecisionKeys, parsed)
     ) {
       result.dropped.push(parsed);

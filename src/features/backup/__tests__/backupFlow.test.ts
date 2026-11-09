@@ -169,7 +169,14 @@ describeSql('R4e backup flow', () => {
     const opened = await openBackup(picked, PASSWORD);
     expect(mockNative.decryptBackupFile).toHaveBeenCalledWith(PICKED.uri, PASSWORD);
     expect(opened.summary).toMatchObject({ transactions: 4, accounts: 2 });
+    // R5-fix C10: the sync guard is held for the whole restore + reload.
+    const guard: boolean[] = [];
+    const unsubscribe = useSyncRunStore.subscribe(state => guard.push(state.restoring));
     await restoreBackup(opened, NOW);
+    unsubscribe();
+    expect(guard[0]).toBe(true);
+    expect(guard[guard.length - 1]).toBe(false);
+    expect(useSyncRunStore.getState().restoring).toBe(false);
 
     const state = useTransactionsStore.getState();
     expect(state.transactions.map(t => t.id).sort()).toEqual(['qa-t1', 'qa-t2', 'qa-t3', 'qa-t4']);
@@ -279,5 +286,12 @@ describeSql('R4e backup flow', () => {
     useSyncRunStore.setState({ running: true });
     await expect(pickBackup()).rejects.toMatchObject({ code: 'busy' });
     expect(mockNative.pickBackupFile).not.toHaveBeenCalled();
+  });
+
+  it('R5-fix C10: a second restore while one runs is refused', async () => {
+    newDb();
+    useSyncRunStore.setState({ running: false, restoring: true });
+    await expect(restoreBackup({} as never, NOW)).rejects.toMatchObject({ code: 'busy' });
+    useSyncRunStore.setState({ restoring: false });
   });
 });

@@ -1,4 +1,5 @@
 import type { TransactionStatus, TransactionType } from '../transactions/transaction.types';
+import type { AccountType } from '../accounts/account.types';
 import type { TransferPairPrevious } from '../transfers/transfer.rules';
 import type { DuplicateRowSnapshot } from '../duplicates/duplicate.rules';
 
@@ -9,6 +10,12 @@ import type { DuplicateRowSnapshot } from '../duplicates/duplicate.rules';
 export type AuditEventType =
   | 'detected'
   | 'created'
+  /**
+   * R5 (owner, 2026-11-06): a record the user typed (Add Record, or "Add as
+   * transaction" from Messages not understood) — saved straight as approved.
+   * 'created' remains for transfers and pre-R5 manual rows (pending).
+   */
+  | 'added'
   | 'auto_approved'
   | 'approved'
   | 'edited'
@@ -36,7 +43,14 @@ export type AuditEventType =
   /** R4b: Pending "Approve all" → Undo put an approved item back to pending. */
   | 'approval_undone'
   /** R4e: all data replaced from a backup file (row counts per table only). */
-  | 'backup_restored';
+  | 'backup_restored'
+  /** R5: "Re-read messages with the new reader" run (counts only). */
+  | 'sms_rescan'
+  /** R5: a run started by a new SMS arriving (counts only). */
+  | 'auto_read'
+  /** R5: New Accounts Found → "Link to existing account" / its Undo. */
+  | 'account_linked'
+  | 'account_unlinked';
 
 export type AuditActor = 'system' | 'user';
 
@@ -46,7 +60,9 @@ export type AuditedSettingKey =
   | 'auto_approve_threshold'
   /** R4b: dates/mode names only — never SMS content. */
   | 'sms_sync_start_mode'
-  | 'sms_sync_start_at';
+  | 'sms_sync_start_at'
+  /** R5: 'on' / 'off' only. */
+  | 'sms_auto_read';
 
 /**
  * Small typed payloads only. NEVER SMS text, SMS sender, or
@@ -62,6 +78,7 @@ export type AuditMetadata =
    */
   | { kind: 'detected'; confidence: number | null; transactionType?: TransactionType }
   | { kind: 'created'; transactionType: TransactionType }
+  | { kind: 'added'; transactionType: TransactionType }
   | { kind: 'approved'; transactionType: TransactionType }
   | { kind: 'rejected'; transactionType: TransactionType }
   | { kind: 'approval_undone'; transactionType: TransactionType }
@@ -130,7 +147,31 @@ export type AuditMetadata =
    * R4e: restored from a backup — row counts per table name only. Never
    * the password, the file name, the JSON or any row content.
    */
-  | { kind: 'backup_restored'; counts: Record<string, number> };
+  | { kind: 'backup_restored'; counts: Record<string, number> }
+  /**
+   * R5: an SMS reader run — COUNTS ONLY (never SMS text, sender, merchant or
+   * amount).
+   */
+  | { kind: 'sms_rescan' | 'auto_read'; counts: SmsRunCounts }
+  /**
+   * R5: a detected SMS account key linked to an existing account (or the
+   * Undo). Public bank id + kind + item count only — no last-4, no SMS text.
+   * The audit row's account_id is the chosen account.
+   */
+  | {
+      kind: 'account_linked' | 'account_unlinked';
+      bankCanonical: string;
+      accountKind: AccountType;
+      items: number;
+    };
+
+/** R5: counts of one reader run. */
+export interface SmsRunCounts {
+  scanned: number;
+  created: number;
+  notUnderstood: number;
+  autoApproved: number;
+}
 
 export interface AuditEvent {
   id: string;

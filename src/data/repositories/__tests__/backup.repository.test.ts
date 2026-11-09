@@ -182,7 +182,22 @@ describeSql('backup repository (real SQLite)', () => {
   });
 
   it('N-1 → N specifically: the backup has no newest table and still restores', async () => {
+    // R5-fix C4: migration 8 adds the backed-up sms_deleted_refs again.
     const version = CURRENT_SCHEMA_VERSION - 1;
+    const tables = rowsAt(version);
+    expect(tables.sms_deleted_refs).toBeUndefined();
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
+    expect(target.rows('sms_deleted_refs')).toEqual([]);
+  });
+
+  it('a backup without migration 7 (v6) still restores', async () => {
+    const version = 6;
     const tables = rowsAt(version);
     expect(tables.duplicate_pair_dismissals).toBeUndefined();
     const payload = parseBackupJson(

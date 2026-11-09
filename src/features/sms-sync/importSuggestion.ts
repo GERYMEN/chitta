@@ -10,6 +10,9 @@ import { autoApproveAfterSync, buildSmsPendingRow, resolveCategoryIdForSms } fro
 import { SuggestionGroup } from './suggestionGroups';
 import { getSuggestionGroup, useSuggestionSession } from './suggestionSession';
 import { showSnackbar } from '../../shared/ui/Snackbar';
+import { smsDeletedRefsRepository } from '../../data/repositories/smsDeletedRefs.repository';
+import { suggestionCandidatesRepository } from '../../data/repositories/suggestionCandidates.repository';
+import { useNewAccountsStore } from './newAccountsStore';
 import { openPendingForAccount } from '../../app/navigation/navigationRef';
 
 export type PendingRowInput = Omit<CreateTransactionInput, 'accountId'>;
@@ -32,7 +35,14 @@ export function preparePendingRows(
   let uncategorised = 0;
   for (const parsed of items) {
     if (seen.has(parsed.sourceReferenceHash)) continue;
-    const categoryId = resolveCategoryIdForSms(categories, parsed.type, parsed.merchantName, rules);
+    // R5-fix C7: a salary credit goes to Salary here too (same as Sync SMS).
+    const categoryId = resolveCategoryIdForSms(
+      categories,
+      parsed.type,
+      parsed.merchantName,
+      rules,
+      parsed.salary === true,
+    );
     if (categoryId == null) continue;
     seen.add(parsed.sourceReferenceHash);
     rows.push(buildSmsPendingRow(parsed, categoryId, detectedAt));
@@ -53,6 +63,8 @@ export function groupAccountKey(group: SuggestionGroup): AccountKey {
 
 export interface SuggestionImportOutcome {
   accountId: string;
+  /** R5: ids of the rows this import inserted (Undo of a link). */
+  transactionIds: string[];
   /** Rows inserted (after dedup). */
   created: number;
   /** Of those, approved by the opt-in auto rule (same rule as Sync SMS). */
@@ -79,6 +91,10 @@ async function runImport(
       .map(transaction => transaction.sourceReferenceHash)
       .filter((hash): hash is string => hash != null),
   );
+  // R5-fix C4: items the user deleted are never re-imported.
+  for (const hash of await smsDeletedRefsRepository.listHashes().catch(() => new Set<string>())) {
+    existingHashes.add(hash);
+  }
   const { rows, uncategorised } = preparePendingRows(
     group.items,
     store.categories,
@@ -118,8 +134,10 @@ async function runImport(
     if (after?.status === 'approved') autoApproved++;
   }
 
+  await useNewAccountsStore.getState().refresh();
   return {
     accountId: result.accountId,
+    transactionIds: result.transactions.map(t => t.id),
     created: result.transactions.length,
     autoApproved,
     uncategorised,
@@ -156,21 +174,77 @@ export async function linkSuggestion(
   return outcome;
 }
 
+/**
+ * R5 Undo of "Link to existing" — exact (R5-fix C11): remove the 'linked'
+ * decision and EVERY row the link inserted that still exists (pending, or
+ * approved by the opt-in auto rule during the link), each audited 'deleted';
+ * then put the card back with all its items — into the current session even
+ * if a sync ran meanwhile — and back into the stored "New accounts found"
+ * summary, so Home can reopen it after the user left the screen. Returns the
+ * number of rows removed.
+ */
+export async function undoLinkSuggestion(
+  runId: string,
+  group: SuggestionGroup,
+  outcome: SuggestionImportOutcome,
+): Promise<number> {
+  const store = useTransactionsStore.getState();
+  const ids = new Set(outcome.transactionIds);
+  const rows = store.transactions.filter(
+    t => ids.has(t.id) && (t.status === 'pending' || t.status === 'approved'),
+  );
+  const removed = await store.undoLinkSuggestion({
+    decisionKey: groupAccountKey(group),
+    accountId: outcome.accountId,
+    pending: rows,
+  });
+  const session = useSuggestionSession.getState();
+  if (session.runId === runId) session.restore(runId, group);
+  else session.merge([group]);
+  const key = groupAccountKey(group);
+  await suggestionCandidatesRepository
+    .recordRun(
+      [
+        {
+          bankCanonical: key.bankCanonical,
+          accountKind: key.accountKind,
+          lastFour: key.lastFour,
+          dates: group.items.map(item => Date.parse(item.occurredAt)),
+        },
+      ],
+      { sinceMs: Number.MAX_SAFE_INTEGER, beforeMs: Number.MAX_SAFE_INTEGER },
+      false,
+    )
+    .catch(() => undefined);
+  await useNewAccountsStore.getState().refresh();
+  return removed;
+}
+
 /** "Ignore": record the 'ignored' decision and drop the card. */
 export async function ignoreSuggestionGroup(runId: string, key: string): Promise<boolean> {
   const group = getSuggestionGroup(runId, key);
   if (!group) return false;
   await useTransactionsStore.getState().ignoreSuggestion(groupAccountKey(group));
   useSuggestionSession.getState().remove(runId, key);
+  await useNewAccountsStore.getState().refresh();
   return true;
 }
 
-/** Snackbar after Add/Link: "N transactions added to Pending — VIEW". */
-export function showImportSnackbar(outcome: SuggestionImportOutcome, linked: boolean): void {
+/**
+ * Snackbar after Add/Link: "N transactions added to Pending — VIEW". R5: a
+ * link passes `onUndo`, which takes the action slot instead ("UNDO").
+ */
+export function showImportSnackbar(
+  outcome: SuggestionImportOutcome,
+  linked: boolean,
+  onUndo?: () => void,
+): void {
   const hasPending = outcome.created - outcome.autoApproved > 0;
   showSnackbar({
     message: importSnackbarMessage(outcome, linked),
-    ...(hasPending
+    ...(onUndo
+      ? { actionLabel: 'Undo', onAction: onUndo }
+      : hasPending
       ? { actionLabel: 'View', onAction: () => openPendingForAccount(outcome.accountId) }
       : {}),
   });

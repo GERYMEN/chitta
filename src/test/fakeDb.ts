@@ -32,6 +32,9 @@ const PRIMARY_KEY: Record<string, string[]> = {
   account_suggestion_decisions: ['bank_canonical', 'account_kind', 'last_four'],
   transfer_pair_dismissals: ['debit_id', 'credit_id'],
   duplicate_pair_dismissals: ['a_id', 'b_id'],
+  sms_unparsed: ['sms_id', 'sms_date'],
+  account_suggestion_candidates: ['bank_canonical', 'account_kind', 'last_four'],
+  sms_deleted_refs: ['source_reference_hash'],
 };
 
 function keyFor(table: string, row: Row): string {
@@ -98,6 +101,21 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
           existing[col] = value === '?' ? params[p++] : value === 'NULL' ? null : value;
         }
         return { rows: [], rowsAffected: 1 };
+      }
+
+      // DELETE FROM t WHERE a = ? AND b = ? [AND c = ?] (composite keys).
+      m = /^DELETE FROM (\w+) WHERE (\w+ = \?(?: AND \w+ = \?)+)$/i.exec(sql);
+      if (m) {
+        const cols = m[2].split(/ AND /i).map(part => part.split('=')[0].trim());
+        const t = table(m[1]);
+        let affected = 0;
+        for (const [key, row] of Array.from(t.entries())) {
+          if (cols.every((col, i) => String(row[col]) === String(params[i]))) {
+            t.delete(key);
+            affected++;
+          }
+        }
+        return { rows: [], rowsAffected: affected };
       }
 
       m = /^DELETE FROM (\w+) WHERE (\w+) = \?$/i.exec(sql);

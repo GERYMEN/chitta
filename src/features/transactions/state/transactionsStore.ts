@@ -56,8 +56,10 @@ import {
   ImportSuggestionInput,
   ImportSuggestionResult,
   suggestionRepository,
+  UndoLinkInput,
 } from '../../../data/repositories/suggestion.repository';
 import type { AccountKey } from '../../sms-sync/normalizeAccountKey';
+import { SMS_USER_ADDED_PARSER_VERSION } from '../../sms-sync/smsSyncLogic';
 import { settingsRepository } from '../../../data/repositories/settings.repository';
 import {
   ApprovalMode,
@@ -101,6 +103,11 @@ export interface TransferInput {
   amountMinor: number;
   occurredAt: string;
   note: string | null;
+  /**
+   * R5-fix U9: added from "Messages not understood" — the transfer keeps the
+   * SMS reference (dedupe on later syncs + "View original SMS").
+   */
+  smsReference?: { hash: string; parserVersion: string } | null;
 }
 
 export interface ProfilePatch {
@@ -215,6 +222,8 @@ interface TransactionsState {
   importSuggestion: (input: ImportSuggestionInput) => Promise<ImportSuggestionResult>;
   /** R2b: Ignore a suggested account key (never suggested/imported again). */
   ignoreSuggestion: (key: AccountKey) => Promise<void>;
+  /** R5: Undo of "Link to existing" (see suggestionRepository.undoLink). */
+  undoLinkSuggestion: (input: UndoLinkInput) => Promise<number>;
   /** R2: "Always use <category> for <merchant>" — audited 'rule_saved'. */
   saveMerchantRule: (
     merchantName: string,
@@ -300,6 +309,9 @@ async function loadAll() {
   };
 }
 
+/** R5-fix C10: the hydrate currently running (shared by concurrent callers). */
+let hydrateInFlight: Promise<void> | null = null;
+
 export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   transactions: [],
   accounts: [],
@@ -326,10 +338,20 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   setSelectedPeriod: period => set({ selectedPeriod: period }),
 
-  hydrate: async () => {
-    await runMigrations();
-    await get().reloadFromDatabase();
-    set({ isHydrated: true });
+  // R5-fix C10: single-flight — a headless auto-read and the app launch
+  // share ONE in-flight hydrate instead of two overlapping full reloads.
+  hydrate: () => {
+    if (hydrateInFlight) return hydrateInFlight;
+    hydrateInFlight = (async () => {
+      try {
+        await runMigrations();
+        await get().reloadFromDatabase();
+        set({ isHydrated: true });
+      } finally {
+        hydrateInFlight = null;
+      }
+    })();
+    return hydrateInFlight;
   },
 
   reloadFromDatabase: async () => {
@@ -614,28 +636,39 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         },
       ],
       current.accountId,
+      current.sourceType === 'sms' ? current.sourceReferenceHash ?? null : null,
     );
     await get().refresh();
   },
 
   addTransaction: async input => {
-    // SMS rows are 'detected' by the system; Add Record rows are 'created' by the user.
-    const audit: AuditEventDraft =
-      input.sourceType === 'manual'
+    // SMS rows are 'detected' by the system. R5 (owner, 2026-11-06): a record
+    // the user typed — Add Record, or "Add as transaction" from Messages not
+    // understood — is saved approved and audited 'added' by the user. A
+    // user-entered row that is still pending (pre-R5 callers) stays 'created'.
+    const userEntered =
+      input.sourceType === 'manual' || input.parserVersion === SMS_USER_ADDED_PARSER_VERSION;
+    const audit: AuditEventDraft = userEntered
+      ? input.status === 'approved'
         ? {
+            eventType: 'added',
+            actor: 'user',
+            metadata: { kind: 'added', transactionType: input.type },
+          }
+        : {
             eventType: 'created',
             actor: 'user',
             metadata: { kind: 'created', transactionType: input.type },
           }
-        : {
-            eventType: 'detected',
-            actor: 'system',
-            metadata: {
-              kind: 'detected',
-              confidence: input.confidenceScore,
-              transactionType: input.type,
-            },
-          };
+      : {
+          eventType: 'detected',
+          actor: 'system',
+          metadata: {
+            kind: 'detected',
+            confidence: input.confidenceScore,
+            transactionType: input.type,
+          },
+        };
     const created = await transactionRepository.create(input, [audit]);
     set(state => ({ transactions: [created, ...state.transactions] }));
     return created;
@@ -720,6 +753,15 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   ignoreSuggestion: async key => {
     await accountRepository.ignoreSuggestion(key);
+  },
+
+  undoLinkSuggestion: async input => {
+    const removed = await suggestionRepository.undoLink(input);
+    const ids = new Set(input.pending.map(row => row.id));
+    set(state => ({
+      transactions: state.transactions.filter(t => !ids.has(t.id)),
+    }));
+    return removed;
   },
 
   saveMerchantRule: async (merchantName, categoryId, transactionId = null) => {
@@ -853,11 +895,11 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         detectedAt: now,
         approvedAt: now,
         note: input.note,
-        sourceType: 'manual',
-        sourceReferenceHash: null,
+        sourceType: input.smsReference ? 'sms' : 'manual',
+        sourceReferenceHash: input.smsReference?.hash ?? null,
         sanitizedPreview: null,
         confidenceScore: null,
-        parserVersion: null,
+        parserVersion: input.smsReference?.parserVersion ?? null,
       },
       [
         {

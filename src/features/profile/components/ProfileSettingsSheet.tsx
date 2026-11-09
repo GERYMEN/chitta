@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Switch, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { BottomSheet, confirmDialog, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
@@ -20,6 +20,8 @@ import {
 } from '../../../domain/settings/smsSyncStart.rules';
 import { useBackupStore } from '../../backup/backupStore';
 import { lastBackupLabel } from '../../backup/backupLabels';
+import { useSmsReaderStore, visibleUnparsed } from '../../sms-sync/smsReaderStore';
+import { effectiveAutoRead } from '../../sms-sync/autoRead/autoReadRules';
 
 export interface ProfileSettingsSheetProps {
   visible: boolean;
@@ -39,6 +41,10 @@ export interface ProfileSettingsSheetProps {
   onOpenBackup?: () => void;
   /** R4e: "Restore from backup" (replaces everything). */
   onOpenRestore?: () => void;
+  /** R5: "Re-read messages with the new reader". */
+  onRescan?: () => void;
+  /** R5: "Messages not understood". */
+  onOpenNotUnderstood?: () => void;
 }
 
 /**
@@ -55,7 +61,42 @@ export function ProfileSettingsSheet({
   onReplayTour,
   onOpenBackup,
   onOpenRestore,
+  onRescan,
+  onOpenNotUnderstood,
 }: ProfileSettingsSheetProps) {
+  // R5: auto-read toggle + not-understood count (counts only).
+  const autoReadSetting = useSmsReaderStore(state => state.autoReadSetting);
+  const receiveGranted = useSmsReaderStore(state => state.receiveGranted);
+  const autoReadOn = effectiveAutoRead(autoReadSetting, receiveGranted);
+  const unparsedRows = useSmsReaderStore(state => state.unparsed);
+  const allTransactions = useTransactionsStore(state => state.transactions);
+  const notUnderstoodCount = visibleUnparsed(unparsedRows, allTransactions).length;
+  const [togglingAutoRead, setTogglingAutoRead] = useState(false);
+
+  async function handleAutoRead(on: boolean) {
+    setTogglingAutoRead(true);
+    try {
+      const result = await useSmsReaderStore.getState().setAutoRead(on);
+      if (result === 'blocked') {
+        showDialog({
+          title: 'SMS permission blocked',
+          message:
+            'To read new SMS automatically, open Settings and allow SMS permission for Tracker.',
+          icon: 'shield-alert-outline',
+          actions: [
+            { label: 'Cancel', variant: 'ghost' },
+            { label: 'Open Settings', variant: 'primary', onPress: () => Linking.openSettings() },
+          ],
+        });
+      } else if (result === 'denied') {
+        ToastAndroid.show('Not turned on — SMS permission was not allowed', ToastAndroid.LONG);
+      }
+    } catch {
+      ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
+    } finally {
+      setTogglingAutoRead(false);
+    }
+  }
   const { userName, approvalMode, autoApproveThreshold } = useTransactionsStore(
     useShallow(state => ({
       userName: state.userName,
@@ -71,7 +112,11 @@ export function ProfileSettingsSheet({
   const lastBackupAt = useBackupStore(state => state.lastBackupAt);
 
   useEffect(() => {
-    if (visible) useBackupStore.getState().load();
+    if (visible) {
+      useBackupStore.getState().load();
+      // R5: the grant may have changed in system settings.
+      useSmsReaderStore.getState().load().catch(() => undefined);
+    }
   }, [visible]);
 
   /**
@@ -214,6 +259,66 @@ export function ProfileSettingsSheet({
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Restore from backup</Text>
             <Text style={styles.activityCaption}>Replace all data with a backup file</Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      <View style={styles.activityRow} testID="settings-auto-read-row">
+        <View style={styles.activityIcon}>
+          <Icon name="message-badge-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>Read new SMS automatically</Text>
+          <Text style={styles.activityCaption}>
+            {autoReadOn
+              ? 'New bank SMS go to Pending on their own'
+              : receiveGranted
+              ? 'Off — use Sync SMS'
+              : 'Off — Turn on to allow reading new SMS'}
+          </Text>
+        </View>
+        <Switch
+          value={autoReadOn}
+          disabled={togglingAutoRead}
+          onValueChange={handleAutoRead}
+          accessibilityLabel={`Read new SMS automatically. ${autoReadOn ? 'On' : 'Off. Turn on'}`}
+          testID="settings-auto-read-switch"
+        />
+      </View>
+      {onRescan ? (
+        <Pressable
+          onPress={onRescan}
+          accessibilityRole="button"
+          accessibilityLabel="Re-read messages with the new reader"
+          testID="settings-rescan-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="message-text-clock-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Re-read messages with the new reader</Text>
+            <Text style={styles.activityCaption}>
+              From {syncStartLabel(smsSyncStartAt)} · existing items stay as they are
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      {onOpenNotUnderstood ? (
+        <Pressable
+          onPress={onOpenNotUnderstood}
+          accessibilityRole="button"
+          accessibilityLabel={`Messages not understood: ${notUnderstoodCount}`}
+          testID="settings-not-understood-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="message-question-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Messages not understood</Text>
+            <Text style={styles.activityCaption}>
+              {notUnderstoodCount === 0 ? 'None right now' : `${notUnderstoodCount} to review`}
+            </Text>
           </View>
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>

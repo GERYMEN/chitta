@@ -2,6 +2,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- R5 auto-read (user-approved 2026-11-03): the only permission R5 adds. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <application
       android:name=".MainApplication"
@@ -34,5 +36,18 @@
           android:name="android.support.FILE_PROVIDER_PATHS"
           android:resource="@xml/feedback_paths" />
       </provider>
+      <!-- R5 auto-read: only the system can deliver SMS_RECEIVED (BROADCAST_SMS). The receiver
+           never reads the message; it starts SmsAutoReadService, which runs the normal sync. -->
+      <receiver
+        android:name=".SmsReceivedReceiver"
+        android:exported="true"
+        android:permission="android.permission.BROADCAST_SMS">
+        <intent-filter>
+          <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+        </intent-filter>
+      </receiver>
+      <service
+        android:name=".SmsAutoReadService"
+        android:exported="false" />
     </application>
 </manifest>

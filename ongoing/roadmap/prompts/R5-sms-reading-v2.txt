@@ -1,0 +1,198 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules" + R7 SMS
+coverage for context), ongoing/roadmap/STATE.md (latest decision lines),
+ongoing/roadmap/R4b-sms-sync-start.md (window/paging/cursor/settings),
+R4c-feedback-tour.md (WhatsApp share path), R4e-backup-pie.md (backup
+table list + its completeness test), R3a/R3b reports (pair holds), the
+decisions log of ongoing/realtime-persistence/STATE.md (absolute privacy
+rules), docs/PROJECT.md (§14 multi-signal classifier) + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5-sms-reading-v2 (created from phase/R4e-backup-pie).
+Stay on it. Do not switch branches, do not commit.
+
+PHASE R5 — SMS reading v2 + auto-read + "Messages not understood".
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+PROBLEM (owner, 2026-11-03): a salary credit SMS was not recorded; on a
+friend's phone most bank SMS were not understood. Orchestrator code read
+of src/features/sms-sync/smsParser.ts (v1 regex parser) found:
+- REJECT_PATTERNS drop any SMS containing "avail", "offer", "click",
+  "gift", "promo"… — kills normal credits ending "Avail Bal Rs …".
+- AMOUNT_PATTERN requires an Rs/INR/₹ prefix — misses "debited by
+  100.0" (common SBI UPI format) and "INR50,000.00"-style variants only
+  partly.
+- DEBIT_PATTERN tested before CREDIT over the whole body: "credited …
+  paid by …" becomes an expense.
+- No sender check (msg.address unused), first amount wins (may be the
+  balance / limit), only 12 banks named, integer amounts get
+  confidence 40.
+- Sync is manual only (no RECEIVE_SMS).
+
+USER DECISIONS (2026-11-03):
+- Rebuild SMS reading (this phase) before Pay-later (R5b) and Budgets.
+- Auto-read new SMS: RECEIVE_SMS permission APPROVED (the only new
+  permission). No other new permission, NO new dependency.
+- "Messages not understood" screen with a masked "Share pattern" over
+  the existing WhatsApp feedback channel.
+
+PRIVACY (absolute, unchanged): the app never stores raw SMS bodies or
+sender numbers (only sanitizedPreview + derived fields). Bodies live only
+in memory during parsing or in component state for display. Nothing logs
+bodies, senders, merchants or amounts. Test fixtures are SYNTHETIC only
+(payees "QA PAYEE", "QA EMPLOYER PVT LTD", VPAs "qa.payee@okqa",
+accounts XX1234/XX9999, refs 000000000001) — write them from general
+knowledge of public Indian bank SMS formats; never from a real phone.
+
+T1 Parser v2 (pure TS, src/features/sms-sync/parser/ or similar; keep
+   parseSmsMessage(msg) as the entry point used by sync; bump a
+   PARSER_VERSION constant):
+   a) Sender stage: parse DLT headers ("XX-ABCDEF", "XX-ABCDEF-S/T/P/G",
+      6-char IDs, plain 10-digit numbers). Drop "-P" (promotional) and
+      plain personal numbers / short codes that are not financial.
+      Financial sender table: bank/card/wallet/paylater header IDs →
+      canonical institution (extend normalizeAccountKey aliases; keep
+      its version constant consistent, bump if behaviour changes).
+      Unknown senders are NOT dropped outright — they go through the
+      classifier with a lower prior (friend's bank may be unknown).
+   b) Classifier: label each message one of txn_debit, txn_credit,
+      card_spend, refund/reversal, failed/declined, otp, mandate_future
+      ("will be debited", "e-mandate", "autopay scheduled"),
+      collect_request ("has requested", "request money"), bill_due /
+      statement ("due on", "min amount due", "statement generated"),
+      loan_or_promo ("pre-approved", "eligible", "limit increased",
+      "apply now"), balance_info, unknown_financial, not_financial.
+      Replace the blanket reject words with these targeted classes —
+      "Avail Bal"/"Avl Bal"/"available balance" must NOT reject.
+      Decide debit vs credit from the verb NEAREST the transaction
+      amount / the account phrase ("A/c XX1234 credited", "debited from
+      A/c", "Dr"/"Cr", "sent", "transferred", "withdrawn", "purchase",
+      "spent on card", "received from", "deposited"), not from any word
+      anywhere.
+      Only txn_debit, txn_credit, card_spend, refund produce
+      transactions. bill_due/statement are returned as typed non-
+      transactions (R5b will use them) — not inserted now.
+   c) Extraction: transaction amount = the amount bound to the
+      transaction verb (with or without Rs/INR/₹/Rs./INR. prefix,
+      Indian digit grouping 1,00,000.00, decimals optional); ignore
+      amounts after Avl/Avail/Available Bal/Balance/limit/credit limit/
+      min due. Account last-4 (XX1234, X1234, *1234, ending 1234, A/c
+      no. XXXXXX1234, card ending). Payee/merchant: UPI "to VPA" / "trf
+      to NAME", "at MERCHANT", "from NAME/VPA" for credits, "Info:" /
+      "NEFT-…-NAME" tails, card "at MERCHANT on". UPI/IMPS/NEFT ref
+      (kept only as part of the dedupe hash input, never shown/stored
+      raw — hash it). Transaction date: SMS date (keep), body date only
+      if you can make it robust (optional, document).
+   d) Salary: tag txn_credit as salary when the body has SAL/SALARY/
+      PAYROLL/"salary credit" tokens (word-bounded; NEFT tails like
+      "NEFT-…-SALARY OCT"); set category to the existing Salary
+      category if one exists (find it in the seed categories); mark
+      confidence high. Recurring-pattern salary detection is out of
+      scope (R8).
+   e) Confidence: recompute from signals (known sender, clear verb,
+      bound amount, account found, merchant found). Integer amounts are
+      not penalised by themselves.
+   f) Institutions with templates + synthetic fixtures (≥3 fixtures each
+      where formats differ: debit UPI, credit, card/ATM): SBI, HDFC,
+      ICICI, Axis, Kotak, Federal, PNB, Bank of Baroda, Canara, Union,
+      Bank of India, Indian Bank, IOB, Central Bank, IDFC First, Yes,
+      IndusInd, South Indian Bank, CSB, Kerala Gramin, AU, RBL, Bandhan,
+      DBS, Paytm Payments Bank, Airtel Payments Bank, Fi/Jupiter
+      (Federal-based); cards SBI Card, HDFC/ICICI/Axis cards, Amex,
+      OneCard; wallets Amazon Pay, Paytm. Plus a GENERIC path for
+      unknown banks that handles the common shapes. Negative fixtures:
+      OTP, promo/loan offer, mandate_future, collect_request, failed,
+      bill_due, balance_info.
+   g) Tests: table-driven fixture suite (type, amount, last-4, payee,
+      salary, class) + a regression set of the v1 bugs above + property
+      checks (no output field contains the raw body/sender; amount
+      never equals the balance figure in fixtures that have both).
+
+T2 Re-scan with the improved reader: Settings row "Re-read messages with
+   the new reader" (and a one-time Home hint after upgrade when
+   PARSER_VERSION increased) → runs the R4b window from the sync start
+   (estimate dialog if >500, Cancel safe), dedup by sourceReferenceHash
+   (unchanged format for SMS already recorded — do NOT change how the
+   hash is formed for the same message, or old items would duplicate;
+   document). Existing items are never rewritten. New items land in
+   Pending as usual (Approve all + Undo exists).
+
+T3 Auto-read (RECEIVE_SMS):
+   - Manifest: RECEIVE_SMS + a manifest-registered BroadcastReceiver for
+     SMS_RECEIVED (exported with the system permission
+     android.permission.BROADCAST_SMS). The receiver never logs or
+     stores the body/sender; it only schedules an incremental sync.
+   - Run the existing incremental sync (R4b window, cursor, overlap,
+     dedupe, pair holds, auto-approve rule) a few seconds after the
+     broadcast (inbox write lands after the broadcast). App in
+     foreground: native event → JS runs sync (respect the existing
+     single-flight guard; coalesce bursts). App in background/killed:
+     RN Headless JS task (HeadlessJsTaskService, part of RN core — not a
+     new dependency) running the same sync code with a short timeout;
+     no UI. Document Android 8+/12+ background-start behaviour you rely
+     on (SMS_RECEIVED temp allowlist).
+   - Skip when onboarding not completed, permission missing, or the
+     user turned it off. Settings toggle "Read new SMS automatically"
+     (default ON once granted). Request RECEIVE_SMS at the permissions
+     step for new installs and from the toggle for existing installs
+     (owner's phone: no auto prompt on upgrade — show the toggle OFF
+     with "Turn on" until granted).
+   - No notification (no POST_NOTIFICATIONS). Home shows new Pending as
+     today; Activity "Read automatically: N new" row (counts only).
+   - Tests: scheduling/coalescing logic as pure TS, skip conditions,
+     single-flight with manual Sync.
+
+T4 "Messages not understood":
+   - During any sync, messages classified unknown_financial (and
+     financial-sender messages that produce no transaction and no known
+     non-transaction class) are recorded in a new table (migration 8,
+     e.g. sms_unparsed: sms_id, sms_date, reason_code, institution
+     canonical or 'unknown', detected_at, dismissed_at, resolved_at) —
+     NO body, NO sender number. Device-local: exclude it from the R4e
+     backup explicitly and update the backup completeness test.
+   - Screen (from Pending header link "N not understood" and Settings):
+     list rows show date + institution label + reason; tapping loads
+     the body LIVE via readSmsById into component state (same pattern
+     as "View original SMS"), never persisted.
+   - Actions per row: "Add as transaction" (prefilled Add Record with
+     best-guess amount/type/date/account; saved item carries the SMS
+     reference so it is not flagged again) · "Not a transaction"
+     (dismiss) · "Share pattern".
+   - Share pattern = maskSmsPattern(body, senderHeader): ALLOWLIST
+     masking — keep only words from a fixed vocabulary of banking terms
+     (debited, credited, a/c, acct, UPI, IMPS, NEFT, Ref, Avl, Bal, Rs,
+     INR, on, to, from, by, via, card, ending, txn, …) and punctuation;
+     every other word → <W>, amounts → <AMT>, other digit runs → <N>
+     (keep only the digit COUNT if useful, e.g. <N4>), VPAs → <VPA>,
+     URLs → <URL>, emails → <EMAIL>, dates → <DATE>. Sender: keep only
+     the DLT header ID (institution code, public) or "<NUMBER>" for
+     plain numbers. Show the masked text to the user, Share only after
+     they tap "Send on WhatsApp" (reuse the R4c share path, text only,
+     same owner number constant), message prefix "Tracker SMS pattern —
+     <reason> · App v<x> · Parser v<n>".
+   - Tests: masker never outputs any digit, any word outside the
+     vocabulary, any VPA/URL/email/name from fixtures (property test
+     over all fixtures); table + migration; backup exclusion.
+
+T5 Activity/audit: 'sms_rescan' and 'auto_read' runs audited with counts
+   only. No SMS content anywhere in audit/settings/logs.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: ongoing/roadmap/R5-sms-reading-v2.md (files, parser architecture,
+classes, institution list, fixture counts, salary rule, re-scan rules,
+auto-read design + background behaviour, migration 8, masking rules +
+vocabulary, gates, decisions, and a DEVICE PLAN for later that: prints
+COUNTS ONLY (re-scan new items count, not-understood count before/after),
+never opens/prints real SMS, never taps "Share pattern" or "Add as
+transaction" on real rows, toggles auto-read only with the owner's OK,
+and verifies auto-read by the owner sending themself a SYNTHETIC test
+SMS is NOT allowed — instead verify only the receiver registration and
+the setting). Leak-scan the report with the pattern given in the
+dispatch message (shell only — never write it into a repo file). Do not
+commit.
+REPLY ONLY: gates yes/no; files changed count; fixture count +
+institutions covered; decisions you made.

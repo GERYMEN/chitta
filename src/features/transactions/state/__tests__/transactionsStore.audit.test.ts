@@ -105,7 +105,7 @@ function smsInput(): CreateTransactionInput {
 }
 
 describe('store actions write exactly one audit event each, in the same db.transaction', () => {
-  it('manual Add Record → created by user', async () => {
+  it('pre-R5 shape: a manual row inserted as pending → created by user', async () => {
     const created = await useTransactionsStore.getState().addTransaction({
       ...smsInput(),
       sourceType: 'manual',
@@ -124,6 +124,40 @@ describe('store actions write exactly one audit event each, in the same db.trans
     // B4: the type at event time (enum only).
     expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'created', transactionType: 'expense' });
     expectSameTransaction(call, /^INSERT INTO transactions/);
+  });
+
+  it('R5: manual Add Record saved approved → added by user (counted at once)', async () => {
+    const created = await useTransactionsStore.getState().addTransaction({
+      ...smsInput(),
+      status: 'approved',
+      approvedAt: '2026-11-06T10:00:00.000Z',
+      sourceType: 'manual',
+      sourceReferenceHash: null,
+      sanitizedPreview: null,
+      confidenceScore: null,
+      parserVersion: null,
+    });
+    expect(created.status).toBe('approved');
+    const { row, call } = onlyAudit();
+    expect(row).toMatchObject({ event_type: 'added', actor: 'user', transaction_id: created.id });
+    expect(JSON.parse(String(row.metadata_json))).toEqual({ kind: 'added', transactionType: 'expense' });
+    expectSameTransaction(call, /^INSERT INTO transactions/);
+  });
+
+  it('R5: "Add as transaction" from Messages not understood → added by user, keeps the SMS reference', async () => {
+    const created = await useTransactionsStore.getState().addTransaction({
+      ...smsInput(),
+      status: 'approved',
+      approvedAt: '2026-11-06T10:00:00.000Z',
+      sourceType: 'sms',
+      sourceReferenceHash: 'sms-77-1700000000000',
+      confidenceScore: null,
+      parserVersion: 'sms-user-added',
+    });
+    const { row } = onlyAudit();
+    expect(row).toMatchObject({ event_type: 'added', actor: 'user' });
+    expect(created.sourceReferenceHash).toBe('sms-77-1700000000000');
+    expect(String(row.metadata_json)).not.toMatch(/SECRET|debited/);
   });
 
   it('SMS insert → detected by system with confidence only', async () => {

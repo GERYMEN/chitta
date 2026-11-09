@@ -25,6 +25,7 @@ import {
   groupPendingByAccount,
 } from '../pendingGroups';
 import { useRedacted } from '../../../shared/privacy/redaction';
+import { useSmsReaderStore, visibleUnparsed } from '../../sms-sync/smsReaderStore';
 
 type Filter = 'all' | 'expense' | 'income';
 
@@ -51,6 +52,12 @@ export function PendingScreen() {
   const transactions = useTransactionsStore(state => state.transactions);
   const transferDismissals = useTransactionsStore(state => state.transferDismissals);
   const duplicateDismissals = useTransactionsStore(state => state.duplicateDismissals);
+  // R5: "N not understood" link (counts only).
+  const unparsedRows = useSmsReaderStore(state => state.unparsed);
+  const notUnderstoodCount = useMemo(
+    () => visibleUnparsed(unparsedRows, transactions).length,
+    [unparsedRows, transactions],
+  );
 
   const [filter, setFilter] = useState<Filter>('all');
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
@@ -213,6 +220,21 @@ export function PendingScreen() {
               Review detected transactions before adding them to your records.
             </Text>
 
+            {notUnderstoodCount > 0 ? (
+              <Pressable
+                onPress={() => navigation.navigate('NotUnderstood')}
+                accessibilityRole="button"
+                accessibilityLabel={`${notUnderstoodCount} messages not understood. Review`}
+                testID="pending-not-understood"
+                style={({ pressed }) => [styles.notUnderstood, pressed && styles.notUnderstoodPressed]}>
+                <Icon name="message-question-outline" size={18} color={colors.onSurfaceVariant} />
+                <Text style={styles.notUnderstoodText}>
+                  {notUnderstoodCount} not understood
+                </Text>
+                <Text style={styles.notUnderstoodLink}>Review ›</Text>
+              </Pressable>
+            ) : null}
+
             <View style={styles.summaryCard}>
               <View style={styles.summaryIcon}>
                 <Icon name="lightning-bolt" size={20} color={colors.primary} />
@@ -334,6 +356,28 @@ export function PendingScreen() {
 }
 
 const styles = StyleSheet.create({
+  notUnderstood: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceContainerLow,
+  },
+  notUnderstoodPressed: {
+    opacity: 0.7,
+  },
+  notUnderstoodText: {
+    ...typography.labelLg,
+    color: colors.onSurface,
+    flex: 1,
+  },
+  notUnderstoodLink: {
+    ...typography.labelLg,
+    color: colors.primary,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.surface,

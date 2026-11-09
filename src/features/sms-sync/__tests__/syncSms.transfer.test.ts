@@ -1,3 +1,4 @@
+import { DEFAULT_AUTO_APPROVE_THRESHOLD } from '../../../domain/settings/approval.rules';
 import { syncSms } from '../syncSms';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { getDatabase } from '../../../data/db/connection';
@@ -60,9 +61,9 @@ const ACCOUNTS = [account('acc-qa', 'QA Delete Bank 9999'), account('acc-wallet'
 
 const T0 = 1761400000000;
 const INBOX = [
-  { id: '1', address: 'AD-QASNDR', body: 'Rs.500.00 debited from your account at QA-Shop on 25-Oct-2026.', date: T0 },
-  { id: '2', address: 'AD-QASNDR', body: 'Rs.500.00 received from QA-Payer on 25-Oct-2026.', date: T0 + 60_000 },
-  { id: '3', address: 'AD-QASNDR', body: 'Rs.250.00 debited from your account at QA-Cafe on 25-Oct-2026.', date: T0 + 120_000 },
+  { id: '1', address: 'AD-HDFCBK-S', body: 'Rs.500.00 debited from your A/c XX9999 at QA-Shop on 25-Oct-2026.', date: T0 },
+  { id: '2', address: 'AD-HDFCBK-S', body: 'Rs.500.00 received in your A/c XX9999 from QA-Payer on 25-Oct-2026.', date: T0 + 60_000 },
+  { id: '3', address: 'AD-HDFCBK-S', body: 'Rs.250.00 debited from your A/c XX9999 at QA-Cafe on 25-Oct-2026.', date: T0 + 120_000 },
 ];
 
 let db: FakeDb;
@@ -82,7 +83,8 @@ beforeEach(() => {
     merchantRules: {},
     transferDismissals: [],
     approvalMode: 'auto',
-    autoApproveThreshold: 90,
+    // R5-fix C9: the production default; clean known-sender parses score 90.
+    autoApproveThreshold: DEFAULT_AUTO_APPROVE_THRESHOLD,
   });
 });
 
@@ -129,7 +131,7 @@ describe('R3a T4: sync never auto-approves a new item that forms a transfer pair
       useTransactionsStore.getState().accounts,
       useTransactionsStore.getState().transferDismissals,
       'auto',
-      90,
+      DEFAULT_AUTO_APPROVE_THRESHOLD,
     );
     expect(out.approve.map(t => t.id).sort()).toEqual([credit.id, debit.id].sort());
     expect(out.heldForTransfer).toEqual([]);
@@ -236,9 +238,9 @@ describe('R3b T4: autoApproveAfterSync holds possible duplicates (pure)', () => 
 describe('R3b T4: syncSms holds a new duplicate pair (end to end)', () => {
   it('two identical 50.00 debits a minute apart stay pending; dedup unchanged after marking', async () => {
     mockReadInbox.mockResolvedValue([
-      { id: '11', address: 'AD-QASNDR', body: 'Rs.50.00 debited from your account at QA-Shop on 25-Oct-2026.', date: T0 },
-      { id: '12', address: 'AD-QASNDR', body: 'Rs.50.00 debited from your account at QA-Shop on 25-Oct-2026.', date: T0 + 60_000 },
-      { id: '13', address: 'AD-QASNDR', body: 'Rs.70.00 debited from your account at QA-Cafe on 25-Oct-2026.', date: T0 + 120_000 },
+      { id: '11', address: 'AD-HDFCBK-S', body: 'Rs.50.00 debited from your A/c XX9999 at QA-Shop on 25-Oct-2026.', date: T0 },
+      { id: '12', address: 'AD-HDFCBK-S', body: 'Rs.50.00 debited from your A/c XX9999 at QA-Shop on 25-Oct-2026.', date: T0 + 60_000 },
+      { id: '13', address: 'AD-HDFCBK-S', body: 'Rs.70.00 debited from your A/c XX9999 at QA-Cafe on 25-Oct-2026.', date: T0 + 120_000 },
     ]);
     const result = await syncSms();
     expect(result.created).toBe(3);
