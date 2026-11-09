@@ -174,3 +174,28 @@ owner). Leak-scan the report with the pattern given in the dispatch
 message (shell only — never write it into a repo file). Do not commit.
 REPLY ONLY: gates yes/no; files changed count; fixtures added; migration
 number; decisions you made.
+
+ORCHESTRATOR NOTES (2026-11-09, after R5 + R5-fix were committed as
+234e9de on phase/R5-sms-reading-v2 — precondition met):
+- The R5-fix tombstone table is `sms_deleted_refs (source_reference_hash
+  TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)`, folded into migration 8
+  (already in the backup). R5d's migration is therefore 9: add
+  sms_content_hash to transactions AND sms_deleted_refs (+ indexes), plus
+  ref_digest on transactions. ROADMAP R6 "migration 9" becomes 10.
+- R5-fix already changed some parser behaviour that T0 touches: refund
+  only when the bound verb is a credit (C6), debit cards are kind 'bank'
+  (U3), "Acct XX1234" / "A/cX1234" are 'bank' (not 'upi'), short-code
+  senders are capped at 80, and only a clean known-sender parse reaches 90.
+  Read readSms.reviewFixes.test.ts first. T0a must keep C6's tests green;
+  skip any T0 item that is already fixed and mark it "already fixed by
+  R5-fix" in the report.
+- Legacy v1 keys come from legacy/normalizeAccountKeyV1.ts (frozen). Never
+  edit it. New fallbacks (long masks, 3-digit masks) must not change any
+  v1 or v2 key that is already produced.
+- The C2 "new accounts found" summary and the C11 link undo already exist:
+  T3b must reuse that card / link path, not add a second one.
+- Do not touch src/features/sms-sync/rules/ or scripts/rules/ (R5g).
+  Never write the reference app's old brand names; the repo calls it
+  "chitta-ref-app".
+- Owner 2026-11-09: tester APK + device testing only after R5 to R5g are
+  all done, so this phase is CODE + TESTS + GATES only.

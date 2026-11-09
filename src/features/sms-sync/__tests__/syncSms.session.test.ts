@@ -90,10 +90,14 @@ describe('syncSms suggestion session (R2b T1)', () => {
     // Nothing about the waiting items is written to the DB — only the R4b
     // sync cursor (a date) and (R5-fix C2) the counts-only "new accounts
     // found" summary: public bank id, kind, last-4, count, first/last date.
+    // R5d: plus the one-time per-install identity salt (random hex, no SMS content).
     const inserts = db.calls.filter(c => /^INSERT/.test(c.sql));
     const cursor = inserts.filter(c => c.params[0] === 'sms_last_synced_at');
     const summary = inserts.filter(c => /account_suggestion_candidates/.test(c.sql));
-    expect(cursor.length + summary.length).toBe(inserts.length);
+    const salt = inserts.filter(c => c.params[0] === 'sms_identity_salt');
+    expect(salt).toHaveLength(1);
+    expect(String(salt[0].params[1])).toMatch(/^[0-9a-f]{64}$/);
+    expect(cursor.length + summary.length + salt.length).toBe(inserts.length);
     for (const c of cursor) {
       expect(c.params).toHaveLength(2);
       expect(Number.isFinite(Date.parse(String(c.params[1])))).toBe(true);

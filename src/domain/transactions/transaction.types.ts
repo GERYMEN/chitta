@@ -50,6 +50,13 @@ export interface Transaction {
   /** R3a/R3b: the row this one is linked to (twin → transfer, refund → expense, duplicate → kept row). */
   linkedTransactionId?: string | null;
   linkKind?: LinkKind | null;
+  /**
+   * R5d: salted SHA-256 identity of the source SMS (32 hex) — dedupes the
+   * same SMS after its inbox id changed (new phone / SMS restore). Never SMS text.
+   */
+  smsContentHash?: string | null;
+  /** R5d: salted SHA-256 digest of the UPI/IMPS/NEFT reference (32 hex), never the ref. */
+  refDigest?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -58,9 +58,10 @@ function compareIds(a: string, b: string): number {
 /**
  * Suggested duplicate pairs: same account, same type (income/expense only),
  * same amount (paise), |occurredAt diff| ≤ window (inclusive), both pending
- * or approved, neither linked/transfer/rejected, pair not dismissed. Each row
- * is in at most one pair: closest pairs are taken first (tie → earlier
- * first row, then ids). Result is ordered newest pair first.
+ * or approved, neither linked/transfer/rejected, pair not dismissed. R5d: OR
+ * the same reference digest + type + amount on any account at any distance.
+ * Each row is in at most one pair: same-reference pairs first, then closest
+ * pairs (tie → earlier first row, then ids). Result is ordered newest pair first.
  */
 export function findDuplicatePairs(
   transactions: ReadonlyArray<Transaction>,
@@ -83,23 +84,43 @@ export function findDuplicatePairs(
 
   interface Candidate extends DuplicatePair {
     firstMs: number;
+    /** R5d: the pair shares a reference digest (taken before time-window pairs). */
+    sameRef: boolean;
   }
   const candidates: Candidate[] = [];
-  for (const list of groups.values()) {
-    if (list.length < 2) continue;
+  const seenPairs = new Set<string>();
+  const addPairs = (list: Array<{ t: Transaction; ms: number }>, sameRef: boolean) => {
+    if (list.length < 2) return;
     list.sort((a, b) => a.ms - b.ms || compareIds(a.t.id, b.t.id));
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const diffMs = list[j].ms - list[i].ms;
-        if (diffMs > windowMs) break;
-        if (dismissed.has(duplicatePairKey(list[i].t.id, list[j].t.id))) continue;
-        candidates.push({ first: list[i].t, second: list[j].t, diffMs, firstMs: list[i].ms });
+        if (!sameRef && diffMs > windowMs) break;
+        const key = duplicatePairKey(list[i].t.id, list[j].t.id);
+        if (dismissed.has(key) || seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        candidates.push({ first: list[i].t, second: list[j].t, diffMs, firstMs: list[i].ms, sameRef });
       }
     }
+  };
+  // R5d T2: equal reference digest + type + amount = the same money, whatever
+  // the account or the time between the alerts (still only a suggestion).
+  const refGroups = new Map<string, Array<{ t: Transaction; ms: number }>>();
+  for (const list of groups.values()) {
+    for (const entry of list) {
+      if (!entry.t.refDigest) continue;
+      const key = `${entry.t.refDigest}|${entry.t.type}|${entry.t.amountMinor}`;
+      const refList = refGroups.get(key);
+      if (refList) refList.push(entry);
+      else refGroups.set(key, [entry]);
+    }
   }
+  for (const list of refGroups.values()) addPairs(list, true);
+  for (const list of groups.values()) addPairs(list, false);
 
   candidates.sort(
     (a, b) =>
+      Number(b.sameRef) - Number(a.sameRef) ||
       a.diffMs - b.diffMs ||
       a.firstMs - b.firstMs ||
       compareIds(a.first.id, b.first.id) ||
@@ -181,7 +202,8 @@ export interface DuplicateMarking {
  * Mark `duplicate` as a duplicate of `kept`: it becomes status 'rejected',
  * link_kind 'duplicate', linked to the kept row (a system rule outside
  * canTransition, like the R3a twin). Null when the two rows are not a valid
- * pair (same account + type + amount, both candidates, different rows).
+ * pair (same account — or, R5d, the same reference digest — + type + amount,
+ * both candidates, different rows).
  */
 export function markDuplicate(
   kept: Transaction,
@@ -190,8 +212,10 @@ export function markDuplicate(
 ): DuplicateMarking | null {
   if (kept.id === duplicate.id) return null;
   if (!isDuplicateCandidate(kept) || !isDuplicateCandidate(duplicate)) return null;
+  // R5d T2: a same-reference pair may sit on two accounts (the user confirms).
+  const sameRef = kept.refDigest != null && kept.refDigest === duplicate.refDigest;
   if (
-    kept.accountId !== duplicate.accountId ||
+    (kept.accountId !== duplicate.accountId && !sameRef) ||
     kept.type !== duplicate.type ||
     kept.amountMinor !== duplicate.amountMinor
   ) {

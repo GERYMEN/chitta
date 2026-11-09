@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,6 +31,8 @@ import {
 } from '../../../app/navigation/routes';
 import { redactLast4, useRedacted } from '../../../shared/privacy/redaction';
 import { TourTarget } from '../../tour/components/TourTarget';
+import { useLinkedNumbersStore } from '../state/linkedNumbersStore';
+import { LinkedNumber, linkedNumbersFor } from '../../sms-sync/suggestionGroups';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accounts'>,
@@ -64,6 +66,31 @@ export function AccountsScreen() {
   const removeAccount = useTransactionsStore(state => state.removeAccount);
   const restoreAccount = useTransactionsStore(state => state.restoreAccount);
   const [deletedOpen, setDeletedOpen] = useState(false);
+  // R5d T3c: 'linked' decisions (card / account numbers routed to an account).
+  // Re-read whenever accounts or transactions change (a link / undo / import).
+  const linkedRows = useLinkedNumbersStore(state => state.rows);
+  const refreshLinked = useLinkedNumbersStore(state => state.refresh);
+  useEffect(() => {
+    refreshLinked().catch(() => undefined);
+  }, [refreshLinked, accounts.length, transactions.length]);
+
+  function confirmUnlink(account: Account, number: LinkedNumber) {
+    showDialog({
+      title: `Unlink ${number.label}?`,
+      message: `Items already added stay on ${account.name}. New SMS for this number will show in "New accounts found" again.`,
+      icon: 'link-variant-off',
+      actions: [
+        { label: 'Cancel', variant: 'ghost' },
+        {
+          label: 'Unlink',
+          variant: 'destructive',
+          onPress: async () => {
+            await useLinkedNumbersStore.getState().unlink(account.id, number);
+          },
+        },
+      ],
+    });
+  }
 
   function transactionCountFor(accountId: string): number {
     // R3a: a transfer belongs to both of its accounts.
@@ -187,6 +214,8 @@ export function AccountsScreen() {
                   key={account.id}
                   account={account}
                   transactions={transactions}
+                  linked={linkedNumbersFor(linkedRows, account.id)}
+                  onUnlink={number => confirmUnlink(account, number)}
                   onRemove={() => confirmRemove(account)}
                 />
               ))}
@@ -242,10 +271,15 @@ export function AccountsScreen() {
 function AccountCard({
   account,
   transactions,
+  linked,
+  onUnlink,
   onRemove,
 }: {
   account: Account;
   transactions: Parameters<typeof calculateBalance>[1];
+  /** R5d T3c: numbers linked to this account (bank · kind · ••last4). */
+  linked: LinkedNumber[];
+  onUnlink: (number: LinkedNumber) => void;
   onRemove: () => void;
 }) {
   const balanceMinor = calculateBalance(account, transactions, account.id);
@@ -279,6 +313,25 @@ function AccountCard({
       >
         {formatRupeesFromMinor(Math.abs(balanceMinor), { showPaise: true })}
       </Text>
+
+      {linked.length > 0 ? (
+        <View style={styles.linkedSection} testID={`linked-numbers-${account.id}`}>
+          <Text style={styles.balanceRowLabel}>Linked card / account numbers</Text>
+          {linked.map(number => (
+            <View key={number.key} style={styles.linkedRow}>
+              <Icon name="link-variant" size={16} color={colors.outline} />
+              <Text style={styles.linkedLabel}>{number.label}</Text>
+              <Pressable
+                onPress={() => onUnlink(number)}
+                style={styles.unlinkAction}
+                accessibilityRole="button"
+                accessibilityLabel={`Unlink ${number.label}`}>
+                <Text style={styles.unlinkLabel}>Unlink</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       <Pressable
         onPress={onRemove}
@@ -440,6 +493,29 @@ const styles = StyleSheet.create({
   removeLabel: {
     ...typography.labelLg,
     color: colors.error,
+  },
+  linkedSection: {
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  linkedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  linkedLabel: {
+    ...typography.bodyMd,
+    color: colors.onSurface,
+    flex: 1,
+  },
+  unlinkAction: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  unlinkLabel: {
+    ...typography.labelLg,
+    color: colors.primary,
   },
   deletedHeader: {
     flexDirection: 'row',

@@ -170,7 +170,7 @@ Features
    calculated.
 3. "Set balance" (balance anchor, already in calculateBalance): one tap
    "Use bank balance" or manual entry; audited; explains effect.
-Data: migration 9 — `accounts.sms_balance_paise`, `sms_balance_at`
+Data: migration 10 (R5d took 9) — `accounts.sms_balance_paise`, `sms_balance_at`
 (anchor columns exist from v2 step 2).
 Tests: parser balance formats, anchor math, difference display.
 Device: synthetic account + manual anchor only (bank SMS = counts only).

@@ -32,6 +32,8 @@ export function rowToTransaction(row: SqlRow): Transaction {
     transferAccountId: asNullableString(row.transfer_account_id),
     linkedTransactionId: asNullableString(row.linked_transaction_id),
     linkKind: asNullableString(row.link_kind) as Transaction['linkKind'],
+    smsContentHash: asNullableString(row.sms_content_hash),
+    refDigest: asNullableString(row.ref_digest),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -61,6 +63,8 @@ export function transactionToRow(transaction: Transaction): SqlWriteRow {
     transfer_account_id: transaction.transferAccountId ?? null,
     linked_transaction_id: transaction.linkedTransactionId ?? null,
     link_kind: transaction.linkKind ?? null,
+    sms_content_hash: transaction.smsContentHash ?? null,
+    ref_digest: transaction.refDigest ?? null,
     created_at: transaction.createdAt,
     updated_at: transaction.updatedAt,
   };

@@ -118,6 +118,8 @@ export interface RefundCandidate {
   expense: Transaction;
   /** Still refundable on this expense BEFORE linking this refund (paise). */
   leftMinor: number;
+  /** R5d T2: the refund carries the same reference digest as this expense. */
+  sameReference: boolean;
   sameMerchant: boolean;
   sameAccount: boolean;
   /** refund.occurredAt − expense.occurredAt (ms, ≥ 0). */
@@ -128,7 +130,8 @@ export interface RefundCandidate {
  * "Link to original expense" picker: approved/pending expenses, not linked/
  * rejected/transfer, with at least the refund amount still refundable,
  * occurred within REFUND_LOOKBACK_DAYS BEFORE (or at) the refund. Ranked by
- * same normalizeMerchant key, then same account, then closest date, then id.
+ * R5d same reference digest, then same normalizeMerchant key, then same
+ * account, then closest date, then id.
  */
 export function rankRefundCandidates(
   refund: Transaction,
@@ -153,6 +156,7 @@ export function rankRefundCandidates(
     candidates.push({
       expense,
       leftMinor,
+      sameReference: refund.refDigest != null && expense.refDigest === refund.refDigest,
       sameMerchant: refundKey !== '' && normalizeMerchant(expense.merchantName) === refundKey,
       sameAccount: expense.accountId === refund.accountId,
       ageMs,
@@ -161,6 +165,7 @@ export function rankRefundCandidates(
 
   candidates.sort(
     (a, b) =>
+      Number(b.sameReference) - Number(a.sameReference) ||
       Number(b.sameMerchant) - Number(a.sameMerchant) ||
       Number(b.sameAccount) - Number(a.sameAccount) ||
       a.ageMs - b.ageMs ||

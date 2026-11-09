@@ -40,7 +40,13 @@ export function ReviewSections({
     [allTransferPairs, accountId],
   );
   const duplicatePairs = useMemo(
-    () => (accountId ? allDuplicatePairs.filter(p => p.first.accountId === accountId) : allDuplicatePairs),
+    () =>
+      accountId
+        ? allDuplicatePairs.filter(
+            // R5d: a same-reference pair may span two accounts.
+            p => p.first.accountId === accountId || p.second.accountId === accountId,
+          )
+        : allDuplicatePairs,
     [allDuplicatePairs, accountId],
   );
 
@@ -122,8 +128,8 @@ export function ReviewSections({
             Possible duplicates · {duplicatePairs.length}
           </Text>
           <Text style={styles.hint}>
-            The same amount on the same account within a few minutes. Keep one — the other stops
-            counting anywhere.
+            The same amount on the same account within a few minutes, or the same payment
+            reference. Keep one — the other stops counting anywhere.
           </Text>
           {duplicatePairs.map(pair => (
             <DuplicatePairCard

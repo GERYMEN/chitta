@@ -14,7 +14,13 @@ import {
   findDuplicatePairs,
 } from '../../domain/duplicates/duplicate.rules';
 import { activeAccounts, deletedAccounts } from '../../domain/accounts/account.rules';
-import { accountKeyToString, ACCOUNT_KEY_NORMALIZER_VERSION } from './normalizeAccountKey';
+import {
+  accountKeyToString,
+  ACCOUNT_KEY_NORMALIZER_VERSION,
+  bankCanonicalForText,
+} from './normalizeAccountKey';
+import { refTombstoneKey } from './smsIdentity';
+import type { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
 import { legacyKeyString } from './legacy/normalizeAccountKeyV1';
 import { normalizeMerchant } from '../../domain/merchants/normalizeMerchant';
 import { categoryFitsType, UNCATEGORISED_ID } from '../../domain/categories/category.rules';
@@ -70,6 +76,29 @@ export function resolveAccountIdForSms(
 }
 
 /**
+ * R5d T3a: a 3-digit mask ("Acct XX888", lastDigits '888', no last-4) matches
+ * an ACTIVE account only when the bank is the same (the account's name
+ * resolves to the candidate's bank), the account's last-4 ends with those
+ * digits, and exactly ONE account qualifies. Otherwise null — never a guess.
+ */
+export function resolveAccountBySuffix(
+  accounts: ReadonlyArray<Account>,
+  candidate: Pick<ParsedSmsTransaction, 'lastFour' | 'lastDigits' | 'bankCanonical'>,
+): string | null {
+  const digits = candidate.lastDigits;
+  if (candidate.lastFour != null || !digits || candidate.bankCanonical === 'unknown') return null;
+  const hits = accounts.filter(account => {
+    const own = account.lastFour ?? '';
+    return (
+      own.length === 4 &&
+      own.endsWith(digits) &&
+      bankCanonicalForText(account.name) === candidate.bankCanonical
+    );
+  });
+  return hits.length === 1 ? hits[0].id : null;
+}
+
+/**
  * Resolve the category for a parsed SMS (R2):
  *  1. a merchant rule for the normalized merchant key wins, if its category
  *     still exists, is not archived and fits the transaction type;
@@ -116,6 +145,145 @@ export function filterNewCandidates(
   existingHashes: ReadonlySet<string>,
 ): ParsedSmsTransaction[] {
   return parsed.filter(candidate => !existingHashes.has(candidate.sourceReferenceHash));
+}
+
+// ---- R5d dedupe -----------------------------------------------------------------
+
+/**
+ * R5d: everything a sync dedupes a candidate against, built once per run
+ * from the store rows + the tombstones and extended with each new item.
+ *  - sourceHashes: the unchanged `sms-<id>-<date>` keys (old rows keep deduping);
+ *  - contentHashes: salted content hashes (T1) — survive a changed inbox id;
+ *  - refKeys: `<refDigest>:<type>:<amount>` of live or rejected rows (T2);
+ *  - tombstoneRefKeys: the same, hashed (refTombstoneKey), of deleted rows;
+ *  - rowsMissingContent / tombstonesMissingContent: old keys whose row or
+ *    tombstone has no content hash yet (lazy backfill).
+ */
+export interface SmsDedupeIndex {
+  sourceHashes: Set<string>;
+  contentHashes: Set<string>;
+  refKeys: Set<string>;
+  tombstoneRefKeys: Set<string>;
+  rowsMissingContent: Map<string, string>;
+  tombstonesMissingContent: Set<string>;
+}
+
+/** Rows whose reference blocks a new item with the same ref + type + amount. */
+const REF_DEDUPE_STATUSES: ReadonlySet<Transaction['status']> = new Set([
+  'pending',
+  'approved',
+  'rejected',
+]);
+
+export function refKeyOf(refDigest: string, type: TransactionType, amountMinor: number): string {
+  return `${refDigest}:${type}:${amountMinor}`;
+}
+
+export function buildSmsDedupeIndex(
+  transactions: ReadonlyArray<
+    Pick<Transaction, 'id' | 'status' | 'type' | 'amountMinor' | 'sourceReferenceHash' | 'smsContentHash' | 'refDigest'>
+  >,
+  tombstones: ReadonlyArray<SmsTombstoneRow> = [],
+): SmsDedupeIndex {
+  const index: SmsDedupeIndex = {
+    sourceHashes: new Set(),
+    contentHashes: new Set(),
+    refKeys: new Set(),
+    tombstoneRefKeys: new Set(),
+    rowsMissingContent: new Map(),
+    tombstonesMissingContent: new Set(),
+  };
+  for (const t of transactions) {
+    if (t.sourceReferenceHash) {
+      index.sourceHashes.add(t.sourceReferenceHash);
+      if (!t.smsContentHash) index.rowsMissingContent.set(t.sourceReferenceHash, t.id);
+    }
+    if (t.smsContentHash) index.contentHashes.add(t.smsContentHash);
+    if (t.refDigest && REF_DEDUPE_STATUSES.has(t.status)) {
+      index.refKeys.add(refKeyOf(t.refDigest, t.type, t.amountMinor));
+    }
+  }
+  for (const tomb of tombstones) {
+    index.sourceHashes.add(tomb.sourceReferenceHash);
+    if (tomb.smsContentHash) index.contentHashes.add(tomb.smsContentHash);
+    else index.tombstonesMissingContent.add(tomb.sourceReferenceHash);
+    if (tomb.refKey) index.tombstoneRefKeys.add(tomb.refKey);
+  }
+  return index;
+}
+
+/** Content hashes to write on old rows / tombstones (collected during a run). */
+export interface SmsBackfill {
+  rows: Array<{ id: string; smsContentHash: string }>;
+  tombstones: Array<{ sourceReferenceHash: string; smsContentHash: string }>;
+}
+
+export type SmsDedupeVerdict =
+  /** Not seen: insert it. */
+  | 'new'
+  /** Same SMS (old key or content hash) already recorded or deleted. */
+  | 'known'
+  /** Another SMS with the same reference + type + amount is recorded (T2). */
+  | 'same_reference';
+
+/**
+ * R5d dedupe order: (1) lazy backfill of an old row / tombstone matched by its
+ * old key, (2) old key, (3) content hash, (4) reference + type + amount
+ * (live / rejected rows, this run, tombstones). Pure apart from appending to
+ * `backfill` and clearing the backfill markers it used.
+ */
+export function checkSmsCandidate(
+  index: SmsDedupeIndex,
+  candidate: Pick<
+    ParsedSmsTransaction,
+    'sourceReferenceHash' | 'smsContentHash' | 'refDigest' | 'type' | 'amountMinor'
+  >,
+  backfill?: SmsBackfill,
+): SmsDedupeVerdict {
+  const oldKey = candidate.sourceReferenceHash;
+  const content = candidate.smsContentHash;
+  if (content && backfill) {
+    const rowId = index.rowsMissingContent.get(oldKey);
+    if (rowId !== undefined) {
+      backfill.rows.push({ id: rowId, smsContentHash: content });
+      index.rowsMissingContent.delete(oldKey);
+      index.contentHashes.add(content);
+    }
+    if (index.tombstonesMissingContent.has(oldKey)) {
+      backfill.tombstones.push({ sourceReferenceHash: oldKey, smsContentHash: content });
+      index.tombstonesMissingContent.delete(oldKey);
+      index.contentHashes.add(content);
+    }
+  }
+  if (index.sourceHashes.has(oldKey)) return 'known';
+  if (content && index.contentHashes.has(content)) return 'known';
+  if (candidate.refDigest) {
+    if (index.refKeys.has(refKeyOf(candidate.refDigest, candidate.type, candidate.amountMinor))) {
+      return 'same_reference';
+    }
+    if (
+      index.tombstoneRefKeys.size > 0 &&
+      index.tombstoneRefKeys.has(refTombstoneKey(candidate.refDigest, candidate.type, candidate.amountMinor))
+    ) {
+      return 'same_reference';
+    }
+  }
+  return 'new';
+}
+
+/** Record a candidate taken by this run, so later pages / items dedupe against it. */
+export function rememberSmsCandidate(
+  index: SmsDedupeIndex,
+  candidate: Pick<
+    ParsedSmsTransaction,
+    'sourceReferenceHash' | 'smsContentHash' | 'refDigest' | 'type' | 'amountMinor'
+  >,
+): void {
+  index.sourceHashes.add(candidate.sourceReferenceHash);
+  if (candidate.smsContentHash) index.contentHashes.add(candidate.smsContentHash);
+  if (candidate.refDigest) {
+    index.refKeys.add(refKeyOf(candidate.refDigest, candidate.type, candidate.amountMinor));
+  }
 }
 
 /**
@@ -241,7 +409,8 @@ export interface PartitionedCandidates {
  *  2. an 'added'/'linked' decision for its key → that account if active,
  *     dropped if that account is soft-deleted;
  *  3. owned by a soft-deleted account (D10) or an 'ignored' key → dropped;
- *  4. otherwise unmatched (suggested).
+ *  4. R5d: a unique 3-digit suffix match on the same bank (resolveAccountBySuffix);
+ *  5. otherwise unmatched (suggested).
  * `accounts` may contain both active and deleted accounts.
  */
 export function partitionCandidates(
@@ -283,6 +452,12 @@ export function partitionCandidates(
       isOwnedByDeletedAccount(deleted, deletedDecisionKeys, parsed)
     ) {
       result.dropped.push(parsed);
+      continue;
+    }
+    // R5d T3a: a unique 3-digit suffix match on the same bank (never a guess).
+    const suffixId = resolveAccountBySuffix(active, parsed);
+    if (suffixId != null) {
+      result.matched.push({ parsed, accountId: suffixId });
     } else {
       result.unmatched.push(parsed);
     }
@@ -316,6 +491,9 @@ export function buildSmsPendingRow(
     sanitizedPreview: parsed.sanitizedPreview,
     confidenceScore: parsed.confidenceScore,
     parserVersion: SMS_PARSER_VERSION,
+    // R5d: one-way identities (no SMS content) for cross-run / cross-phone dedupe.
+    smsContentHash: parsed.smsContentHash ?? null,
+    refDigest: parsed.refDigest ?? null,
   };
 }
 
@@ -335,6 +513,11 @@ export interface PostSyncApproval {
   heldForTransfer: Transaction[];
   /** R3b: … or a possible duplicate pair (and no transfer pair). */
   heldForDuplicate: Transaction[];
+  /**
+   * R5d T0e: … or a credit-card bill paid from a bank a/c (moneyHint
+   * 'card_payment'; R5e turns these into transfers) — and no pair above.
+   */
+  heldForCardPayment: Transaction[];
 }
 
 /**
@@ -353,16 +536,25 @@ export function autoApproveAfterSync(
   mode: ApprovalMode,
   threshold: number,
   duplicateDismissals: ReadonlyArray<Pick<DuplicateDismissal, 'aId' | 'bId'>> = [],
+  /** R5d: ids of new items with moneyHint 'card_payment' (held, never auto-approved). */
+  cardPaymentIds: ReadonlySet<string> = new Set(),
 ): PostSyncApproval {
   const eligible = created.filter(
     t => t.status === 'pending' && shouldAutoApprove(mode, threshold, t.confidenceScore),
   );
-  if (eligible.length === 0) return { approve: [], heldForTransfer: [], heldForDuplicate: [] };
+  if (eligible.length === 0) {
+    return { approve: [], heldForTransfer: [], heldForDuplicate: [], heldForCardPayment: [] };
+  }
   const paired = pairedTransactionIds(findTransferPairs(allTransactions, accounts, dismissals));
   const duplicates = duplicatePairIds(findDuplicatePairs(allTransactions, duplicateDismissals));
   return {
-    approve: eligible.filter(t => !paired.has(t.id) && !duplicates.has(t.id)),
+    approve: eligible.filter(
+      t => !paired.has(t.id) && !duplicates.has(t.id) && !cardPaymentIds.has(t.id),
+    ),
     heldForTransfer: eligible.filter(t => paired.has(t.id)),
     heldForDuplicate: eligible.filter(t => !paired.has(t.id) && duplicates.has(t.id)),
+    heldForCardPayment: eligible.filter(
+      t => !paired.has(t.id) && !duplicates.has(t.id) && cardPaymentIds.has(t.id),
+    ),
   };
 }

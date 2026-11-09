@@ -86,6 +86,9 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       transfer_account_id: 6,
       linked_transaction_id: 6,
       link_kind: 6,
+      // R5d: salted identity hashes (no SMS content) — restored rows keep deduping.
+      sms_content_hash: 9,
+      ref_digest: 9,
     },
   },
   {
@@ -158,7 +161,7 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
     // up so a restore on the same phone keeps deleted items deleted.
     name: 'sms_deleted_refs',
     sinceVersion: 8,
-    columns: { source_reference_hash: 8, deleted_at: 8 },
+    columns: { source_reference_hash: 8, deleted_at: 8, sms_content_hash: 9, ref_key: 9 },
   },
 ];
 

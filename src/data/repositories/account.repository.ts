@@ -251,21 +251,33 @@ export interface SuggestionDecisionRow {
   key: string;
   decision: SuggestionDecision;
   accountId: string | null;
+  /** R5d T3c: the key's parts (public bank id, kind, '' or last-4). */
+  bankCanonical?: string;
+  accountKind?: AccountKey['accountKind'];
+  lastFour?: string;
 }
 
 /** Every suggestion decision row (small table: one row per decided key). */
 async function listSuggestionDecisions(): Promise<SuggestionDecisionRow[]> {
   const result = await getDatabase().execute('SELECT * FROM account_suggestion_decisions');
-  return result.rows.map(row => ({
-    key: accountKeyToString({
-      bankCanonical: String(row.bank_canonical),
-      accountKind: String(row.account_kind) as AccountKey['accountKind'],
-      lastFour: row.last_four == null ? '' : String(row.last_four),
-      normalizerVersion: Number(row.normalizer_version),
-    }),
-    decision: String(row.decision) as SuggestionDecision,
-    accountId: row.account_id == null ? null : String(row.account_id),
-  }));
+  return result.rows.map(row => {
+    const bankCanonical = String(row.bank_canonical);
+    const accountKind = String(row.account_kind) as AccountKey['accountKind'];
+    const lastFour = row.last_four == null ? '' : String(row.last_four);
+    return {
+      key: accountKeyToString({
+        bankCanonical,
+        accountKind,
+        lastFour,
+        normalizerVersion: Number(row.normalizer_version),
+      }),
+      decision: String(row.decision) as SuggestionDecision,
+      accountId: row.account_id == null ? null : String(row.account_id),
+      bankCanonical,
+      accountKind,
+      lastFour,
+    };
+  });
 }
 
 /**

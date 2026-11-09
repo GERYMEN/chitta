@@ -2,15 +2,15 @@ import type { TransactionType } from '../../../domain/transactions/transaction.t
 import type { AccountType } from '../../../domain/accounts/account.types';
 import { CONFIDENCE_HIGH } from '../../../domain/transactions/transaction.rules';
 import { formatRupeesPlain } from '../../../shared/utils/currency';
-import { bankCanonicalForText, normalizeAccountKey } from '../normalizeAccountKey';
+import { bankCanonicalForText, extractLastDigits, normalizeAccountKey } from '../normalizeAccountKey';
 import { AccountKeyV1, normalizeAccountKeyV1 } from '../legacy/normalizeAccountKeyV1';
 import { parseSender, SenderInfo } from './senders';
 import { institutionDisplayName, V1_CANONICALS } from './institutions';
+import { refDigestFor, smsContentHash } from '../smsIdentity';
 import {
   AmountHit,
   bindTransaction,
   BoundTxn,
-  digest,
   Direction,
   extractPayee,
   extractReference,
@@ -70,6 +70,14 @@ export interface SmsInput {
   date: number;
 }
 
+/** R5d: what a transaction means beyond its direction (R5e converts these). */
+export type MoneyHint = 'card_payment';
+
+/** R5d: the per-install salt that keys the reference digest and the content hash. */
+export interface SmsReadOptions {
+  salt?: string | null;
+}
+
 export interface ParsedSmsTransaction {
   type: TransactionType;
   amountMinor: number;
@@ -87,8 +95,23 @@ export interface ParsedSmsTransaction {
   label?: SmsLabel;
   /** R5: a salary credit (SAL / SALARY / PAYROLL token). */
   salary?: boolean;
-  /** R5: FNV-1a digest of the UPI/IMPS/NEFT reference (never the raw ref). */
+  /**
+   * R5d T2: salted SHA-256 digest (32 hex) of the UPI/IMPS/NEFT reference —
+   * never the raw ref. Null when there is no reference or no salt was given.
+   */
   refDigest?: string | null;
+  /**
+   * R5d T1: stable identity of the SMS itself (salted SHA-256 of header +
+   * second + whitespace-folded body, 32 hex). Survives a new phone / an SMS
+   * restore that changes the content-provider `_id`. Undefined without a salt.
+   */
+  smsContentHash?: string;
+  /** R5d T0b/T0e: the OTHER side's account digits (display only, never matched). */
+  counterpartyLastFour?: string;
+  /** R5d T0d: 3 visible digits of a 3-digit mask ("Acct XX888"); lastFour stays null. */
+  lastDigits?: string;
+  /** R5d T0e: a credit card bill paid from this bank a/c — held from auto-approve. */
+  moneyHint?: MoneyHint;
   /**
    * R5-fix C1: the EXACT key parser v1 produced for this SMS (frozen v1
    * normalizer over the raw body), so decisions and account matches saved
@@ -138,6 +161,30 @@ const REFUND_RE = /\b(?:refund(?:ed)?|revers(?:al|ed)|chargeback|cash\s*back)\b/
 /** C6: "Refund of Rs 500 … credited" — a refund even when a debit verb is nearer. */
 const REFUND_EXPLICIT_RE =
   /\b(?:refund|reversal|cash\s*back)\s+(?:of\s+)?(?:rs\.?|inr\.?|₹)\s*[\d,]+(?:\.\d{1,2})?[^.]{0,60}?\b(?:credited|refunded|reversed|added)\b/i;
+
+/**
+ * R5d T0a: "Rs X debited on <d> … has been reversed to your A/c XX1234" —
+ * the debit verb is bound, but the sentence says the money came BACK. Only a
+ * completed reversal INTO the user's account (C6's "reversal of credit"
+ * debits never match).
+ */
+const REVERSED_DEBIT_RE =
+  /\bdebited\b[^.;]{0,80}?\b(?:has\s+been|is|was)\s+(?:reversed|refunded)\s+(?:to|in|into)\s+(?:your|ur)\s+(?:a\/?c|acct|account)\b/i;
+
+/**
+ * R5d T0b: "from <words> A/c XX1234" — the OTHER side's account on a credit
+ * ("added to your Paytm Wallet from HDFC Bank A/c XX1234").
+ */
+const FROM_ACCOUNT_RE =
+  /\bfrom\s+(?:(?!your\b|ur\b)[A-Za-z&'-]+\.?\s+){0,5}?(?:a\/?c|acct|account)\s*(?:no\.?\s*)?[x*#.]*\s*(\d{3,})\b/i;
+
+/** R5d T0e: a debit verb bound to "from (your) … A/c XX1234", or "A/c XX1234 (is) debited". */
+const BANK_DEBIT_FROM_RE =
+  /\b(?:debited|deducted|paid|transferred|sent)\b[^.;]{0,40}?\bfrom\s+(?:your\s+|ur\s+)?(?:[A-Za-z]+\s+){0,3}?(?:a\/?c|acct|account)\b\s*(?:no\.?\s*)?[x*#.]*\s*(\d{4})\b|\b(?:a\/?c|acct|account)\s*(?:no\.?\s*)?[x*#.]*\s*(\d{4})\s+(?:is\s+|has\s+been\s+|was\s+)?(?:debited|deducted)\b/i;
+
+/** R5d T0e: "… Credit Card XX9999 payment" / "payment of Credit Card XX9999". */
+const CARD_PAYMENT_RE =
+  /\bcredit\s*card\b(?:\s*(?:no\.?|number|ending(?:\s*with)?))?\s*[x*#]*\s*(\d{4})\b[^.;]{0,40}?\bpayment\b|\bpayment\s+(?:of|for|towards)\s+(?:your\s+)?(?:[A-Za-z]+\s+){0,3}?credit\s*card\b(?:\s*(?:no\.?|number|ending(?:\s*with)?))?\s*[x*#]*\s*(\d{4})\b/i;
 
 /** U2: a charge / penalty debit is real money out even when it names a failure. */
 const CHARGE_RE = /\b(?:charges?|fees?|penalty|penal|bounce)\b/i;
@@ -332,7 +379,7 @@ function nonTransaction(
  * Full read of one SMS: its class, plus a transaction (txn classes), a typed
  * non-transaction (bill/statement/balance/…), or a "not understood" reason.
  */
-export function readSmsMessage(msg: SmsInput): SmsReadResult {
+export function readSmsMessage(msg: SmsInput, options: SmsReadOptions = {}): SmsReadResult {
   const sender = parseSender(msg.address);
   const body = normalizeBody(msg.body ?? '');
   const base = { institution: sender.institution, senderKind: sender.kind };
@@ -384,10 +431,12 @@ export function readSmsMessage(msg: SmsInput): SmsReadResult {
 
   // C6: refund / reversal only when the BOUND verb is a credit (or an explicit
   // "refund of Rs X … credited") — never flips a bound debit into income.
+  // R5d T0a: … or a debit that "has been reversed to your a/c".
   const refund =
     boundIsPast &&
-    REFUND_RE.test(body) &&
-    (bound!.verb.direction === 'credit' || REFUND_EXPLICIT_RE.test(body));
+    ((REFUND_RE.test(body) &&
+      (bound!.verb.direction === 'credit' || REFUND_EXPLICIT_RE.test(body))) ||
+      REVERSED_DEBIT_RE.test(body));
   // U2: "… return charges debited …" is a real debit even with failure words.
   const chargeDebit = boundIsPast && bound!.verb.direction === 'debit' && CHARGE_RE.test(core);
   if (!refund && !chargeDebit && FAILED_RE.test(markerText)) return nt('failed');
@@ -399,19 +448,21 @@ export function readSmsMessage(msg: SmsInput): SmsReadResult {
     if (PROMO_RE.test(markerText) && lastFour == null && !refund) return nt('loan_or_promo');
     // Unknown senders need an account / card / rail mention to count.
     if (!knownSender && !accountMention) return result('not_financial');
-    const label: SmsLabel = refund ? 'refund' : labelForBound(bound, body, sender);
+    const direction: Direction = refund ? 'credit' : bound.verb.direction;
+    const account = accountFor(body, sender, direction, {
+      // U11: a card issuer's own sender (OneCard, SBI Card…) never means a UPI handle.
+      accountKind:
+        key.accountKind === 'upi' && sender.institutionKind === 'card' ? 'credit_card' : key.accountKind,
+      lastFour,
+    });
+    const label: SmsLabel = refund
+      ? 'refund'
+      : account.moneyHint === 'card_payment'
+      ? 'txn_debit'
+      : labelForBound(bound, body, sender);
     return result(label, {
       institution,
-      // U11: a card issuer's own sender (OneCard, SBI Card…) never means a UPI handle.
-      transaction: buildTransaction(
-        msg,
-        body,
-        sender,
-        bound,
-        label,
-        key.accountKind === 'upi' && sender.institutionKind === 'card' ? 'credit_card' : key.accountKind,
-        lastFour,
-      ),
+      transaction: buildTransaction(msg, body, sender, bound, label, account, options.salt ?? null),
     });
   }
 
@@ -437,15 +488,85 @@ export function readSmsMessage(msg: SmsInput): SmsReadResult {
   return result('unknown_financial', { institution, notUnderstood: { reason } });
 }
 
+/** The account a transaction lands on, plus R5d's display-only extras. */
+interface ReadAccount {
+  accountKind: AccountType;
+  lastFour: string | null;
+  /** Set when the account is not the body's bank (T0b wallet credits). */
+  bankCanonical?: string;
+  counterpartyLastFour?: string;
+  lastDigits?: string;
+  moneyHint?: MoneyHint;
+}
+
+function lastFourOfRun(digits: string): string {
+  return digits.slice(-4);
+}
+
+/**
+ * R5d T0b / T0d / T0e on top of the v2 key. Each rule only applies to its own
+ * shape; everything else keeps the v2 key unchanged.
+ */
+function accountFor(
+  body: string,
+  sender: SenderInfo,
+  direction: Direction,
+  v2: { accountKind: AccountType; lastFour: string | null },
+): ReadAccount {
+  if (direction === 'credit') {
+    const from = FROM_ACCOUNT_RE.exec(body);
+    if (from) {
+      const counterparty = lastFourOfRun(from[1]);
+      // A wallet's own alert: the money landed in the wallet, not the bank a/c.
+      if (sender.institutionKind === 'wallet') {
+        return {
+          accountKind: 'other',
+          lastFour: null,
+          bankCanonical: sender.institution,
+          counterpartyLastFour: counterparty,
+        };
+      }
+      // Another (own) account is named outside the "from … a/c" phrase.
+      const blanked =
+        body.slice(0, from.index) + ' '.repeat(from[0].length) + body.slice(from.index + from[0].length);
+      const own = normalizeAccountKey(blanked).lastFour;
+      if (own !== '' && own !== counterparty) {
+        return { ...v2, lastFour: own, counterpartyLastFour: counterparty };
+      }
+    }
+  } else {
+    const bankDebit = BANK_DEBIT_FROM_RE.exec(body);
+    const card = CARD_PAYMENT_RE.exec(body);
+    if (bankDebit && card) {
+      const bankDigits = bankDebit[1] ?? bankDebit[2];
+      const cardDigits = card[1] ?? card[2];
+      if (bankDigits !== cardDigits) {
+        return {
+          accountKind: 'bank',
+          lastFour: bankDigits,
+          counterpartyLastFour: cardDigits,
+          moneyHint: 'card_payment',
+        };
+      }
+    }
+  }
+  if (v2.lastFour == null) {
+    const lastDigits = extractLastDigits(body);
+    if (lastDigits) return { ...v2, lastDigits };
+  }
+  return v2;
+}
+
 function buildTransaction(
   msg: SmsInput,
   body: string,
   sender: SenderInfo,
   bound: BoundTxn,
   label: SmsLabel,
-  accountKind: AccountType,
-  lastFour: string | null,
+  account: ReadAccount,
+  salt: string | null,
 ): ParsedSmsTransaction {
+  const { accountKind, lastFour } = account;
   // C6: 'refund' is only labelled for a bound credit or an explicit "refund of Rs X credited".
   const direction: Direction = label === 'refund' ? 'credit' : bound.verb.direction;
   const type: TransactionType = direction === 'credit' ? 'income' : 'expense';
@@ -455,7 +576,7 @@ function buildTransaction(
   const merchantName = payee ?? 'Unknown';
   const reference = extractReference(body);
   const salary = label === 'txn_credit' && hasSalaryToken(body);
-  const bankCanonical = bankCanonicalFor(body, sender);
+  const bankCanonical = account.bankCanonical ?? bankCanonicalFor(body, sender);
   const amountMinor = bound.amount.minor;
   const confidenceScore = scoreConfidence({
     sender,
@@ -475,7 +596,8 @@ function buildTransaction(
       amountMinor,
     )} — ${merchantName}`,
     // UNCHANGED from v1 (sms-<id>-<date>): re-scans must dedupe against
-    // items v1 already recorded. The reference only feeds `refDigest`.
+    // items v1 already recorded. R5d adds `smsContentHash` beside it (an id
+    // change on a new phone keeps deduping); the reference only feeds `refDigest`.
     sourceReferenceHash: `sms-${msg.id}-${msg.date}`,
     bankName: institutionDisplayName(bankCanonical),
     bankCanonical,
@@ -483,7 +605,11 @@ function buildTransaction(
     lastFour,
     label,
     salary,
-    refDigest: reference ? digest(reference) : null,
+    refDigest: reference && salt ? refDigestFor(salt, reference) : null,
+    ...(salt ? { smsContentHash: smsContentHash(salt, msg) } : {}),
+    ...(account.counterpartyLastFour ? { counterpartyLastFour: account.counterpartyLastFour } : {}),
+    ...(account.lastDigits ? { lastDigits: account.lastDigits } : {}),
+    ...(account.moneyHint ? { moneyHint: account.moneyHint } : {}),
     legacyKey: normalizeAccountKeyV1(msg.body ?? ''),
   };
 }

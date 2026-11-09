@@ -179,7 +179,11 @@ describe('C4 — deleted SMS items never come back', () => {
     const del = db.calls.find(c => /^DELETE FROM transactions/.test(c.sql))!;
     expect(call.transactionNo).toBe(del.transactionNo);
     expect(call.params[0]).toBe(`sms-1-${T0}`);
-    expect(call.params).toHaveLength(2);
+    // R5d: + the salted content hash and the (null: no reference) ref key — one-way keys only.
+    expect(call.params).toHaveLength(4);
+    expect(call.params[2]).toMatch(/^[0-9a-f]{32}$/);
+    expect(call.params[3]).toBeNull();
+    expect(JSON.stringify(call.params)).not.toMatch(/QA-Shop|debited|HDFCBK/);
 
     // The next overlap / re-scan does not recreate it.
     const again = await syncSms({ window: { sinceMs: 0, beforeMs: T0 + DAY }, kind: 'rescan' });

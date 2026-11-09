@@ -175,8 +175,8 @@ describe('autoApproveAfterSync (pure)', () => {
 
   it('manual mode approves nothing; below-threshold items are neither approved nor held', () => {
     const fresh = base('new', { confidenceScore: 80 });
-    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'manual', 90)).toEqual({ approve: [], heldForTransfer: [], heldForDuplicate: [] });
-    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'auto', 90)).toEqual({ approve: [], heldForTransfer: [], heldForDuplicate: [] });
+    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'manual', 90)).toEqual({ approve: [], heldForTransfer: [], heldForDuplicate: [], heldForCardPayment: [] });
+    expect(autoApproveAfterSync([fresh], [fresh], accounts, [], 'auto', 90)).toEqual({ approve: [], heldForTransfer: [], heldForDuplicate: [], heldForCardPayment: [] });
   });
 });
 

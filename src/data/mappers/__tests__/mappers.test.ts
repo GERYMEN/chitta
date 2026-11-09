@@ -28,6 +28,8 @@ const transaction: Transaction = {
   transferAccountId: null,
   linkedTransactionId: null,
   linkKind: null,
+  smsContentHash: null,
+  refDigest: null,
   createdAt: '2026-10-01T19:32:05.000Z',
   updatedAt: '2026-10-01T19:32:05.000Z',
 };
@@ -169,5 +171,21 @@ describe('category mapper', () => {
   it('maps is_system 0 back to boolean false', () => {
     const custom = rowToCategory(categoryToRow({ ...category, isSystem: false }));
     expect(custom.isSystem).toBe(false);
+  });
+});
+
+describe('R5d identity columns', () => {
+  it('round-trip sms_content_hash and ref_digest; absent columns map to null', () => {
+    const withIds = { ...transaction, smsContentHash: 'a'.repeat(32), refDigest: 'b'.repeat(32) };
+    const row = transactionToRow(withIds);
+    expect(row.sms_content_hash).toBe('a'.repeat(32));
+    expect(row.ref_digest).toBe('b'.repeat(32));
+    expect(rowToTransaction(row)).toEqual(withIds);
+    const old = { ...row } as Record<string, unknown>;
+    delete old.sms_content_hash;
+    delete old.ref_digest;
+    const mapped = rowToTransaction(old as never);
+    expect(mapped.smsContentHash).toBeNull();
+    expect(mapped.refDigest).toBeNull();
   });
 });

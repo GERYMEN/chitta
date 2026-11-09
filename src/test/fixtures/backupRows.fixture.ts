@@ -38,6 +38,8 @@ const tx = (id: string, patch: BackupRow): BackupRow => ({
   transfer_account_id: null,
   linked_transaction_id: null,
   link_kind: null,
+  sms_content_hash: null,
+  ref_digest: null,
   ...patch,
 });
 
@@ -60,6 +62,9 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       sanitized_preview: 'QA preview text',
       confidence_score: 0.85,
       parser_version: 'qa-1',
+      // R5d: synthetic salted hashes (not derived from any SMS).
+      sms_content_hash: '0123456789abcdef0123456789abcdef',
+      ref_digest: 'fedcba9876543210fedcba9876543210',
     }),
     tx('qa-t3', { type: 'transfer', category_id: 'cat-transfer', transfer_account_id: 'acc-qa-2', bulk_batch_id: 'qa-batch' }),
     tx('qa-t4', { type: 'income', status: 'rejected', linked_transaction_id: 'qa-t3', link_kind: 'transfer_twin', source_type: 'sms', source_reference_hash: 'qa-hash-2', confidence_score: 92 }),
@@ -79,6 +84,8 @@ export const FULL_BACKUP_ROWS: BackupTables = {
     { key: 'sms_last_synced_at', value: T1 },
     { key: 'tour_completed_at', value: T1 },
     { key: 'feedback_button_position', value: '{"side":"left","centerY":300}' },
+    // R5d (O1): the SMS identity salt is user data — it travels with the backup.
+    { key: 'sms_identity_salt', value: 'ab'.repeat(32) },
   ],
   merchant_rules: [
     { merchant_key: 'qa merchant', category_id: 'cat-qa-custom', created_at: T1, updated_at: T1 },
@@ -95,7 +102,14 @@ export const FULL_BACKUP_ROWS: BackupTables = {
   transfer_pair_dismissals: [{ debit_id: 'qa-t1', credit_id: 'qa-t4', dismissed_at: T1 }],
   duplicate_pair_dismissals: [{ a_id: 'qa-t1', b_id: 'qa-t2', dismissed_at: T1 }],
   // R5-fix C4: a deleted SMS item's reference hash (synthetic id/date).
-  sms_deleted_refs: [{ source_reference_hash: 'sms-900-1759300000000', deleted_at: T1 }],
+  sms_deleted_refs: [
+    {
+      source_reference_hash: 'sms-900-1759300000000',
+      deleted_at: T1,
+      sms_content_hash: '00112233445566778899aabbccddeeff',
+      ref_key: 'ffeeddccbbaa99887766554433221100',
+    },
+  ],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

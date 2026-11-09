@@ -103,14 +103,34 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
         return { rows: [], rowsAffected: 1 };
       }
 
-      // DELETE FROM t WHERE a = ? AND b = ? [AND c = ?] (composite keys).
-      m = /^DELETE FROM (\w+) WHERE (\w+ = \?(?: AND \w+ = \?)+)$/i.exec(sql);
+      // R5d: UPDATE t SET a = ? WHERE <col> = ? (non-id key, e.g. a tombstone hash).
+      m = /^UPDATE (\w+) SET (.*) WHERE (\w+) = \?$/i.exec(sql);
       if (m) {
-        const cols = m[2].split(/ AND /i).map(part => part.split('=')[0].trim());
+        const keyValue = String(params[params.length - 1]);
+        const matches = Array.from(table(m[1]).values()).filter(row => String(row[m![3]]) === keyValue);
+        for (const existing of matches) {
+          let p = 0;
+          for (const assignment of splitTopLevel(m[2])) {
+            const [col, value] = assignment.split('=').map(x => x.trim());
+            existing[col] = value === '?' ? params[p++] : value === 'NULL' ? null : value;
+          }
+        }
+        return { rows: [], rowsAffected: matches.length };
+      }
+
+      // DELETE FROM t WHERE a = ? AND b = ? [AND c = ?] (composite keys).
+      // R5d: a condition may also be a quoted literal (decision = 'linked').
+      m = /^DELETE FROM (\w+) WHERE (\w+ = (?:\?|'[^']*')(?: AND \w+ = (?:\?|'[^']*'))+)$/i.exec(sql);
+      if (m) {
+        let p = 0;
+        const conds = m[2].split(/ AND /i).map(part => {
+          const [col, value] = part.split('=').map(x => x.trim());
+          return { col, value: value === '?' ? params[p++] : value.replace(/^'(.*)'$/, '$1') };
+        });
         const t = table(m[1]);
         let affected = 0;
         for (const [key, row] of Array.from(t.entries())) {
-          if (cols.every((col, i) => String(row[col]) === String(params[i]))) {
+          if (conds.every(({ col, value }) => String(row[col]) === String(value))) {
             t.delete(key);
             affected++;
           }

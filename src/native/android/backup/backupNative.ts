@@ -31,6 +31,8 @@ interface BackupNativeModule {
   pickBackup(): Promise<PickedBackup>;
   decryptBackup(uri: string, password: string): Promise<string>;
   forgetPickedBackup(): Promise<boolean>;
+  /** R5d: SecureRandom bytes as lowercase hex (1..64 bytes). */
+  randomBytes?(count: number): Promise<string>;
 }
 
 const { TrackerBackup } = NativeModules as { TrackerBackup?: BackupNativeModule };
@@ -81,6 +83,22 @@ export async function decryptBackupFile(uri: string, password: string): Promise<
   } catch (error) {
     throw toBackupError(error);
   }
+}
+
+/**
+ * R5d: `count` bytes from the native SecureRandom (BackupModule.randomBytes),
+ * as lowercase hex. Throws when the native module is unavailable; the result
+ * is checked to be exactly `count` bytes of hex.
+ */
+export async function randomBytesHex(count: number): Promise<string> {
+  if (!TrackerBackup?.randomBytes) throw new BackupError('io');
+  const hex = await TrackerBackup.randomBytes(count).catch(() => {
+    throw new BackupError('io');
+  });
+  if (typeof hex !== 'string' || !new RegExp(`^[0-9a-f]{${count * 2}}$`).test(hex)) {
+    throw new BackupError('io');
+  }
+  return hex;
 }
 
 export async function forgetPickedBackup(): Promise<void> {

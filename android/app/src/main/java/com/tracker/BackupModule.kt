@@ -13,6 +13,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.security.SecureRandom
 import java.util.Arrays
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -40,6 +41,7 @@ class BackupModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext), ActivityEventListener {
 
   private val io: ExecutorService = Executors.newSingleThreadExecutor()
+  private val secureRandom = SecureRandom()
 
   private var pendingPromise: Promise? = null
   private var pendingRequest: Int = 0
@@ -177,6 +179,27 @@ class BackupModule(reactContext: ReactApplicationContext) :
   fun forgetPickedBackup(promise: Promise) {
     pickedUri = null
     promise.resolve(true)
+  }
+
+  /**
+   * R5d: [count] (1..64) bytes from SecureRandom, as lowercase hex. Used once
+   * per install for the SMS identity salt. Nothing is logged or kept here.
+   */
+  @ReactMethod
+  fun randomBytes(count: Int, promise: Promise) {
+    if (count < 1 || count > MAX_RANDOM_BYTES) {
+      promise.reject("E_IO", "Invalid length")
+      return
+    }
+    val bytes = ByteArray(count)
+    secureRandom.nextBytes(bytes)
+    val hex = StringBuilder(count * 2)
+    for (b in bytes) {
+      val v = b.toInt() and 0xFF
+      hex.append(HEX[v ushr 4]).append(HEX[v and 0x0F])
+    }
+    Arrays.fill(bytes, 0)
+    promise.resolve(hex.toString())
   }
 
   override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
@@ -320,6 +343,8 @@ class BackupModule(reactContext: ReactApplicationContext) :
     private const val DEFAULT_NAME = "tracker-backup.trkbak"
     /** No real backup comes near this; anything bigger is refused unread. */
     private const val MAX_FILE_BYTES = 64L * 1024 * 1024
+    private const val MAX_RANDOM_BYTES = 64
+    private const val HEX = "0123456789abcdef"
 
     /** Letters, digits, dot, dash and underscore only; must end in .trkbak. */
     fun safeFileName(name: String): String {

@@ -62,6 +62,8 @@ function txRow(id: string, patch: Record<string, unknown>) {
     transfer_account_id: null,
     linked_transaction_id: null,
     link_kind: null,
+    sms_content_hash: null,
+    ref_digest: null,
     created_at: '2026-10-20T10:00:00.000Z',
     updated_at: '2026-10-20T10:00:00.000Z',
     ...patch,

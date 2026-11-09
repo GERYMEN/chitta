@@ -196,3 +196,42 @@ describe('duplicatePickerOptions (manual "Mark as duplicate of…")', () => {
     expect(duplicatePickerOptions(tx('t', { type: 'transfer', transferAccountId: 'w' }), rows)).toEqual([]);
   });
 });
+
+describe('R5d T2 — same reference digest + type + amount', () => {
+  const REF = 'ab'.repeat(16);
+
+  it('is a duplicate suggestion regardless of the time window and the account', () => {
+    const a = tx('r1', { refDigest: REF, accountId: 'acc-bank', occurredAt: at(0) });
+    const b = tx('r2', { refDigest: REF, accountId: 'acc-card', occurredAt: at(3 * DAY) });
+    const pairs = findDuplicatePairs([a, b], []);
+    expect(pairs).toHaveLength(1);
+    expect([pairs[0].first.id, pairs[0].second.id]).toEqual(['r1', 'r2']);
+  });
+
+  it('never pairs a different type (a reversal) or a different amount', () => {
+    const debit = tx('r1', { refDigest: REF });
+    const reversal = tx('r2', { refDigest: REF, type: 'income', occurredAt: at(2 * DAY) });
+    const other = tx('r3', { refDigest: REF, amountMinor: 9999, occurredAt: at(2 * DAY) });
+    expect(findDuplicatePairs([debit, reversal, other], [])).toHaveLength(0);
+  });
+
+  it('respects "Not duplicates" dismissals', () => {
+    const a = tx('r1', { refDigest: REF });
+    const b = tx('r2', { refDigest: REF, accountId: 'acc-card', occurredAt: at(DAY) });
+    expect(findDuplicatePairs([a, b], [{ aId: 'r1', bId: 'r2' }])).toHaveLength(0);
+  });
+
+  it('different refs outside the window on different accounts stay apart', () => {
+    const a = tx('r1', { refDigest: REF });
+    const b = tx('r2', { refDigest: 'cd'.repeat(16), accountId: 'acc-card', occurredAt: at(DAY) });
+    expect(findDuplicatePairs([a, b], [])).toHaveLength(0);
+  });
+
+  it('markDuplicate accepts a same-reference pair on two accounts (user confirms)', () => {
+    const a = tx('r1', { refDigest: REF });
+    const b = tx('r2', { refDigest: REF, accountId: 'acc-card', occurredAt: at(DAY) });
+    expect(markDuplicate(a, b, at(DAY))?.duplicate.linkedTransactionId).toBe('r1');
+    const noRef = tx('r3', { accountId: 'acc-card' });
+    expect(markDuplicate(a, noRef, at(DAY))).toBeNull();
+  });
+});

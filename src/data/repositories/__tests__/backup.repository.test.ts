@@ -181,9 +181,9 @@ describeSql('backup repository (real SQLite)', () => {
     expect(withoutRestoreBookkeeping(snapshot(target))).toEqual(expected);
   });
 
-  it('N-1 → N specifically: the backup has no newest table and still restores', async () => {
+  it('a backup without migration 8 (v7) has no tombstone table and still restores', async () => {
     // R5-fix C4: migration 8 adds the backed-up sms_deleted_refs again.
-    const version = CURRENT_SCHEMA_VERSION - 1;
+    const version = 7;
     const tables = rowsAt(version);
     expect(tables.sms_deleted_refs).toBeUndefined();
     const payload = parseBackupJson(
@@ -194,6 +194,47 @@ describeSql('backup repository (real SQLite)', () => {
     await restoreInto(target, payload);
     expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
     expect(target.rows('sms_deleted_refs')).toEqual([]);
+  });
+
+  it('N-1 → N specifically (R5d): a v8 backup has no identity columns; they restore as NULL', async () => {
+    const version = CURRENT_SCHEMA_VERSION - 1;
+    expect(version).toBe(8);
+    const tables = rowsAt(version);
+    expect(Object.keys(tables.transactions[0])).not.toContain('sms_content_hash');
+    expect(Object.keys(tables.sms_deleted_refs[0])).not.toContain('ref_key');
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
+    for (const row of target.rows('transactions')) {
+      expect(row.sms_content_hash).toBeNull();
+      expect(row.ref_digest).toBeNull();
+    }
+    expect(target.rows('sms_deleted_refs')).toHaveLength(FULL_BACKUP_ROWS.sms_deleted_refs.length);
+    expect(target.rows('sms_deleted_refs')[0].sms_content_hash).toBeNull();
+  });
+
+  it('R5d: a v9 backup carries the identity hashes and the salt round-trips', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    const sms = tables.transactions.find(row => row.sms_content_hash != null)!;
+    expect(sms.ref_digest).toMatch(/^[0-9a-f]{32}$/);
+    expect(tables.app_settings.some(row => row.key === 'sms_identity_salt')).toBe(true);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    const restored = target.rows('transactions').find(row => row.id === sms.id)!;
+    expect(restored.sms_content_hash).toBe(sms.sms_content_hash);
+    expect(restored.ref_digest).toBe(sms.ref_digest);
+    expect(target.rows('sms_deleted_refs')[0].ref_key).toBe(tables.sms_deleted_refs[0].ref_key);
+    expect(target.rows('app_settings').find(row => row.key === 'sms_identity_salt')?.value).toBe(
+      tables.app_settings.find(row => row.key === 'sms_identity_salt')?.value,
+    );
   });
 
   it('a backup without migration 7 (v6) still restores', async () => {

@@ -26,9 +26,15 @@ export interface SmsFixtureExpect {
   /** Not-understood reason. */
   reason?: 'no_amount' | 'no_direction' | 'unknown_format';
   /** Account kind of the transaction. */
-  accountKind?: 'bank' | 'credit_card' | 'upi';
+  accountKind?: 'bank' | 'credit_card' | 'upi' | 'other';
   /** Display bank name of the transaction. */
   bankName?: string;
+  /** R5d: the other side's account digits (never used for matching). */
+  counterpartyLastFour?: string;
+  /** R5d: a 3-digit account mask ("Acct XX888"). */
+  lastDigits?: string;
+  /** R5d: a credit card bill paid from a bank a/c. */
+  moneyHint?: 'card_payment';
 }
 
 export interface SmsFixture {
@@ -723,3 +729,112 @@ export const ACCOUNT_EXPECT: Readonly<Record<string, readonly ['bank' | 'credit_
   'regression: footer never supplies a payee or an account when the main text has none': ['upi', 'HDFC'],
   'regression: "click"/"offer" footer on a real debit': ['bank', 'HDFC'],
 };
+
+/**
+ * R5d — the review set (2026-11-08): 30 SYNTHETIC bank SMS in the common
+ * shapes of the major issuers, rewritten with QA names, XX1234 / XX9999 /
+ * XXXXX123456 / XX888 masks and 000000000xxx references. The three shapes
+ * the review found wrong are 'T0a', 'T0b' and 'T0e'. Every transaction row
+ * states class, type, amount, last-4 and account kind.
+ */
+const txn = (
+  label: SmsLabel,
+  type: 'expense' | 'income',
+  amountMinor: number,
+  lastFour: string | null,
+  accountKind: SmsFixtureExpect['accountKind'],
+  extra: Partial<SmsFixtureExpect> = {},
+): SmsFixtureExpect => ({ label, type, amountMinor, lastFour, accountKind, ...extra });
+
+export const R5D_REVIEW_FIXTURES: ReadonlyArray<SmsFixture> = [
+  fx('review', 'hdfc UPI sent (multi-field)', 'AD-HDFCBK-S',
+    'Sent Rs.250.00 From HDFC Bank A/C *1234 To QA PAYEE On 03/11/26 Ref 000000000301 Not done by you? Call 18000000000',
+    txn('txn_debit', 'expense', 25000, '1234', 'bank')),
+  fx('review', 'hdfc UPI credit from VPA', 'AD-HDFCBK-S',
+    'Rs.1,500.00 credited to HDFC Bank A/c XX1234 on 03-11-26 from VPA qa.payee@okqa (UPI 000000000302)',
+    txn('txn_credit', 'income', 150000, '1234', 'bank')),
+  fx('review', 'hdfc credit card spend', 'AD-HDFCBK-S',
+    'Spent Rs.799.00 On HDFC Bank Card 9999 At QA STORE On 2026-11-03:10:20:30',
+    txn('card_spend', 'expense', 79900, '9999', 'credit_card')),
+  fx('review', 'hdfc debit card spend', 'AD-HDFCBK-S',
+    'Rs.300.00 spent on HDFC Bank Debit Card ending 5678 at QA CAFE on 03-11-26',
+    txn('card_spend', 'expense', 30000, '5678', 'bank')),
+  fx('review', 'sbi UPI debit unprefixed', 'AD-SBIUPI-S',
+    'Dear UPI user A/C X1234 debited by 75.0 on date 03Nov26 trf to QA CAFE Refno 000000000303. If not u? call 18000000000. -SBI',
+    txn('txn_debit', 'expense', 7500, '1234', 'bank')),
+  fx('review', 'sbi long-mask credit (T0c)', 'VM-SBIINB-S',
+    'Your A/C XXXXX123456 Credited INR 2,000.00 on 03/11/26 -Deposit by transfer from QA PAYEE. Avl Bal INR 12,000.00-SBI',
+    txn('txn_credit', 'income', 200000, '3456', 'bank')),
+  fx('review', 'sbi long-mask debit (T0c)', 'VM-SBIINB-S',
+    'Your A/C XXXXX123456 Debited INR 500.00 on 03/11/26 -Transferred to QA PAYEE. Avl Bal INR 11,500.00-SBI',
+    txn('txn_debit', 'expense', 50000, '3456', 'bank')),
+  fx('review', 'icici 3-digit mask debit (T0d)', 'AD-ICICIB-S',
+    'ICICI Bank Acct XX888 debited for Rs 1,250.00 on 03-Nov-26; QA PAYEE credited. UPI:000000000304. Call 18000000000 for dispute.',
+    txn('txn_debit', 'expense', 125000, null, 'bank', { lastDigits: '888' })),
+  fx('review', 'icici 3-digit mask credit (T0d)', 'AD-ICICIB-S',
+    'Dear Customer, Acct XX888 is credited with Rs 5,000.00 on 03-Nov-26 from QA PAYEE. UPI:000000000305-ICICI Bank.',
+    txn('txn_credit', 'income', 500000, null, 'bank', { lastDigits: '888' })),
+  fx('review', 'icici credit card spend', 'AD-ICICIB-S',
+    'INR 2,499.00 spent using ICICI Bank Card XX9999 on 03-Nov-26 on QA STORE. Avl Limit: INR 47,501.00.',
+    txn('card_spend', 'expense', 249900, '9999', 'credit_card')),
+  fx('review', 'axis UPI debit info tail', 'AD-AXISBK-S',
+    'Debit INR 600.00 A/c no. XX1234 03-11-26 10:20:30 UPI/P2M/000000000306/QA STORE SMS BLOCKUPI to 9000000000 -Axis Bank',
+    txn('txn_debit', 'expense', 60000, '1234', 'bank')),
+  fx('review', 'axis UPI credit by VPA', 'AD-AXISBK-S',
+    'INR 1,000.00 credited to A/c no. XX1234 on 03-11-26 10:20:30 by A/c linked to VPA qa.payee@okqa (UPI Ref no 000000000307). -Axis Bank',
+    txn('txn_credit', 'income', 100000, '1234', 'bank')),
+  fx('review', 'kotak UPI sent', 'AD-KOTAKB-S',
+    'Sent Rs.450.00 from Kotak Bank AC X1234 to qa.payee@okqa on 03-11-26.UPI Ref 000000000308.',
+    txn('txn_debit', 'expense', 45000, '1234', 'bank')),
+  fx('review', 'kotak UPI received', 'AD-KOTAKB-S',
+    'Received Rs.900.00 in your Kotak Bank AC X1234 from qa.payee@okqa on 03-11-26.UPI Ref:000000000309.',
+    txn('txn_credit', 'income', 90000, '1234', 'bank')),
+  fx('review', 'federal UPI debit to VPA', 'AD-FEDBNK-S',
+    'Rs 350.00 debited from your A/c XX1234 to VPA qa.payee@okqa on 03-11-2026. UPI Ref 000000000310 - Federal Bank',
+    txn('txn_debit', 'expense', 35000, '1234', 'bank')),
+  fx('review', 'federal UPI credit', 'AD-FEDBNK-S',
+    'Rs 4,000.00 credited to your A/c XX1234 from QA PAYEE on 03-11-2026. UPI Ref 000000000311 - Federal Bank',
+    txn('txn_credit', 'income', 400000, '1234', 'bank')),
+  fx('review', 'pnb UPI debit', 'AD-PNBSMS-S',
+    'A/c XX1234 debited INR 220.00 on 03-11-26 towards UPI/000000000312/QA CAFE. Bal INR 5,780.00 -PNB',
+    txn('txn_debit', 'expense', 22000, '1234', 'bank')),
+  fx('review', 'bob UPI credit', 'AD-BOBTXN-S',
+    'Rs.1200 Credited to A/c ...1234 thru UPI/000000000313 by qa.payee@okqa. Total Bal:Rs.9200.00CR. -BOB',
+    txn('txn_credit', 'income', 120000, '1234', 'bank')),
+  fx('review', 'canara UPI debit', 'AD-CANBNK-S',
+    'An amount of INR 150.00 has been DEBITED to your account XXX1234 on 03/11/2026 towards UPI 000000000314 to QA CAFE. Total Avail.bal INR 850.00 - Canara Bank',
+    txn('txn_debit', 'expense', 15000, '1234', 'bank')),
+  fx('review', 'union mobile banking credit', 'AD-UNIONB-S',
+    'A/c *1234 Credited for Rs:2500.00 on 03-11-2026 by Mob Bk ref no 000000000315 Avl Bal Rs:10000.00 -Union Bank of India',
+    txn('txn_credit', 'income', 250000, '1234', 'bank')),
+  fx('review', 'federal ATM withdrawal', 'AD-FEDBNK-S',
+    'Rs.2,000.00 withdrawn from your A/c XX1234 at QA ATM on 03-11-2026. Avl Bal Rs.8,000.00 - Federal Bank',
+    txn('txn_debit', 'expense', 200000, '1234', 'bank')),
+  fx('review', 'hdfc NEFT salary credit', 'AD-HDFCBK-S',
+    'Rs.45,000.00 credited to A/c XX1234 on 03-11-26 by NEFT-QAEMP0000000316-QA EMPLOYER PVT LTD-SALARY OCT. Avl Bal Rs.50,000.00',
+    txn('txn_credit', 'income', 4500000, '1234', 'bank', { salary: true })),
+  fx('review', 'reversal of a debit is a refund (T0a)', 'AD-HDFCBK-S',
+    'Rs.500.00 debited on 01-11-26 for UPI Ref 000000000317 has been reversed to your A/c XX1234 on 03-11-26. -HDFC Bank',
+    txn('refund', 'income', 50000, '1234', 'bank')),
+  fx('review', 'card bill paid from a bank a/c (T0e)', 'AD-HDFCBK-S',
+    'Rs.10,000.00 debited from A/c XX1234 on 03-11-26 towards HDFC Bank Credit Card XX9999 payment. Avl Bal Rs.5,000.00',
+    txn('txn_debit', 'expense', 1000000, '1234', 'bank', { counterpartyLastFour: '9999', moneyHint: 'card_payment' })),
+  fx('review', 'wallet top-up from a bank a/c (T0b)', 'VM-IPAYTM-S',
+    'Rs.1,000.00 added to your Paytm Wallet from HDFC Bank A/c XX1234 on 03-11-26. Txn ID 000000000318.',
+    txn('txn_credit', 'income', 100000, null, 'other', { counterpartyLastFour: '1234', bankName: 'Paytm' })),
+  fx('review', 'debit naming a "reversal of credit" stays a debit (C6)', 'AD-HDFCBK-S',
+    'Rs.500.00 debited from your A/c XX1234 on 03-11-26 towards reversal of credit dated 01-11-26',
+    txn('txn_debit', 'expense', 50000, '1234', 'bank')),
+  fx('review', 'credit naming the sender a/c first (T0b)', 'AD-KOTAKB-S',
+    'Rs.2,000.00 received from QA PAYEE A/c XX9999 in your A/c XX1234 on 03-11-26. IMPS Ref 000000000319 -Kotak',
+    txn('txn_credit', 'income', 200000, '1234', 'bank', { counterpartyLastFour: '9999' })),
+  fx('review', 'OTP for a card txn', 'AD-HDFCBK-S',
+    '123456 is your OTP for txn of Rs.500.00 at QA STORE on card XX9999. Valid for 5 mins.',
+    { label: 'otp' }),
+  fx('review', 'credit card bill due', 'AD-HDFCBK-S',
+    'Your HDFC Bank Credit Card XX9999 bill of Rs.12,345.00 is due on 15-11-26. Min amt due Rs.620.00.',
+    { label: 'bill_due' }),
+  fx('review', 'e-mandate future debit', 'AD-HDFCBK-S',
+    'Rs.499.00 will be debited from A/c XX1234 on 05-11-26 for QA PAYEE e-mandate.',
+    { label: 'mandate_future' }),
+];

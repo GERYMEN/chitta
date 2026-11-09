@@ -166,6 +166,28 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
   )`,
     ],
   },
+  {
+    // R5d stable SMS identity + persisted reference dedupe. All columns start
+    // NULL; no existing row is rewritten here (sync backfills
+    // sms_content_hash lazily when it sees the same SMS again).
+    //  - sms_content_hash: salted SHA-256 (32 hex) of header + second + body —
+    //    survives a changed inbox `_id` (new phone, SMS restore).
+    //  - ref_digest: salted SHA-256 (32 hex) of the UPI/IMPS/NEFT reference.
+    //  - sms_deleted_refs.ref_key: a deleted row's ref_digest bound to its
+    //    type + amount (hashed again), so a deleted debit stays deleted when
+    //    a second alert with the same reference arrives, but never blocks
+    //    its reversal (a different type).
+    // No SMS text, sender or raw reference is stored.
+    version: 9,
+    statements: [
+      'ALTER TABLE transactions ADD COLUMN sms_content_hash TEXT',
+      'ALTER TABLE transactions ADD COLUMN ref_digest TEXT',
+      'ALTER TABLE sms_deleted_refs ADD COLUMN sms_content_hash TEXT',
+      'ALTER TABLE sms_deleted_refs ADD COLUMN ref_key TEXT',
+      'CREATE INDEX IF NOT EXISTS ix_transactions_sms_content_hash ON transactions(sms_content_hash)',
+      'CREATE INDEX IF NOT EXISTS ix_transactions_ref_digest ON transactions(ref_digest)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

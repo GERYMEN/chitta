@@ -1,6 +1,9 @@
 import { Account, AccountType } from '../../domain/accounts/account.types';
 import { activeAccounts } from '../../domain/accounts/account.rules';
 import { redactLast4 } from '../../shared/privacy/redaction';
+import { bankCanonicalForText } from './normalizeAccountKey';
+import { institutionDisplayName } from './parser/institutions';
+import type { SuggestionDecisionRow } from '../../data/repositories/account.repository';
 import { ParsedSmsTransaction } from './smsParser';
 import { decisionKeyFor, SmsAccountSuggestion, suggestionKeyFor } from './smsSyncLogic';
 
@@ -207,4 +210,67 @@ export function formatShortDateRange(firstIso: string, lastIso: string): string 
   if (sameDay) return shortDate(lastIso, true);
   const sameYear = first.getFullYear() === last.getFullYear();
   return `${shortDate(firstIso, !sameYear)} – ${shortDate(lastIso, true)}`;
+}
+
+/**
+ * R5d T3b (owner decision O2, 2026-11-08): a debit card's SMS carry the
+ * CARD's last-4, so they never match the bank account. When a 'bank' group's
+ * institution has exactly ONE active bank account, "New accounts found"
+ * suggests linking to it ("Looks like your debit card for …") — a
+ * suggestion only: the user confirms and the normal link path records the
+ * 'linked' decision. Null when there is no single candidate.
+ */
+export function debitCardLinkTarget(
+  group: Pick<SuggestionGroup, 'bankCanonical' | 'suggestion'>,
+  accounts: ReadonlyArray<Account>,
+): Account | null {
+  if (group.suggestion.accountKind !== 'bank' || group.bankCanonical === 'unknown') return null;
+  const sameBank = activeAccounts(accounts).filter(
+    account => account.type === 'bank' && bankCanonicalForText(account.name) === group.bankCanonical,
+  );
+  return sameBank.length === 1 ? sameBank[0] : null;
+}
+
+const KIND_LABEL: Record<AccountType, string> = {
+  bank: 'Bank',
+  credit_card: 'Credit Card',
+  upi: 'UPI',
+  cash: 'Cash',
+  other: 'Other',
+};
+
+export interface LinkedNumber {
+  /** `accountKeyToString` key of the 'linked' decision. */
+  key: string;
+  bankCanonical: string;
+  accountKind: AccountType;
+  /** '' when the linked key has no number. */
+  lastFour: string;
+  /** "HDFC · Bank · ••5678" (last-4 masked in the feedback screenshot). */
+  label: string;
+}
+
+/**
+ * R5d T3c: the card / account numbers linked to `accountId` (its 'linked'
+ * decisions) — public bank id, kind and last-4 only; no SMS content.
+ */
+export function linkedNumbersFor(
+  rows: ReadonlyArray<SuggestionDecisionRow>,
+  accountId: string,
+): LinkedNumber[] {
+  return rows
+    .filter(row => row.decision === 'linked' && row.accountId === accountId && row.bankCanonical && row.accountKind)
+    .map(row => {
+      const lastFour = row.lastFour ?? '';
+      const kind = row.accountKind as AccountType;
+      return {
+        key: row.key,
+        bankCanonical: row.bankCanonical as string,
+        accountKind: kind,
+        lastFour,
+        label: `${institutionDisplayName(row.bankCanonical as string)} · ${KIND_LABEL[kind] ?? 'Other'} · ${
+          lastFour ? `••${redactLast4(lastFour)}` : 'no number'
+        }`,
+      };
+    });
 }

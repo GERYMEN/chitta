@@ -87,3 +87,23 @@ describe('R4e backup_restored audit + Activity', () => {
     expect(item.icon).toBe('database-import-outline');
   });
 });
+
+describe('R5d randomBytesHex', () => {
+  it('returns the native SecureRandom hex when it has the right length', async () => {
+    const native = load();
+    const mock = mockModule as typeof mockModule & { randomBytes?: jest.Mock };
+    mock.randomBytes = jest.fn(async (n: number) => 'ab'.repeat(n));
+    await expect(native.randomBytesHex(32)).resolves.toBe('ab'.repeat(32));
+    expect(mock.randomBytes).toHaveBeenCalledWith(32);
+  });
+
+  it('rejects malformed output and a missing native method', async () => {
+    const native = load();
+    const mock = mockModule as typeof mockModule & { randomBytes?: jest.Mock };
+    mock.randomBytes = jest.fn(async () => 'zz');
+    await expect(native.randomBytesHex(32)).rejects.toMatchObject({ code: 'io' });
+    delete mock.randomBytes;
+    const again = load();
+    await expect(again.randomBytesHex(32)).rejects.toMatchObject({ code: 'io' });
+  });
+});

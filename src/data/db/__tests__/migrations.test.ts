@@ -78,8 +78,8 @@ describe('runMigrations versioning', () => {
 
     // 4 from migration 1 + audit_events.account_id from migration 4 +
     // categories.archived_at / color from migration 5 + 3 transactions
-    // columns from migration 6.
-    expect(alterCounts.size).toBe(10);
+    // columns from migration 6 + 4 identity columns from migration 9 (R5d).
+    expect(alterCounts.size).toBe(14);
     for (const count of alterCounts.values()) {
       expect(count).toBe(1);
     }
@@ -255,7 +255,7 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/CHECK \(a_id < b_id\)/);
   });
 
-  it('R5: migration 8 only creates sms_unparsed + sms_deleted_refs (no body / sender column), rewrites nothing, and is the last migration', () => {
+  it('R5: migration 8 only creates sms_unparsed + sms_deleted_refs (no body / sender column), rewrites nothing', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m8 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 8);
     const sqls: string[] = m8.statements.map((st: string | { sql: string }) =>
@@ -268,7 +268,26 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/PRIMARY KEY \(sms_id, sms_date\)/);
     // R5-fix C4: the tombstone table holds the reference hash only.
     expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS sms_deleted_refs \(\s*source_reference_hash TEXT PRIMARY KEY,\s*deleted_at TEXT NOT NULL\s*\)/);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(8);
+  });
+
+  it('R5d: migration 9 only adds the identity columns + indexes, rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m9 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 9);
+    const sqls: string[] = m9.statements.map((st: string | { sql: string }) =>
+      typeof st === 'string' ? st : st.sql,
+    );
+    expect(sqls).toEqual([
+      'ALTER TABLE transactions ADD COLUMN sms_content_hash TEXT',
+      'ALTER TABLE transactions ADD COLUMN ref_digest TEXT',
+      'ALTER TABLE sms_deleted_refs ADD COLUMN sms_content_hash TEXT',
+      'ALTER TABLE sms_deleted_refs ADD COLUMN ref_key TEXT',
+      'CREATE INDEX IF NOT EXISTS ix_transactions_sms_content_hash ON transactions(sms_content_hash)',
+      'CREATE INDEX IF NOT EXISTS ix_transactions_ref_digest ON transactions(ref_digest)',
+    ]);
+    const joined = sqls.join('\n');
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b|\bINSERT\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(9);
   });
 
   it('R5: runs migration 8 exactly once and records it', async () => {

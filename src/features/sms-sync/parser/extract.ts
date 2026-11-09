@@ -2,7 +2,8 @@
  * R5 parser v2 — extraction helpers (pure, no state, no logging).
  *
  * Everything here works on an in-memory SMS body and returns derived values
- * only (amounts in paise, a direction, a payee label, a hashed reference).
+ * only (amounts in paise, a direction, a payee label, the reference — which
+ * callers only ever keep salted + hashed, see smsIdentity.refDigestFor).
  * Nothing here keeps or returns the body itself.
  */
 
@@ -396,17 +397,8 @@ export function extractReference(body: string): string | null {
   return null;
 }
 
-/** FNV-1a 32-bit, hex. A one-way digest so the raw reference is never kept. */
-export function digest(text: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    // eslint-disable-next-line no-bitwise -- FNV-1a is defined on bits
-    hash ^= text.charCodeAt(i);
-    // eslint-disable-next-line no-bitwise -- unsigned 32-bit wrap
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0');
-}
+// R5d: the FNV-1a `digest` that lived here is gone — references are now
+// digested with the per-install salt + SHA-256 (smsIdentity.refDigestFor).
 
 // ---- salary ------------------------------------------------------------------
 

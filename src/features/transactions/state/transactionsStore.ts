@@ -39,8 +39,10 @@ import { runMigrations } from '../../../data/db/connection';
 import {
   transactionRepository,
   CreateTransactionInput,
+  SmsTombstoneInput,
   TransactionPatch,
 } from '../../../data/repositories/transaction.repository';
+import { refTombstoneKey } from '../../sms-sync/smsIdentity';
 import {
   accountRepository,
   AccountPatch,
@@ -224,6 +226,11 @@ interface TransactionsState {
   ignoreSuggestion: (key: AccountKey) => Promise<void>;
   /** R5: Undo of "Link to existing" (see suggestionRepository.undoLink). */
   undoLinkSuggestion: (input: UndoLinkInput) => Promise<number>;
+  /**
+   * R5d lazy backfill: write the content hash on rows that lack it (no
+   * audit, no other field — see transactionRepository.setContentHashes).
+   */
+  backfillSmsContentHashes: (rows: ReadonlyArray<{ id: string; smsContentHash: string }>) => Promise<void>;
   /** R2: "Always use <category> for <merchant>" — audited 'rule_saved'. */
   saveMerchantRule: (
     merchantName: string,
@@ -280,6 +287,21 @@ function transitionLocal(
     status: to,
     approvedAt: to === 'approved' ? now : transaction.approvedAt,
     updatedAt: now,
+  };
+}
+
+/**
+ * R5-fix C4 / R5d: the one-way keys a deleted SMS item leaves behind (null
+ * for manual rows). The reference key is bound to type + amount.
+ */
+export function smsTombstoneFor(
+  t: Pick<Transaction, 'sourceType' | 'sourceReferenceHash' | 'smsContentHash' | 'refDigest' | 'type' | 'amountMinor'>,
+): SmsTombstoneInput | null {
+  if (t.sourceType !== 'sms' || !t.sourceReferenceHash) return null;
+  return {
+    sourceReferenceHash: t.sourceReferenceHash,
+    smsContentHash: t.smsContentHash ?? null,
+    refKey: t.refDigest ? refTombstoneKey(t.refDigest, t.type, t.amountMinor) : null,
   };
 }
 
@@ -636,7 +658,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         },
       ],
       current.accountId,
-      current.sourceType === 'sms' ? current.sourceReferenceHash ?? null : null,
+      smsTombstoneFor(current),
     );
     await get().refresh();
   },
@@ -753,6 +775,17 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   ignoreSuggestion: async key => {
     await accountRepository.ignoreSuggestion(key);
+  },
+
+  backfillSmsContentHashes: async rows => {
+    if (rows.length === 0) return;
+    await transactionRepository.setContentHashes(rows);
+    const byId = new Map(rows.map(row => [row.id, row.smsContentHash]));
+    set(state => ({
+      transactions: state.transactions.map(t =>
+        byId.has(t.id) ? { ...t, smsContentHash: byId.get(t.id) ?? null } : t,
+      ),
+    }));
   },
 
   undoLinkSuggestion: async input => {

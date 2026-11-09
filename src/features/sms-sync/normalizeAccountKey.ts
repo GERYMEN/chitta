@@ -187,6 +187,13 @@ const ENDING_LAST_FOUR_PATTERN = /\bending\s*(?:with\s*)?[x*]{0,6}\s*(\d{4})\b/i
 /** v2: a 5-digit masked card tail ("card ** 12345") → its last 4 digits. */
 const MASKED_FIVE_PATTERN = /[x*]{2,}\s*\d(\d{4})(?![A-Za-z0-9])/i;
 
+/**
+ * R5d T0c: a long mask — mask characters then 5+ digits (SBI
+ * "A/C XXXXX123456") → the last 4 of the digit run. Checked after every
+ * earlier pattern, so it only fills a key v1 / v2 left ''.
+ */
+const LONG_MASK_PATTERN = /[x*]+\s*(\d{5,})(?![A-Za-z0-9])/i;
+
 function extractLastFour(body: string): string {
   const keywordMatch = body.match(LAST_FOUR_PATTERN);
   if (keywordMatch) return keywordMatch[1];
@@ -200,7 +207,25 @@ function extractLastFour(body: string): string {
   const fiveMatch = body.match(MASKED_FIVE_PATTERN);
   if (fiveMatch) return fiveMatch[1];
 
+  const longMatch = body.match(LONG_MASK_PATTERN);
+  if (longMatch) return longMatch[1].slice(-4);
+
   return '';
+}
+
+/** R5d T0d: an account/card word, a mask, then exactly 3 digits ("Acct XX888"). */
+const LAST_DIGITS_PATTERN = /(?:a\/?c|acct|account|card)[^\d]{0,20}?[x*.#]+\s*(\d{3})(?![A-Za-z0-9])/i;
+
+/**
+ * R5d T0d: the 3 visible digits of a 3-digit account mask (ICICI "Acct
+ * XX888"), or null. Only when no last-4 was found — it is NOT part of the
+ * account key (lastFour stays ''); account matching uses it as a suffix
+ * (unique match only).
+ */
+export function extractLastDigits(body: string): string | null {
+  if (extractLastFour(body) !== '') return null;
+  const m = LAST_DIGITS_PATTERN.exec(body);
+  return m ? m[1] : null;
 }
 
 export function normalizeAccountKey(body: string): AccountKey {

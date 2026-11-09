@@ -37,6 +37,8 @@ const COLUMNS = [
   'transfer_account_id',
   'linked_transaction_id',
   'link_kind',
+  'sms_content_hash',
+  'ref_digest',
   'created_at',
   'updated_at',
 ] as const;
@@ -84,6 +86,8 @@ export function buildTransaction(input: CreateTransactionInput): Transaction {
     transferAccountId: input.transferAccountId ?? null,
     linkedTransactionId: input.linkedTransactionId ?? null,
     linkKind: input.linkKind ?? null,
+    smsContentHash: input.smsContentHash ?? null,
+    refDigest: input.refDigest ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -153,20 +157,36 @@ export async function updateTransactionTx(tx: SqlExecutor, transaction: Transact
  * Hard delete. The audit rows (incl. the `deleted` snapshot) keep the id so
  * the feed can still show the history; foreign keys are not enforced.
  */
+/**
+ * R5-fix C4 / R5d: what a deleted SMS item leaves behind — one-way keys only:
+ * the `sms-<id>-<date>` hash, the salted content hash (R5d T1) and the salted
+ * reference key bound to type + amount (R5d T2). Never SMS content.
+ */
+export interface SmsTombstoneInput {
+  sourceReferenceHash: string;
+  smsContentHash: string | null;
+  refKey: string | null;
+}
+
 async function remove(
   id: string,
   audit: ReadonlyArray<AuditEventDraft> = [],
   accountId: string | null = null,
-  smsTombstoneHash: string | null = null,
+  smsTombstone: SmsTombstoneInput | null = null,
 ): Promise<void> {
   await getDatabase().transaction(async tx => {
     await tx.execute('DELETE FROM transactions WHERE id = ?', [id]);
     // R5-fix C4: a deleted SMS item leaves its reference hash (no content) so
     // a re-scan / the 1-day overlap never recreates it.
-    if (smsTombstoneHash) {
+    if (smsTombstone) {
       await tx.execute(
-        'INSERT OR IGNORE INTO sms_deleted_refs (source_reference_hash, deleted_at) VALUES (?, ?)',
-        [smsTombstoneHash, new Date().toISOString()],
+        'INSERT OR IGNORE INTO sms_deleted_refs (source_reference_hash, deleted_at, sms_content_hash, ref_key) VALUES (?, ?, ?, ?)',
+        [
+          smsTombstone.sourceReferenceHash,
+          new Date().toISOString(),
+          smsTombstone.smsContentHash,
+          smsTombstone.refKey,
+        ],
       );
     }
     for (const draft of audit) {
@@ -214,6 +234,25 @@ async function setCategories(
   return now;
 }
 
+/**
+ * R5d lazy backfill: store the content hash on rows recorded before R5d (or
+ * on another phone) when a sync sees the same SMS again by its old key. ONE
+ * db.transaction; only sms_content_hash changes (no updated_at, no audit).
+ */
+async function setContentHashes(
+  rows: ReadonlyArray<{ id: string; smsContentHash: string }>,
+): Promise<void> {
+  if (rows.length === 0) return;
+  await getDatabase().transaction(async tx => {
+    for (const row of rows) {
+      await tx.execute('UPDATE transactions SET sms_content_hash = ? WHERE id = ?', [
+        row.smsContentHash,
+        row.id,
+      ]);
+    }
+  });
+}
+
 export const transactionRepository = {
   listAll,
   getById,
@@ -221,4 +260,5 @@ export const transactionRepository = {
   update,
   delete: remove,
   setCategories,
+  setContentHashes,
 };

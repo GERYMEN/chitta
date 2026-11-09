@@ -267,3 +267,16 @@ describe('linkRefundPatch', () => {
     });
   });
 });
+
+describe('R5d T2 — a refund with the same reference ranks its expense first', () => {
+  it('same ref_digest beats same merchant, same account and the closest date', () => {
+    const REF = 'ef'.repeat(16);
+    const refundRow = tx('rf', { type: 'income', amountMinor: 10000, merchantName: 'QA-Merchant-10', occurredAt: at(5 * DAY), refDigest: REF });
+    const sameMerchantClose = tx('e1', { occurredAt: at(4 * DAY) });
+    const sameRefFar = tx('e2', { merchantName: 'QA-Other', accountId: 'acc-card', occurredAt: at(0), refDigest: REF });
+    const ranked = rankRefundCandidates(refundRow, [refundRow, sameMerchantClose, sameRefFar]);
+    expect(ranked.map(c => c.expense.id)).toEqual(['e2', 'e1']);
+    expect(ranked[0].sameReference).toBe(true);
+    expect(ranked[1].sameReference).toBe(false);
+  });
+});

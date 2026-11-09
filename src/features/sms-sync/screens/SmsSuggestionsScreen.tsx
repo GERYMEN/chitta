@@ -26,6 +26,7 @@ import { OriginalSmsView } from '../../transactions/components/OriginalSmsView';
 import { parseSmsReference } from '../smsReference';
 import { ParsedSmsTransaction } from '../smsParser';
 import {
+  debitCardLinkTarget,
   formatShortDateRange,
   linkableAccounts,
   linkCompatibility,
@@ -105,10 +106,15 @@ export function SmsSuggestionsScreen() {
   function confirmLink(group: SuggestionGroup, account: Account) {
     setLinking(null);
     const count = group.items.length;
-    const fit = linkCompatibility(account, group.suggestion);
+    // R5d T3b (O2): the suggested debit-card link — a card number on its own
+    // bank's only account is expected, not a mismatch.
+    const debitCard = debitCardLinkTarget(group, accounts)?.id === account.id;
+    const fit = debitCard ? ({ ok: true } as const) : linkCompatibility(account, group.suggestion);
     // R5: a kind / last-4 mismatch (e.g. a card's SMS onto a bank account) is
     // allowed, but only after a clear warning.
-    const warning = fit.ok
+    const warning = debitCard
+      ? `Looks like your debit card for ${accountDisplayLabel(account)}. `
+      : fit.ok
       ? ''
       : fit.reason === 'kind'
       ? `These SMS look like a ${TYPE_LABEL[group.suggestion.accountKind]}, but ${accountDisplayLabel(account)} is a ${TYPE_LABEL[account.type]}. `
@@ -177,6 +183,8 @@ export function SmsSuggestionsScreen() {
             group={item}
             busy={busyKey === item.key}
             canLink={linkableAccounts(accounts, item.suggestion).length > 0}
+            debitTarget={debitCardLinkTarget(item, accounts)}
+            onLinkDebit={account => confirmLink(item, account)}
             onAdd={() =>
               navigation.navigate('AddAccount', {
                 prefill: {
@@ -196,7 +204,7 @@ export function SmsSuggestionsScreen() {
       <BottomSheet visible={linking !== null} onClose={() => setLinking(null)}>
         {linking ? (
           <LinkPicker
-            accounts={linkableAccounts(accounts, linking.suggestion)}
+            accounts={pickerAccounts(accounts, linking)}
             onPick={account => confirmLink(linking, account)}
           />
         ) : null}
@@ -205,16 +213,35 @@ export function SmsSuggestionsScreen() {
   );
 }
 
+/** Link picker order: the suggested debit-card account (R5d T3b) first, then best matches. */
+function pickerAccounts(accounts: ReadonlyArray<Account>, group: SuggestionGroup): Account[] {
+  const list = linkableAccounts(accounts, group.suggestion);
+  const target = debitCardLinkTarget(group, accounts);
+  return target ? [target, ...list.filter(account => account.id !== target.id)] : list;
+}
+
 interface SuggestionCardProps {
   group: SuggestionGroup;
   busy: boolean;
   canLink: boolean;
+  /** R5d T3b: the bank's only active bank account, when this looks like its debit card. */
+  debitTarget: Account | null;
+  onLinkDebit: (account: Account) => void;
   onAdd: () => void;
   onLink: () => void;
   onIgnore: () => void;
 }
 
-function SuggestionCard({ group, busy, canLink, onAdd, onLink, onIgnore }: SuggestionCardProps) {
+function SuggestionCard({
+  group,
+  busy,
+  canLink,
+  debitTarget,
+  onLinkDebit,
+  onAdd,
+  onLink,
+  onIgnore,
+}: SuggestionCardProps) {
   const [expanded, setExpanded] = useState(false);
   useRedacted(); // R4c: title last-4 + in/out amounts masked in the feedback screenshot
   const summary = useMemo(() => summarizeGroup(group.items), [group.items]);
@@ -262,16 +289,36 @@ function SuggestionCard({ group, busy, canLink, onAdd, onLink, onIgnore }: Sugge
         </View>
       ) : null}
 
+      {debitTarget ? (
+        <Text style={styles.debitHint} testID="debit-card-hint">
+          {`Looks like your debit card for ${accountDisplayLabel(debitTarget)}`}
+        </Text>
+      ) : null}
+
       <View style={styles.actions}>
+        {debitTarget ? (
+          <Button
+            label={`Link to ${accountDisplayLabel(debitTarget)}`}
+            variant="brand"
+            disabled={busy}
+            onPress={() => onLinkDebit(debitTarget)}
+            testID={`link-debit-${group.key}`}
+          />
+        ) : null}
         <Button
           label="Add account"
-          variant="brand"
+          variant={debitTarget ? 'ghost' : 'brand'}
           disabled={busy}
           onPress={onAdd}
           testID={`add-account-${group.key}`}
         />
         {canLink ? (
-          <Button label="Link to existing" variant="ghost" disabled={busy} onPress={onLink} />
+          <Button
+            label={debitTarget ? 'Link to another account' : 'Link to existing'}
+            variant="ghost"
+            disabled={busy}
+            onPress={onLink}
+          />
         ) : null}
         <Button label="Ignore" variant="ghost" disabled={busy} onPress={onIgnore} />
       </View>
@@ -456,6 +503,11 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  debitHint: {
+    ...typography.labelLg,
+    color: colors.primary,
+    marginTop: spacing.xs,
   },
   picker: {
     gap: spacing.sm,

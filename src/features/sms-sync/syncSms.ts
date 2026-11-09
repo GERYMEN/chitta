@@ -20,13 +20,18 @@ import { suggestionCandidatesRepository } from '../../data/repositories/suggesti
 import { Transaction } from '../../domain/transactions/transaction.types';
 import {
   autoApproveAfterSync,
+  buildSmsDedupeIndex,
   buildSmsTransactionInput,
-  filterNewCandidates,
+  checkSmsCandidate,
   partitionCandidates,
+  rememberSmsCandidate,
   resolveCategoryIdForSms,
   SmsAccountSuggestion,
+  SmsBackfill,
   SuggestionDecisions,
 } from './smsSyncLogic';
+import { loadSmsIdentitySalt } from './smsIdentitySalt';
+import { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
 import {
   accountRepository,
   SuggestionDecisionRow,
@@ -61,6 +66,8 @@ export interface SmsSyncResult {
   heldForTransfer: number;
   /** R3b: new items held from auto-approve because they form a possible duplicate pair. */
   heldForDuplicate: number;
+  /** R5d T0e: new credit-card bill payments from a bank a/c, held from auto-approve. */
+  heldForCardPayment: number;
   /** R4b: the user pressed Cancel — items already inserted are kept. */
   cancelled: boolean;
   /** R4b: the user said no to the large-scan warning — nothing was read. */
@@ -179,6 +186,7 @@ function emptyResult(declined: boolean): SmsSyncResult {
     autoApproved: 0,
     heldForTransfer: 0,
     heldForDuplicate: 0,
+    heldForCardPayment: 0,
     cancelled: false,
     declined,
     notUnderstood: 0,
@@ -265,14 +273,19 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   }
   options.onProgress?.({ scanned: 0, total });
 
-  const existingHashes = new Set(
-    store.transactions
-      .map(transaction => transaction.sourceReferenceHash)
-      .filter((hash): hash is string => hash != null),
-  );
-  // R5-fix C4: SMS items the user DELETED never come back (hash tombstones).
-  const deletedRefs = await smsDeletedRefsRepository.listHashes().catch(() => new Set<string>());
-  for (const hash of deletedRefs) existingHashes.add(hash);
+  // R5d: the per-install salt (restored with a backup) keys the content hash
+  // and the reference digest. Without it (never expected) sync still dedupes
+  // by the old `sms-<id>-<date>` key.
+  const salt = await loadSmsIdentitySalt().catch(() => null);
+  // R5-fix C4: SMS items the user DELETED never come back (tombstones).
+  const tombstones = await smsDeletedRefsRepository
+    .listAll()
+    .catch((): SmsTombstoneRow[] => []);
+  // R5d dedupe: old key OR content hash on any row / tombstone, then the
+  // same reference + type + amount (see checkSmsCandidate).
+  const dedupe = buildSmsDedupeIndex(store.transactions, tombstones);
+  const existingHashes = dedupe.sourceHashes;
+  const deletedRefs = new Set(tombstones.map(tomb => tomb.sourceReferenceHash));
 
   // D10: SMS owned by a soft-deleted account (exact type+lastFour match, or
   // a 'deleted' decision for its normalized key) are dropped — not imported,
@@ -285,9 +298,6 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const openUnparsed = await smsUnparsedRepository.openKeys().catch(() => new Set<string>());
   const resolvedUnparsed: Array<{ smsId: string; smsDate: number }> = [];
   let notUnderstood = 0;
-  // R5: in-run duplicate guard — two SMS with the same reference, type and
-  // amount are one transaction (the reference is only ever held hashed).
-  const seenRefs = new Set<string>();
 
   // Snapshot the policy once so a settings change mid-sync can't mix modes.
   const { approvalMode, autoApproveThreshold } = store;
@@ -297,6 +307,8 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   let newestSeenMs: number | null = null;
   let completed = false;
   const createdRows: Transaction[] = [];
+  // R5d T0e: new card-bill payments are held from auto-approve.
+  const cardPaymentIds = new Set<string>();
   const unmatchedAll: ParsedSmsTransaction[] = [];
   let cursor = firstCursor(window);
 
@@ -314,8 +326,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
 
     const candidates: ParsedSmsTransaction[] = [];
     const unparsed: SmsUnparsedInput[] = [];
+    const backfill: SmsBackfill = { rows: [], tombstones: [] };
     for (const message of page) {
-      const read = readSmsMessage(message);
+      const read = readSmsMessage(message, { salt });
       const key = unparsedKey(message.id, message.date);
       if (read.notUnderstood) {
         if (!existingHashes.has(`sms-${message.id}-${message.date}`)) {
@@ -334,11 +347,11 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       }
       const candidate = read.transaction;
       if (!candidate) continue;
-      if (candidate.refDigest) {
-        const refKey = `${candidate.refDigest}:${candidate.type}:${candidate.amountMinor}`;
-        if (seenRefs.has(refKey)) continue;
-        seenRefs.add(refKey);
-      }
+      // R5d: old key / content hash (+ lazy backfill), then the reference
+      // guard — two SMS with the same reference, type and amount are one
+      // transaction, in this run AND against earlier runs (counted as skipped).
+      if (checkSmsCandidate(dedupe, candidate, backfill) !== 'new') continue;
+      rememberSmsCandidate(dedupe, candidate);
       candidates.push(candidate);
     }
     if (unparsed.length > 0) {
@@ -346,12 +359,20 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       // row seen again in the overlap is ignored by INSERT OR IGNORE).
       notUnderstood += await smsUnparsedRepository.recordMany(unparsed).catch(() => 0);
     }
-    const fresh = filterNewCandidates(candidates, existingHashes);
-    for (const candidate of fresh) existingHashes.add(candidate.sourceReferenceHash);
+    // R5d lazy backfill: content hash only — no audit, no other field.
+    if (backfill.rows.length > 0) {
+      await useTransactionsStore
+        .getState()
+        .backfillSmsContentHashes(backfill.rows)
+        .catch(() => undefined);
+    }
+    if (backfill.tombstones.length > 0) {
+      await smsDeletedRefsRepository.setContentHashes(backfill.tombstones).catch(() => undefined);
+    }
 
     const latestStore = useTransactionsStore.getState();
     const { matched, unmatched } = partitionCandidates(
-      fresh,
+      candidates,
       latestStore.accounts,
       deletedDecisionKeys,
       decisions,
@@ -371,7 +392,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
 
       const input = buildSmsTransactionInput(parsed, accountId, categoryId, new Date().toISOString());
 
-      createdRows.push(await useTransactionsStore.getState().addTransaction(input));
+      const row = await useTransactionsStore.getState().addTransaction(input);
+      createdRows.push(row);
+      if (parsed.moneyHint === 'card_payment') cardPaymentIds.add(row.id);
       if (categoryId === UNCATEGORISED_ID) uncategorised++;
     }
 
@@ -391,15 +414,17 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   // R3a T4: auto-approve only AFTER every new pending item is in, so a new
   // item that pairs as a possible transfer stays pending for the user.
   const latest = useTransactionsStore.getState();
-  const { approve: toApprove, heldForTransfer, heldForDuplicate } = autoApproveAfterSync(
-    createdRows,
-    latest.transactions,
-    latest.accounts,
-    latest.transferDismissals,
-    approvalMode,
-    autoApproveThreshold,
-    latest.duplicateDismissals,
-  );
+  const { approve: toApprove, heldForTransfer, heldForDuplicate, heldForCardPayment } =
+    autoApproveAfterSync(
+      createdRows,
+      latest.transactions,
+      latest.accounts,
+      latest.transferDismissals,
+      approvalMode,
+      autoApproveThreshold,
+      latest.duplicateDismissals,
+      cardPaymentIds,
+    );
   let autoApproved = 0;
   for (const transaction of toApprove) {
     await useTransactionsStore.getState().approve(transaction.id, {
@@ -479,6 +504,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     autoApproved,
     heldForTransfer: heldForTransfer.length,
     heldForDuplicate: heldForDuplicate.length,
+    heldForCardPayment: heldForCardPayment.length,
     cancelled: !completed,
     declined: false,
     notUnderstood,

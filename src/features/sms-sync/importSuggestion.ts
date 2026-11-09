@@ -6,7 +6,15 @@ import { UNCATEGORISED_ID } from '../../domain/categories/category.rules';
 import { Transaction } from '../../domain/transactions/transaction.types';
 import { ACCOUNT_KEY_NORMALIZER_VERSION, AccountKey } from './normalizeAccountKey';
 import { ParsedSmsTransaction } from './smsParser';
-import { autoApproveAfterSync, buildSmsPendingRow, resolveCategoryIdForSms } from './smsSyncLogic';
+import {
+  autoApproveAfterSync,
+  buildSmsDedupeIndex,
+  buildSmsPendingRow,
+  checkSmsCandidate,
+  rememberSmsCandidate,
+  resolveCategoryIdForSms,
+} from './smsSyncLogic';
+import { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
 import { SuggestionGroup } from './suggestionGroups';
 import { getSuggestionGroup, useSuggestionSession } from './suggestionSession';
 import { showSnackbar } from '../../shared/ui/Snackbar';
@@ -86,20 +94,22 @@ async function runImport(
   target: { kind: 'add'; account: CreateAccountInput } | { kind: 'link'; accountId: string },
 ): Promise<SuggestionImportOutcome> {
   const store = useTransactionsStore.getState();
-  const existingHashes = new Set(
-    store.transactions
-      .map(transaction => transaction.sourceReferenceHash)
-      .filter((hash): hash is string => hash != null),
-  );
-  // R5-fix C4: items the user deleted are never re-imported.
-  for (const hash of await smsDeletedRefsRepository.listHashes().catch(() => new Set<string>())) {
-    existingHashes.add(hash);
-  }
+  // R5-fix C4: items the user deleted are never re-imported. R5d: the same
+  // dedupe as Sync SMS — old key, content hash, then reference + type + amount.
+  const tombstones = await smsDeletedRefsRepository
+    .listAll()
+    .catch((): SmsTombstoneRow[] => []);
+  const dedupe = buildSmsDedupeIndex(store.transactions, tombstones);
+  const items = group.items.filter(item => {
+    if (checkSmsCandidate(dedupe, item) !== 'new') return false;
+    rememberSmsCandidate(dedupe, item);
+    return true;
+  });
   const { rows, uncategorised } = preparePendingRows(
-    group.items,
+    items,
     store.categories,
     store.merchantRules,
-    existingHashes,
+    new Set<string>(),
     new Date().toISOString(),
   );
 
@@ -113,6 +123,15 @@ async function runImport(
   // R3a/R3b: items that form a possible transfer or duplicate pair stay pending.
   const latest = useTransactionsStore.getState();
   const { approvalMode, autoApproveThreshold } = latest;
+  // R5d T0e: card-bill payments are held like transfer / duplicate pairs.
+  const cardPaymentRefs = new Set(
+    items.filter(item => item.moneyHint === 'card_payment').map(item => item.sourceReferenceHash),
+  );
+  const cardPaymentIds = new Set(
+    result.transactions
+      .filter(t => t.sourceReferenceHash != null && cardPaymentRefs.has(t.sourceReferenceHash))
+      .map(t => t.id),
+  );
   const { approve: toApprove } = autoApproveAfterSync(
     result.transactions,
     latest.transactions,
@@ -121,6 +140,7 @@ async function runImport(
     approvalMode,
     autoApproveThreshold,
     latest.duplicateDismissals,
+    cardPaymentIds,
   );
   let autoApproved = 0;
   for (const transaction of toApprove) {
