@@ -2,7 +2,7 @@
  * R5d T0 — parser fixes from the 2026-11-08 review (SYNTHETIC inputs only:
  * QA names, XX1234 / XX9999, refs 000000000xxx, qa.x@okqa).
  */
-import { readSmsMessage, SmsReadResult } from '../readSms';
+import { readSmsMessage, readSmsWithReader, SmsReadResult } from '../readSms';
 import { extractLastDigits, normalizeAccountKey } from '../../normalizeAccountKey';
 import { normalizeAccountKeyV1 } from '../../legacy/normalizeAccountKeyV1';
 import { R5D_REVIEW_FIXTURES } from '../../../../test/fixtures/smsReader.fixture';
@@ -145,9 +145,17 @@ describe('T0e — credit card bill paid from a bank a/c', () => {
   });
 
   it('a card issuer\'s "payment received" credit is not a bank debit', () => {
-    const r = read('Payment of Rs.5,000.00 received on your HDFC Bank Credit Card XX9999 on 03-11-26', 'AD-HDFCCC-S');
+    const body = 'Payment of Rs.5,000.00 received on your HDFC Bank Credit Card XX9999 on 03-11-26';
+    // The reader alone: an income on the card, no bank-side card payment.
+    const reader = readSmsWithReader({ id: '9', address: 'AD-HDFCCC-S', body, date: DATE });
+    expect(reader.transaction!.type).toBe('income');
+    expect(reader.transaction!.moneyHint).toBeUndefined();
+    // R5g: the generic card-payment template agrees on type/amount/last-4 and
+    // adds the meaning (card side of a bill payment) — held until R5e.
+    const r = read(body, 'AD-HDFCCC-S');
+    expect(r.source).toBe('rule');
     expect(r.transaction!.type).toBe('income');
-    expect(r.transaction!.moneyHint).toBeUndefined();
+    expect(r.transaction!.moneyHint).toBe('card_payment');
   });
 });
 

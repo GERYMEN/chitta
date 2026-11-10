@@ -27,7 +27,7 @@ export interface SmsUnparsedInput {
   parserVersion: number;
 }
 
-const REASONS: ReadonlySet<string> = new Set(['no_amount', 'no_direction', 'unknown_format']);
+const REASONS: ReadonlySet<string> = new Set(['no_amount', 'no_direction', 'unknown_format', 'foreign_currency']);
 
 function toRow(row: Record<string, unknown>): SmsUnparsedRow {
   const reason = String(row.reason_code);

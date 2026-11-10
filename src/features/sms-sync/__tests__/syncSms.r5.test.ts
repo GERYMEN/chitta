@@ -165,7 +165,16 @@ describe('R5 sync: run kinds + audit (counts only)', () => {
     expect(rescans[0].row.actor).toBe('user');
     expect(JSON.parse(String(rescans[0].row.metadata_json))).toEqual({
       kind: 'sms_rescan',
-      counts: { scanned: 2, created: 1, notUnderstood: 1, autoApproved: 0 },
+      // R5g: + via rule / via reader / held for disagreement (counts only).
+      counts: {
+        scanned: 2,
+        created: 1,
+        notUnderstood: 1,
+        autoApproved: 0,
+        viaRule: 0,
+        viaReader: 1,
+        heldForRuleDisagreement: 0,
+      },
     });
     expect(useTransactionsStore.getState().smsLastSyncedAt).toBeNull();
   });

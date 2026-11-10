@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -33,6 +33,7 @@ import { redactLast4, useRedacted } from '../../../shared/privacy/redaction';
 import { TourTarget } from '../../tour/components/TourTarget';
 import { useLinkedNumbersStore } from '../state/linkedNumbersStore';
 import { LinkedNumber, linkedNumbersFor } from '../../sms-sync/suggestionGroups';
+import { checkBalanceContacts } from '../../sms-sync/rules/checkBalance';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accounts'>,
@@ -332,6 +333,21 @@ function AccountCard({
           ))}
         </View>
       ) : null}
+
+      {/* R5g item 22: verified balance-enquiry numbers only (tel: link, no SMS). */}
+      {checkBalanceContacts(account).slice(0, 1).map(contact => (
+        <Pressable
+          key={contact.telUrl}
+          onPress={() => Linking.openURL(contact.telUrl).catch(() => undefined)}
+          style={styles.unlinkAction}
+          accessibilityRole="button"
+          accessibilityLabel={`Check balance for ${account.name}`}
+          testID={`check-balance-${account.id}`}>
+          <Text style={styles.unlinkLabel}>
+            {contact.type === 'missed_call' ? 'Check balance (missed call)' : 'Check balance'}
+          </Text>
+        </Pressable>
+      ))}
 
       <Pressable
         onPress={onRemove}

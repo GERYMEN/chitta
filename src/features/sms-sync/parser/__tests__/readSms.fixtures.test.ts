@@ -1,4 +1,4 @@
-import { readSmsMessage, TRANSACTION_LABELS } from '../readSms';
+import { readSmsMessage, readSmsWithReader, SmsReadResult, TRANSACTION_LABELS } from '../readSms';
 import {
   ACCOUNT_EXPECT,
   BANK_GROUPS,
@@ -14,8 +14,20 @@ function read(fixture: SmsFixture, id = '7') {
   return readSmsMessage({ id, address: fixture.address, body: fixture.body, date: DATE });
 }
 
-function check(fixture: SmsFixture) {
-  const result = read(fixture);
+/**
+ * R5g T4(b): where a template AGREES with the reader, the record is the
+ * template's — its payee / time may be richer. Class, type, amount and
+ * last-4 must still be the fixture's. Payee deltas listed here.
+ */
+const RULE_PAYEE_DELTAS: Readonly<Record<string, string>> = {
+  'union: mobile banking debit': 'Net Banking',
+};
+const DAY = 24 * 60 * 60 * 1000;
+
+function check(fixture: SmsFixture, reader: (f: SmsFixture) => SmsReadResult = read) {
+  const result = reader(fixture);
+  const viaRule = result.source === 'rule';
+  const key = `${fixture.group}: ${fixture.name}`;
   const e = fixture.expect;
   expect(result.label).toBe(e.label);
   if (e.institution !== undefined) expect(result.institution).toBe(e.institution);
@@ -27,7 +39,9 @@ function check(fixture: SmsFixture) {
     if (e.type !== undefined) expect(t.type).toBe(e.type);
     if (e.amountMinor !== undefined) expect(t.amountMinor).toBe(e.amountMinor);
     if (e.lastFour !== undefined) expect(t.lastFour).toBe(e.lastFour);
-    if (e.payee !== undefined) expect(t.merchantName).toBe(e.payee ?? 'Unknown');
+    if (e.payee !== undefined) {
+      expect(t.merchantName).toBe(viaRule && RULE_PAYEE_DELTAS[key] ? RULE_PAYEE_DELTAS[key] : e.payee ?? 'Unknown');
+    }
     if (e.salary !== undefined) expect(t.salary).toBe(e.salary);
     // R5-fix U11: account kind + display bank asserted on EVERY transaction fixture.
     const account = ACCOUNT_EXPECT[`${fixture.group}: ${fixture.name}`];
@@ -37,7 +51,14 @@ function check(fixture: SmsFixture) {
     // Phone-number-like digits never become a merchant.
     expect(t.merchantName).not.toMatch(/\d{5,}/);
     expect(t.sourceReferenceHash).toBe(`sms-7-${DATE}`);
-    expect(t.occurredAt).toBe(new Date(DATE).toISOString());
+    if (viaRule) {
+      // A template reads the date from the body (item 11): inside the window.
+      const ms = Date.parse(t.occurredAt);
+      expect(ms).toBeGreaterThanOrEqual(DATE - 45 * DAY);
+      expect(ms).toBeLessThanOrEqual(DATE + DAY);
+    } else {
+      expect(t.occurredAt).toBe(new Date(DATE).toISOString());
+    }
   } else {
     expect(result.transaction).toBeNull();
   }
@@ -46,6 +67,16 @@ function check(fixture: SmsFixture) {
 describe('SMS reader v2 — institution fixtures (table-driven)', () => {
   it.each(SMS_FIXTURES.map(f => [`${f.group}: ${f.name}`, f] as const))('%s', (_n, fixture) =>
     check(fixture),
+  );
+});
+
+const readerOnly = (fixture: SmsFixture) =>
+  readSmsWithReader({ id: '7', address: fixture.address, body: fixture.body, date: DATE });
+
+describe('R5g — the reader alone is unchanged (every fixture, exact)', () => {
+  it.each([...SMS_FIXTURES, ...V1_REGRESSION_FIXTURES].map(f => [`${f.group}: ${f.name}`, f] as const))(
+    '%s',
+    (_n, fixture) => check(fixture, readerOnly),
   );
 });
 

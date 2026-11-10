@@ -26,6 +26,8 @@ import {
   partitionCandidates,
   rememberSmsCandidate,
   resolveCategoryIdForSms,
+  RuleHoldReason,
+  ruleHoldReasonFor,
   SmsAccountSuggestion,
   SmsBackfill,
   SuggestionDecisions,
@@ -50,6 +52,43 @@ import {
   SyncWindow,
 } from '../../domain/settings/smsSyncStart.rules';
 import { firstCursor, isLastPage, nextCursor } from './inboxPaging';
+import {
+  ChainChild,
+  chainOutcome,
+  ChainOutcome,
+  findChainParent,
+  useChainSuggestions,
+} from './rules/chaining';
+import { bankCanonicalForText } from './normalizeAccountKey';
+import type { Account } from '../../domain/accounts/account.types';
+
+/**
+ * R5g item 21: run each chained child's rule against live + pending SMS rows
+ * (suggestions + holds only — never deletes or merges). Same issuer = the
+ * candidate's account belongs to the child's bank (or is the same account).
+ */
+export function resolveChains(
+  children: ReadonlyArray<ChainChild>,
+  transactions: ReadonlyArray<Transaction>,
+  accounts: ReadonlyArray<Pick<Account, 'id' | 'name'>>,
+  facts: ReadonlyMap<string, ParsedSmsTransaction>,
+): ChainOutcome[] {
+  const bankOf = new Map(accounts.map(a => [a.id, bankCanonicalForText(a.name)]));
+  const candidates = transactions
+    .filter(t => t.sourceType === 'sms')
+    .map(t => ({ row: t, parsed: facts.get(t.id) }));
+  return children.map(child => {
+    const chain = child.parsed.chain!;
+    const childBank = facts.get(child.row.id)?.bankCanonical ?? bankOf.get(child.row.accountId);
+    const parent = findChainParent(
+      child,
+      chain,
+      candidates,
+      row => row.accountId === child.row.accountId || (childBank != null && bankOf.get(row.accountId) === childBank),
+    );
+    return chainOutcome(child, chain, parent);
+  });
+}
 
 export interface SmsSyncResult {
   scanned: number;
@@ -68,6 +107,15 @@ export interface SmsSyncResult {
   heldForDuplicate: number;
   /** R5d T0e: new credit-card bill payments from a bank a/c, held from auto-approve. */
   heldForCardPayment: number;
+  /** R5g N1: new items where the template and the reader disagree (reader's values, held). */
+  heldForRuleDisagreement: number;
+  /** R5g: new items held for a template money_kind R5e will convert. */
+  heldByMoneyKind: MoneyKindHoldCounts;
+  /** R5g item 21: new items held by a chaining outcome (suggestions only). */
+  heldForChain: number;
+  /** R5g: new items built from a template record / by the reader alone. */
+  viaRule: number;
+  viaReader: number;
   /** R4b: the user pressed Cancel — items already inserted are kept. */
   cancelled: boolean;
   /** R4b: the user said no to the large-scan warning — nothing was read. */
@@ -112,6 +160,27 @@ export class SmsSyncError extends Error {
     this.name = 'SmsSyncError';
     this.code = code;
   }
+}
+
+export type MoneyKindHoldCounts = Record<Exclude<RuleHoldReason, 'rule_disagreement' | 'chain'>, number>;
+
+export function emptyMoneyKindHolds(): MoneyKindHoldCounts {
+  return { transfer: 0, atm: 0, wallet_load: 0, emi: 0, refund: 0 };
+}
+
+/** R5g: counts per hold reason (no SMS content). */
+export function countRuleHolds(
+  held: ReadonlyArray<{ reason: RuleHoldReason }>,
+): { heldForRuleDisagreement: number; heldByMoneyKind: MoneyKindHoldCounts; heldForChain: number } {
+  const heldByMoneyKind = emptyMoneyKindHolds();
+  let heldForRuleDisagreement = 0;
+  let heldForChain = 0;
+  for (const { reason } of held) {
+    if (reason === 'rule_disagreement') heldForRuleDisagreement++;
+    else if (reason === 'chain') heldForChain++;
+    else heldByMoneyKind[reason]++;
+  }
+  return { heldForRuleDisagreement, heldByMoneyKind, heldForChain };
 }
 
 export interface SyncProgress {
@@ -187,6 +256,11 @@ function emptyResult(declined: boolean): SmsSyncResult {
     heldForTransfer: 0,
     heldForDuplicate: 0,
     heldForCardPayment: 0,
+    heldForRuleDisagreement: 0,
+    heldByMoneyKind: emptyMoneyKindHolds(),
+    heldForChain: 0,
+    viaRule: 0,
+    viaReader: 0,
     cancelled: false,
     declined,
     notUnderstood: 0,
@@ -309,6 +383,12 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const createdRows: Transaction[] = [];
   // R5d T0e: new card-bill payments are held from auto-approve.
   const cardPaymentIds = new Set<string>();
+  // R5g: N1 disagreements and template money kinds are held the same way.
+  const ruleHolds = new Map<string, RuleHoldReason>();
+  let viaRule = 0;
+  // R5g item 21: chained children of this run (+ facts of this run's rows).
+  const chainChildren: ChainChild[] = [];
+  const runFacts = new Map<string, ParsedSmsTransaction>();
   const unmatchedAll: ParsedSmsTransaction[] = [];
   let cursor = firstCursor(window);
 
@@ -345,14 +425,16 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       if (openUnparsed.has(key) && read.label !== 'not_financial') {
         resolvedUnparsed.push({ smsId: message.id, smsDate: message.date });
       }
-      const candidate = read.transaction;
-      if (!candidate) continue;
-      // R5d: old key / content hash (+ lazy backfill), then the reference
-      // guard — two SMS with the same reference, type and amount are one
-      // transaction, in this run AND against earlier runs (counted as skipped).
-      if (checkSmsCandidate(dedupe, candidate, backfill) !== 'new') continue;
-      rememberSmsCandidate(dedupe, candidate);
-      candidates.push(candidate);
+      // R5g item 7: a reparse SMS carries up to 3 records (own `#n` hash each).
+      for (const candidate of [read.transaction, ...(read.extraTransactions ?? [])]) {
+        if (!candidate) continue;
+        // R5d: old key / content hash (+ lazy backfill), then the reference
+        // guard — two SMS with the same reference, type and amount are one
+        // transaction, in this run AND against earlier runs (counted as skipped).
+        if (checkSmsCandidate(dedupe, candidate, backfill) !== 'new') continue;
+        rememberSmsCandidate(dedupe, candidate);
+        candidates.push(candidate);
+      }
     }
     if (unparsed.length > 0) {
       // R5-fix C8: only rows really inserted count (a dismissed or resolved
@@ -395,6 +477,11 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       const row = await useTransactionsStore.getState().addTransaction(input);
       createdRows.push(row);
       if (parsed.moneyHint === 'card_payment') cardPaymentIds.add(row.id);
+      const hold = ruleHoldReasonFor(parsed);
+      if (hold) ruleHolds.set(row.id, hold);
+      if (parsed.source === 'rule') viaRule++;
+      runFacts.set(row.id, parsed);
+      if (parsed.chain) chainChildren.push({ row, parsed });
       if (categoryId === UNCATEGORISED_ID) uncategorised++;
     }
 
@@ -414,7 +501,15 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   // R3a T4: auto-approve only AFTER every new pending item is in, so a new
   // item that pairs as a possible transfer stays pending for the user.
   const latest = useTransactionsStore.getState();
-  const { approve: toApprove, heldForTransfer, heldForDuplicate, heldForCardPayment } =
+  if (chainChildren.length > 0) {
+    const outcomes = resolveChains(chainChildren, latest.transactions, latest.accounts, runFacts);
+    for (const outcome of outcomes) if (outcome.hold && !ruleHolds.has(outcome.childId)) ruleHolds.set(outcome.childId, 'chain');
+    const chains = useChainSuggestions.getState();
+    // A child that found its parent completes an "incomplete" parent.
+    for (const outcome of outcomes) if (outcome.parentId) chains.remove(outcome.parentId);
+    chains.add(outcomes, now());
+  }
+  const { approve: toApprove, heldForTransfer, heldForDuplicate, heldForCardPayment, heldForRule } =
     autoApproveAfterSync(
       createdRows,
       latest.transactions,
@@ -424,7 +519,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       autoApproveThreshold,
       latest.duplicateDismissals,
       cardPaymentIds,
+      ruleHolds,
     );
+  const ruleHoldCounts = countRuleHolds(heldForRule);
   let autoApproved = 0;
   for (const transaction of toApprove) {
     await useTransactionsStore.getState().approve(transaction.id, {
@@ -459,7 +556,16 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
           actor: kind === 'rescan' ? 'user' : 'system',
           metadata: {
             kind: kind === 'rescan' ? 'sms_rescan' : 'auto_read',
-            counts: { scanned, created, notUnderstood, autoApproved },
+            // R5g: via rule / via reader / held for disagreement — counts only.
+            counts: {
+              scanned,
+              created,
+              notUnderstood,
+              autoApproved,
+              viaRule,
+              viaReader: created - viaRule,
+              heldForRuleDisagreement: ruleHoldCounts.heldForRuleDisagreement,
+            },
           },
         },
       ])
@@ -505,6 +611,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     heldForTransfer: heldForTransfer.length,
     heldForDuplicate: heldForDuplicate.length,
     heldForCardPayment: heldForCardPayment.length,
+    ...ruleHoldCounts,
+    viaRule,
+    viaReader: created - viaRule,
     cancelled: !completed,
     declined: false,
     notUnderstood,

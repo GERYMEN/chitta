@@ -7,6 +7,10 @@ import { AccountKeyV1, normalizeAccountKeyV1 } from '../legacy/normalizeAccountK
 import { parseSender, SenderInfo } from './senders';
 import { institutionDisplayName, V1_CANONICALS } from './institutions';
 import { refDigestFor, smsContentHash } from '../smsIdentity';
+import type { RuleMoneyKind, RuleRefType } from '../rules/rules.types';
+import type { CompiledRules } from '../rules/rulesLoader';
+import type { RuleChainInfo, SmsEvent } from '../rules/ruleRead';
+import { combineWithRules } from '../rules/combineReaders';
 import {
   AmountHit,
   bindTransaction,
@@ -61,7 +65,9 @@ export type NotUnderstoodReason =
   /** An amount but no debit/credit wording. */
   | 'no_direction'
   /** A financial sender, but no shape we know. */
-  | 'unknown_format';
+  | 'unknown_format'
+  /** R5g: a template read a non-INR amount (not supported until R5e). */
+  | 'foreign_currency';
 
 export interface SmsInput {
   id: string;
@@ -70,12 +76,24 @@ export interface SmsInput {
   date: number;
 }
 
-/** R5d: what a transaction means beyond its direction (R5e converts these). */
-export type MoneyHint = 'card_payment';
+/**
+ * R5d: what a transaction means beyond its direction (R5e converts these).
+ * R5g: a template's money_kind adds transfer / atm / wallet_load / emi /
+ * refund — all held from auto-approve like 'card_payment'.
+ */
+export type MoneyHint = 'card_payment' | 'transfer' | 'atm' | 'wallet_load' | 'emi' | 'refund';
+
+/** R5g: which reader produced the record ('rule' = a rules.json template). */
+export type ReadSource = 'rule' | 'reader';
 
 /** R5d: the per-install salt that keys the reference digest and the content hash. */
 export interface SmsReadOptions {
   salt?: string | null;
+  /**
+   * R5g: the compiled rules document. Undefined = the active (bundled /
+   * stored) document; null = reader only (rules engine off).
+   */
+  rules?: CompiledRules | null;
 }
 
 export interface ParsedSmsTransaction {
@@ -118,6 +136,36 @@ export interface ParsedSmsTransaction {
    * under v1 keep routing. Undefined for rows built outside the reader.
    */
   legacyKey?: AccountKeyV1;
+  /** R5g T3: 'rule' = built from a template's data_fields; undefined = reader. */
+  source?: ReadSource;
+  /** R5g T3: the template that matched (also stamped into parser_version). */
+  patternUid?: string;
+  /** R5g: the rules document version the template came from. */
+  rulesVersion?: number;
+  /**
+   * R5g N1: the template and the reader disagree — the row carries the
+   * READER's values and is held from auto-approve ("two readers disagree").
+   */
+  ruleDisagreement?: boolean;
+  /** R5g item 13: the template's money_kind (Tracker-only). */
+  moneyKind?: RuleMoneyKind;
+  /** R5g item 9: a debit card's alert (the last-4 is the CARD, R5d T3b). */
+  panKind?: 'debit_card';
+  /** R5g item 16: rail of the network reference (refund / duplicate rankers). */
+  refType?: RuleRefType;
+  /** R5g item 15: merchant-rule key only (never a new category). */
+  categoryHint?: string;
+  /** R5g item 18: display name proposed in "New accounts found". */
+  accountNameOverride?: string;
+  /** R5g item 19: wallet / prepaid — spends are expenses, loads are transfers (R5e). */
+  setAccountAsExpense?: boolean;
+  /** R5g item 17: 'Unknown' merchant is expected for this template. */
+  setNoPos?: boolean;
+  recurring?: boolean;
+  /** R5g: the account balance the SMS reported (R6 input). */
+  balanceMinor?: number;
+  /** R5g item 21: chaining rule of the template (sync looks for a parent). */
+  chain?: RuleChainInfo;
 }
 
 /** R5b input: a bill / statement message (never inserted as a transaction). */
@@ -146,6 +194,18 @@ export interface SmsReadResult {
   nonTransaction: SmsNonTransaction | null;
   /** Set when the message should be listed in "Messages not understood". */
   notUnderstood: { reason: NotUnderstoodReason } | null;
+  /** R5g: who produced this result (undefined = reader; rules engine off). */
+  source?: ReadSource;
+  /** R5g: the template that matched (agreeing, winning or disagreeing). */
+  patternUid?: string | null;
+  /** R5g N1: template and reader disagree (any transaction is held). */
+  ruleDisagreement?: boolean;
+  /** R5g item 7: reparse records 2..3 (own `#n` reference hash each). */
+  extraTransactions?: ParsedSmsTransaction[];
+  /** R5g item 23: an event SMS (dropped for now). */
+  event?: SmsEvent | null;
+  /** R5g item 8: a template's ignore_reason. */
+  ignoreReason?: string | null;
 }
 
 // ---- class signals -----------------------------------------------------------
@@ -378,8 +438,17 @@ function nonTransaction(
 /**
  * Full read of one SMS: its class, plus a transaction (txn classes), a typed
  * non-transaction (bill/statement/balance/…), or a "not understood" reason.
+ *
+ * R5g: the reader below AND the rules engine both run (pure, in memory);
+ * `combineWithRules` applies the owner's N1 rule (agree → template record,
+ * reader failed → template, disagreement → reader's values held for review).
  */
 export function readSmsMessage(msg: SmsInput, options: SmsReadOptions = {}): SmsReadResult {
+  return combineWithRules(msg, readSmsWithReader(msg, options), options);
+}
+
+/** The heuristic reader v2 alone (unchanged by R5g). */
+export function readSmsWithReader(msg: SmsInput, options: SmsReadOptions = {}): SmsReadResult {
   const sender = parseSender(msg.address);
   const body = normalizeBody(msg.body ?? '');
   const base = { institution: sender.institution, senderKind: sender.kind };

@@ -7,7 +7,7 @@ const errors = [];
 const warn = [];
 
 const TOP = new Set(['_doc', 'schema_version', 'version', 'min_app_version', 'format_status', 'blacklist_regex', 'rules']);
-const ISSUER = new Set(['sender_status', 'scope', 'institution_from_body', 'name', 'full_name', 'institution_kind', 'senders', 'sender_regexes', 'preprocessor', 'misc_information', 'set_account_as_expense', 'account_name_override', '_doc', 'patterns']);
+const ISSUER = new Set(['sender_status', 'scope', 'institution_from_body', 'name', 'full_name', 'institution_kind', 'senders', 'sender_regexes', 'preprocessor', 'misc_information', 'set_account_as_expense', 'account_name_override', 'format_verified', '_doc', 'patterns']);
 const PATTERN = new Set(['pattern_UID', 'sort_UID', 'sms_type', 'account_type', 'regex', 'flags', 'data_fields', 'samples', 'reparse', 'obsolete', 'obsolete_after', 'preprocessor', 'account_name_override', 'set_account_as_expense', 'create_txn', 'show_notification', '_doc']);
 const FIELDS = new Set(['transaction_type', 'money_kind', 'statement_type', 'notice_type', 'ignore_reason', 'amount', 'pan', 'counterparty_pan', 'counterparty_name', 'pos', 'note', 'date', 'account_balance', 'outstanding_balance', 'available_limit', 'min_due_amount', 'currency', 'network_reference_id', 'transaction_type_rule', 'pos_type_rules', 'recurring_hint', 'category_hint', 'enable_chaining', 'chaining_rule', 'incomplete', 'deleted', 'event_type', 'pnr', 'event_location', 'event_info', 'event_reminder_span', 'name']);
 const SMS_TYPES = new Set(['transaction', 'statement', 'notice', 'balance', 'event', 'ignore']);
@@ -84,6 +84,7 @@ for (const issuer of doc.rules) {
   for (const k of Object.keys(issuer)) if (!ISSUER.has(k)) errors.push(`${issuer.name}: unknown key ${k}`);
   if (!issuer.senders?.length && !issuer.scope) errors.push(`${issuer.name}: no senders`);
   if (issuer.scope && !['financial_fallback', 'any_sender'].includes(issuer.scope)) errors.push(`${issuer.name}: bad scope`);
+  if (issuer.format_verified !== undefined && typeof issuer.format_verified !== 'boolean') errors.push(`${issuer.name}: format_verified must be boolean`);
   const sorts = new Set();
   for (const p of issuer.patterns) {
     patterns++;
@@ -98,6 +99,7 @@ for (const issuer of doc.rules) {
     if (f.money_kind && !KINDS.has(f.money_kind)) errors.push(`${id}: bad money_kind`);
     if (p.sms_type === 'transaction' && !f.transaction_type) errors.push(`${id}: transaction without transaction_type`);
     if (p.sms_type === 'transaction' && !f.amount) errors.push(`${id}: transaction without amount`);
+    if (p.sms_type === 'transaction' && issuer.scope === 'any_sender') errors.push(`${id}: an any_sender layer may not yield a transaction`);
     for (const sel of f.chaining_rule?.parent_selection || []) if (!MATCH.has(sel.match_type)) errors.push(`${id}: bad match_type ${sel.match_type}`);
     try { p._re = new RegExp(p.regex, p.flags); } catch (e) { errors.push(`${id}: bad regex ${e.message}`); continue; }
     const gc = groupCount(p._re);

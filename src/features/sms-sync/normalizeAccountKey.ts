@@ -21,7 +21,13 @@ import { AccountType } from '../../domain/accounts/account.types';
  * ("ending 1234" without a keyword, and a 5-digit masked card tail → its last
  * 4). Both only fill keys v1 left 'unknown' / ''.
  */
-export const ACCOUNT_KEY_NORMALIZER_VERSION = 2;
+/**
+ * v3 (R5g T6): body names of the 20 live banks added to rules.json, appended
+ * AFTER every v2 alias — a body any v1/v2 alias matched keeps its key
+ * (e.g. "City Union Bank" still resolves to 'union' through the v1 alias
+ * "Union Bank"; CUB is told apart by its sender instead).
+ */
+export const ACCOUNT_KEY_NORMALIZER_VERSION = 3;
 
 export interface AccountKey {
   /** Canonical lowercase bank id, e.g. 'hdfc' | 'federal' | 'sbi' | 'unknown'. */
@@ -103,6 +109,43 @@ const BANK_ALIASES: ReadonlyArray<readonly [string, string]> = [
   ['Amex', 'amex'],
   ['OneCard', 'onecard'],
   ['Amazon Pay', 'amazonpay'],
+  // v3 additions (R5g T6) — after every v2 alias, so v1/v2 results are unchanged.
+  ['Bank of Maharashtra', 'bom'],
+  ['IDBI Bank', 'idbi'],
+  ['IDBI', 'idbi'],
+  ['Karur Vysya Bank', 'kvb'],
+  ['Karur Vysya', 'kvb'],
+  ['KVB', 'kvb'],
+  ['Tamilnad Mercantile Bank', 'tmb'],
+  ['Tamilnad Mercantile', 'tmb'],
+  ['TMB', 'tmb'],
+  ['Jammu & Kashmir Bank', 'jkb'],
+  ['J&K Bank', 'jkb'],
+  ['Karnataka Bank', 'kbl'],
+  ['Saraswat Co-operative Bank', 'saraswat'],
+  ['Saraswat Bank', 'saraswat'],
+  ['Saraswat', 'saraswat'],
+  ['Equitas Small Finance Bank', 'equitas'],
+  ['Equitas', 'equitas'],
+  ['SVC Co-operative Bank', 'svc'],
+  ['SVC Bank', 'svc'],
+  ['Fino Payments Bank', 'fino'],
+  ['Fino Bank', 'fino'],
+  ['Punjab & Sind Bank', 'psb'],
+  ['Punjab and Sind Bank', 'psb'],
+  ['NKGSB Co-operative Bank', 'nkgsb'],
+  ['NKGSB Bank', 'nkgsb'],
+  ['NKGSB', 'nkgsb'],
+  ['Ujjivan Small Finance Bank', 'ujjivan'],
+  ['Ujjivan', 'ujjivan'],
+  ['UCO Bank', 'uco'],
+  ['India Post Payments Bank', 'ippb'],
+  ['IPPB', 'ippb'],
+  ['Jio Payments Bank', 'jio'],
+  ['HSBC', 'hsbc'],
+  ['Standard Chartered', 'stanc'],
+  ['StanChart', 'stanc'],
+  ['Bajaj Finserv', 'bajaj'],
 ];
 
 function escapeRegExp(text: string): string {

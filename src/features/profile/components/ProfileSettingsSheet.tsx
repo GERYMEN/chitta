@@ -22,6 +22,7 @@ import { useBackupStore } from '../../backup/backupStore';
 import { lastBackupLabel } from '../../backup/backupLabels';
 import { useSmsReaderStore, visibleUnparsed } from '../../sms-sync/smsReaderStore';
 import { effectiveAutoRead } from '../../sms-sync/autoRead/autoReadRules';
+import { rulesAboutLabel } from '../../sms-sync/rules/rulesLoader';
 
 export interface ProfileSettingsSheetProps {
   visible: boolean;
@@ -359,6 +360,18 @@ export function ProfileSettingsSheet({
         submitLabel="Save"
         submitting={saving}
       />
+      {/* R5g T5 / item 24: the SMS rules document in use (version + bank count). */}
+      <View style={styles.activityRow} testID="settings-about">
+        <View style={styles.activityIcon}>
+          <Icon name="information-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>About</Text>
+          <Text style={styles.activityCaption} testID="settings-about-rules">
+            {rulesAboutLabel()}
+          </Text>
+        </View>
+      </View>
     </BottomSheet>
   );
 }

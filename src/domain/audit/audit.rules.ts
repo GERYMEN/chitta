@@ -149,18 +149,25 @@ function sanitizeCounts(counts: Record<string, number> | null | undefined): Reco
   return out;
 }
 
-/** R5: exactly the four run counters, each a non-negative integer (else 0). */
+/**
+ * R5: exactly the four run counters, each a non-negative integer (else 0).
+ * R5g: plus via rule / via reader / held for disagreement when present.
+ */
 function sanitizeRunCounts(counts: Partial<SmsRunCounts> | null | undefined): SmsRunCounts {
   const n = (value: unknown) => {
     const v = Number(value);
     return Number.isInteger(v) && v >= 0 ? v : 0;
   };
-  return {
+  const out: SmsRunCounts = {
     scanned: n(counts?.scanned),
     created: n(counts?.created),
     notUnderstood: n(counts?.notUnderstood),
     autoApproved: n(counts?.autoApproved),
   };
+  for (const key of ['viaRule', 'viaReader', 'heldForRuleDisagreement'] as const) {
+    if (counts?.[key] !== undefined) out[key] = n(counts[key]);
+  }
+  return out;
 }
 
 /** Whitelist the enum/id/timestamp fields of a transfer row snapshot. */

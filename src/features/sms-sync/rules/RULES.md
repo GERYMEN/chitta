@@ -33,6 +33,7 @@ Generated 2026-11-08 by `scripts/rules/gen_coverage.js`. Do not edit by hand.
 | account name override / set_account_as_expense | same names | display name in New accounts found; wallets: loads are transfers, spends are expenses |
 | misc_information.get_balance | same | "Check balance" numbers (shown only when `verified`) |
 | version / min_app_version | same | newest compatible document wins (bundled now, downloaded later) |
+| *(Tracker only)* format_verified | issuer flag, default false (set on none yet) | N1 (owner 2026-11-10): template vs reader disagreement is held for review; `true` (after a tester's masked "Share pattern" confirmed the format) lets that issuer's templates win outright |
 | *(Tracker only)* money_kind | spend · income · refund · transfer · card_payment · atm · wallet_load · emi · interest | the money **meaning** chitta-ref-app spreads over categories and account types |
 
 ## Totals

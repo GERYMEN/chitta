@@ -163,7 +163,41 @@ const SENDER_TABLE: Readonly<Record<string, SenderEntry>> = {
   // Wallets
   AMZPAY: wallet('amazonpay'),
   AMAZON: wallet('amazonpay'),
+  // R5g T6: live banks added to rules.json (sender IDs cross-checked; same
+  // canonical ids as the rules issuers). NKGSB is 'unconfirmed' — it is
+  // resolved only through SENDER_REGEXES below, never an exact entry.
+  MAHABK: bank('bom'),
+  IDBIBK: bank('idbi'),
+  KVBANK: bank('kvb'),
+  CUBANK: bank('cub'),
+  TMBANK: bank('tmb'),
+  JKBANK: bank('jkb'),
+  KBLBNK: bank('kbl'),
+  KTKBNK: bank('kbl'),
+  SARBNK: bank('saraswat'),
+  EQUTAS: bank('equitas'),
+  SVCBNK: bank('svc'),
+  FINOBK: bank('fino'),
+  PSBANK: bank('psb'),
+  UJJIVN: bank('ujjivan'),
+  UCOBNK: bank('uco'),
+  IPBMSG: bank('ippb'),
+  JIOMNY: bank('jio'),
+  HSBCIN: bank('hsbc'),
+  HSBCBK: bank('hsbc'),
+  SCBANK: bank('stanc'),
+  BAJAJF: card('bajaj'),
 };
+
+/**
+ * R5g T6: issuers whose header IDs are not confirmed ('unconfirmed' in
+ * rules.json) match by their rules.json sender_regexes only (after the exact
+ * table and the prefixes).
+ */
+const SENDER_REGEXES: ReadonlyArray<readonly [RegExp, SenderEntry]> = [
+  [/^NKGSB[A-Z]?$/, bank('nkgsb')],
+  [/^NKG[A-Z]{3}$/, bank('nkgsb')],
+];
 
 /**
  * Prefix fallbacks for headers missing from the exact table (banks register
@@ -203,6 +237,9 @@ function lookup(header: string): SenderEntry | null {
   if (exact) return exact;
   for (const [prefix, entry] of SENDER_PREFIXES) {
     if (header.startsWith(prefix)) return entry;
+  }
+  for (const [re, entry] of SENDER_REGEXES) {
+    if (re.test(header)) return entry;
   }
   return null;
 }

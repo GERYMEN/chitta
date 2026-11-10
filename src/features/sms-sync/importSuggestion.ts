@@ -13,6 +13,8 @@ import {
   checkSmsCandidate,
   rememberSmsCandidate,
   resolveCategoryIdForSms,
+  RuleHoldReason,
+  ruleHoldReasonFor,
 } from './smsSyncLogic';
 import { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
 import { SuggestionGroup } from './suggestionGroups';
@@ -132,6 +134,17 @@ async function runImport(
       .filter(t => t.sourceReferenceHash != null && cardPaymentRefs.has(t.sourceReferenceHash))
       .map(t => t.id),
   );
+  // R5g: N1 disagreements and template money kinds stay pending too.
+  const holdByRef = new Map<string, RuleHoldReason>();
+  for (const item of items) {
+    const reason = ruleHoldReasonFor(item);
+    if (reason) holdByRef.set(item.sourceReferenceHash, reason);
+  }
+  const ruleHolds = new Map<string, RuleHoldReason>();
+  for (const t of result.transactions) {
+    const reason = t.sourceReferenceHash != null ? holdByRef.get(t.sourceReferenceHash) : undefined;
+    if (reason) ruleHolds.set(t.id, reason);
+  }
   const { approve: toApprove } = autoApproveAfterSync(
     result.transactions,
     latest.transactions,
@@ -141,6 +154,7 @@ async function runImport(
     autoApproveThreshold,
     latest.duplicateDismissals,
     cardPaymentIds,
+    ruleHolds,
   );
   let autoApproved = 0;
   for (const transaction of toApprove) {

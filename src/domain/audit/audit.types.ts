@@ -171,6 +171,10 @@ export interface SmsRunCounts {
   created: number;
   notUnderstood: number;
   autoApproved: number;
+  /** R5g: new items from a template / the reader alone / held for disagreement. */
+  viaRule?: number;
+  viaReader?: number;
+  heldForRuleDisagreement?: number;
 }
 
 export interface AuditEvent {

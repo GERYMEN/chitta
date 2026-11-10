@@ -103,7 +103,7 @@ describe('syncSms suggestion session (R2b T1)', () => {
       expect(Number.isFinite(Date.parse(String(c.params[1])))).toBe(true);
     }
     expect(summary).toHaveLength(1);
-    expect(summary[0].params).toEqual(['hdfc', 'bank', '4242', 3, 1700000000000, 1700000000002, 2]);
+    expect(summary[0].params).toEqual(['hdfc', 'bank', '4242', 3, 1700000000000, 1700000000002, 3]); // R5g: normalizer v3
     // No raw SMS body / sender in the session.
     const json = JSON.stringify(session.groups);
     expect(json).not.toContain('AD-QASNDR');

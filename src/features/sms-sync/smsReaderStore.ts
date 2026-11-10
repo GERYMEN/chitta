@@ -185,6 +185,7 @@ const REASON_LABELS: Record<SmsUnparsedRow['reasonCode'], string> = {
   no_amount: 'No amount found',
   no_direction: 'Not sure if money went in or out',
   unknown_format: 'Unfamiliar message format',
+  foreign_currency: 'Foreign currency (not supported yet)',
 };
 
 export function unparsedReasonLabel(reason: SmsUnparsedRow['reasonCode']): string {

@@ -67,6 +67,12 @@ export function findDuplicatePairs(
   transactions: ReadonlyArray<Transaction>,
   dismissals: ReadonlyArray<Pick<DuplicateDismissal, 'aId' | 'bId'>>,
   windowMinutes: number = DUPLICATE_WINDOW_MINUTES,
+  /**
+   * R5g item 21: pairs suggested by a chaining template ([parentId, childId]).
+   * Offered like same-reference pairs (any account / distance) when both rows
+   * are candidates with the same type and amount. Suggestions only.
+   */
+  chainPairs: ReadonlyArray<readonly [string, string]> = [],
 ): DuplicatePair[] {
   const windowMs = windowMinutes * 60 * 1000;
   const dismissed = new Set(dismissals.map(d => duplicatePairKey(d.aId, d.bId)));
@@ -116,6 +122,15 @@ export function findDuplicatePairs(
     }
   }
   for (const list of refGroups.values()) addPairs(list, true);
+  if (chainPairs.length > 0) {
+    const byId = new Map<string, { t: Transaction; ms: number }>();
+    for (const list of groups.values()) for (const entry of list) byId.set(entry.t.id, entry);
+    for (const [a, b] of chainPairs) {
+      const x = byId.get(a);
+      const y = byId.get(b);
+      if (x && y && x.t.type === y.t.type && x.t.amountMinor === y.t.amountMinor) addPairs([x, y], true);
+    }
+  }
   for (const list of groups.values()) addPairs(list, false);
 
   candidates.sort(

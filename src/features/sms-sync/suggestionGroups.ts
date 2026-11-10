@@ -40,6 +40,9 @@ export function groupUnmatchedCandidates(unmatched: ParsedSmsTransaction[]): Sug
     if (existing) {
       existing.items.push(candidate);
       existing.suggestion.messageCount += 1;
+      if (!existing.suggestion.accountName && candidate.accountNameOverride) {
+        existing.suggestion.accountName = candidate.accountNameOverride;
+      }
     } else {
       byKey.set(key, {
         key,
@@ -50,6 +53,7 @@ export function groupUnmatchedCandidates(unmatched: ParsedSmsTransaction[]): Sug
           accountKind: candidate.accountKind,
           lastFour: candidate.lastFour,
           messageCount: 1,
+          ...(candidate.accountNameOverride ? { accountName: candidate.accountNameOverride } : {}),
         },
         items: [candidate],
       });
@@ -83,8 +87,10 @@ const KIND_SUFFIX: Record<AccountType, string> = {
  * appends it). "HDFC Bank", "SBI Credit Card", "Union Bank", "Unknown bank".
  */
 export function proposedAccountBaseName(
-  suggestion: Pick<SmsAccountSuggestion, 'bankName' | 'accountKind'>,
+  suggestion: Pick<SmsAccountSuggestion, 'bankName' | 'accountKind' | 'accountName'>,
 ): string {
+  // R5g item 18: a template's account_name_override wins ("SBI Card").
+  if (suggestion.accountName) return suggestion.accountName;
   const unknown = suggestion.bankName === UNKNOWN_BANK;
   const bank = unknown ? 'Unknown bank' : suggestion.bankName;
   const suffix = KIND_SUFFIX[suggestion.accountKind];
@@ -99,7 +105,7 @@ export function proposedAccountBaseName(
  * "Unknown bank (no last 4)".
  */
 export function proposedAccountTitle(
-  suggestion: Pick<SmsAccountSuggestion, 'bankName' | 'accountKind' | 'lastFour'>,
+  suggestion: Pick<SmsAccountSuggestion, 'bankName' | 'accountKind' | 'lastFour' | 'accountName'>,
 ): string {
   const base = proposedAccountBaseName(suggestion);
   return suggestion.lastFour ? `${base} ••${redactLast4(suggestion.lastFour)}` : `${base} (no last 4)`;

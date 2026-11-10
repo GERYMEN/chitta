@@ -11,6 +11,13 @@ import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { categoryLabel, UNCATEGORISED_ID } from '../../../domain/categories/category.rules';
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
+import { isRuleDisagreementRow } from '../../sms-sync/smsSyncLogic';
+import { isWaitingForMatchingAlert, useChainSuggestions } from '../../sms-sync/rules/chaining';
+
+/** R5g N1: the template and the reader read this SMS differently. */
+export const RULE_DISAGREEMENT_NOTE = 'Check this one: two readers disagree';
+/** R5g item 21: an incomplete chained alert (held up to 24 h). */
+export const WAITING_FOR_ALERT_NOTE = 'Waiting for the matching alert';
 
 export interface PendingTransactionCardProps {
   transaction: Transaction;
@@ -37,6 +44,7 @@ export function PendingTransactionCard({
   onReview,
 }: PendingTransactionCardProps) {
   const categories = useTransactionsStore(state => state.categories);
+  const chainSuggestions = useChainSuggestions(state => state.suggestions);
   useRedacted(); // R4c
 
   const category = categories.find(c => c.id === transaction.categoryId);
@@ -57,6 +65,17 @@ export function PendingTransactionCard({
         </View>
         <AmountText amountMinor={transaction.amountMinor} type={transaction.type} variant="headlineSm" />
       </View>
+
+      {isRuleDisagreementRow(transaction) ? (
+        <Text style={styles.disagreeNote} testID="pending-rule-disagreement">
+          {RULE_DISAGREEMENT_NOTE}
+        </Text>
+      ) : null}
+      {isWaitingForMatchingAlert(chainSuggestions, transaction.id, Date.now()) ? (
+        <Text style={styles.disagreeNote} testID="pending-waiting-alert">
+          {WAITING_FOR_ALERT_NOTE}
+        </Text>
+      ) : null}
 
       <View style={styles.chipRow}>
         {category ? (
@@ -121,6 +140,10 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.outline,
     marginTop: 2,
+  },
+  disagreeNote: {
+    ...typography.bodyMd,
+    color: colors.outline,
   },
   chipRow: {
     flexDirection: 'row',

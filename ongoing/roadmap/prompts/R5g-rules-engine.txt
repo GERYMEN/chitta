@@ -199,3 +199,65 @@ Leak-scan the report (pattern from the dispatch message, shell only).
 Do not commit.
 REPLY ONLY: gates yes/no; files changed; generated sample tests count;
 fixtures whose result changed; decisions.
+
+ORCHESTRATOR NOTES (2026-11-10, after R5d was committed as 0a8efbb on
+phase/R5d-identity-aliases — precondition met; you are already on
+phase/R5g-rules-engine created from it). These OVERRIDE the text above
+where they differ.
+
+N1 OWNER DECISION 2026-11-10: when template and reader disagree, HOLD for
+   review. This replaces "A pattern hit must never be overridden by the
+   classifier" in the PIPELINE section. Every templates in rules.json were
+   written from synthetic bodies and are unverified on real SMS, so:
+   - Run BOTH the rules engine and the existing reader on every SMS (pure,
+     in memory). Reader behaviour itself stays unchanged.
+   - No pattern hit: reader result, exactly as today.
+   - Pattern hit, reader produced no transaction and no specific
+     non-transaction class (not understood / unknown_financial /
+     not_financial): the template result wins (source 'rule').
+   - Pattern hit, both produce a transaction and they AGREE (same
+     direction/type, same amount in paise, same last-4 when both have
+     one): use the template's record (richer fields, source 'rule'),
+     normal approval rules apply.
+   - Any other combination is a DISAGREEMENT: e.g. different amount /
+     direction / last-4, or one side says transaction and the other says
+     otp / promo / mandate_future / failed / statement / notice / ignore.
+     If either side has a transaction, insert ONE pending item using the
+     READER's values, HELD from auto-approve (same hold mechanism as
+     R5d's card-payment hold; add a `heldForRuleDisagreement` count) and
+     tagged so Pending can show "Check this one: two readers disagree".
+     If neither side has a transaction, keep the reader's class.
+   - Per-issuer `format_verified: true` (new optional schema field,
+     default false; add it to build_rules.js templates + validate_v2.js
+     + TS types; set it on NO issuer now) makes that issuer's template
+     win outright over the reader. It is set later, only after a
+     tester's masked "Share pattern" confirms the format.
+   - Audit `sms_rescan` / `auto_read` / sync rows get counts only:
+     via rule, via reader, held for disagreement.
+   - Tests: one per branch above, including format_verified true/false.
+     T4(b) fixture deltas: list fixtures that are now 'rule' agreeing,
+     'rule' where the reader failed, and held disagreements.
+N2 Data facts have changed since this prompt was written: rules.json is
+   now 49 issuers + 2 generic layers, 157 patterns, 163 samples, 8
+   negatives (validate_v2.js ALL OK). Regenerate it ONLY via
+   `node scripts/rules/build_rules.js src/features/sms-sync/rules/rules.json`
+   after editing templates, then run validate_v2.js. Never hand-edit
+   rules.json.
+N3 R5d facts to build on: migration 9 is the latest (R5g needs no
+   migration — patternUid goes into parser_version as stated);
+   ParsedSmsTransaction already has counterpartyLastFour, lastDigits,
+   moneyHint ('card_payment'), refDigest (salted SHA-256 via the R5d
+   helper — use that for network_reference_id, never FNV), and the
+   card-payment hold. Map money_kind card_payment to moneyHint
+   'card_payment'. Other held kinds (transfer, atm, wallet_load, emi,
+   refund-chain) reuse the same hold with their own counts.
+N4 T6 normalizer: R5d kept ACCOUNT_KEY_NORMALIZER_VERSION at 2. Bump to
+   3 only for the appended v3 aliases, and prove with a test that every
+   key produced by v2 for the existing fixture table is unchanged, plus
+   the legacy v1 table (legacy/normalizeAccountKeyV1.ts is frozen — never
+   edit it).
+N5 Chaining (item 21) must never delete or merge rows by itself: only
+   suggestions (duplicate / refund link) and holds, as written above.
+N6 Never write the reference app's old brand names; the repo calls it
+   "chitta-ref-app". Owner: tester APK and device testing come after R5g,
+   so this dispatch stays CODE + TESTS + GATES only.

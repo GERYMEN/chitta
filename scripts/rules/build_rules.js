@@ -174,7 +174,13 @@ const CHAIN_CARD_PAYMENT = {
 };
 
 const R = []; // issuers
+// format_verified (N1, owner 2026-11-10): optional issuer flag, default false. true = this
+// issuer's templates win outright over the reader. Set it ONLY after a tester's masked
+// "Share pattern" confirmed the format — no issuer has it yet. Pass it in `extra`.
 function I(name, full_name, kind, senders, patterns, extra = {}) {
+  if (extra.format_verified !== undefined && typeof extra.format_verified !== 'boolean') {
+    throw new Error(`${name}: format_verified must be boolean`);
+  }
   R.push({ name, full_name, institution_kind: kind, senders, ...extra, patterns: patterns.map(p => P(name, p)) });
 }
 

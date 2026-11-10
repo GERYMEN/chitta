@@ -36,6 +36,52 @@ export const SMS_PARSER_VERSION = `sms-reader-v${PARSER_VERSION}`;
  */
 export const SMS_USER_ADDED_PARSER_VERSION = 'sms-user-added';
 
+/**
+ * R5g T3: parser_version of a row a template took part in (no new column):
+ * `sms-reader-v2+rules-v<n>:<pattern_UID>` for a template record, and
+ * `sms-reader-v2+rules-v<n>:disagree:<pattern_UID>` for an N1 disagreement
+ * (the row carries the reader's values and is held for review).
+ */
+export function parserVersionFor(
+  parsed: Pick<ParsedSmsTransaction, 'patternUid' | 'rulesVersion' | 'ruleDisagreement'>,
+): string {
+  if (!parsed.patternUid) return SMS_PARSER_VERSION;
+  const base = `${SMS_PARSER_VERSION}+rules-v${parsed.rulesVersion ?? 0}`;
+  return parsed.ruleDisagreement ? `${base}:disagree:${parsed.patternUid}` : `${base}:${parsed.patternUid}`;
+}
+
+const DISAGREE_TAG = /\+rules-v\d+:disagree:/;
+
+/** R5g N1: Pending shows "Check this one: two readers disagree" for these rows. */
+export function isRuleDisagreementRow(t: Pick<Transaction, 'parserVersion'>): boolean {
+  return DISAGREE_TAG.test(t.parserVersion ?? '');
+}
+
+/**
+ * R5g: why a new item is held from auto-approve besides R3a/R3b pairs and
+ * R5d's card payment — an N1 disagreement, or a template money_kind that
+ * R5e will convert (transfer / ATM / wallet top-up / EMI / refund).
+ */
+export type RuleHoldReason =
+  | 'rule_disagreement'
+  | 'transfer'
+  | 'atm'
+  | 'wallet_load'
+  | 'emi'
+  | 'refund'
+  /** Item 21: a chaining outcome (duplicate / refund link / twin / incomplete). */
+  | 'chain';
+
+const MONEY_KIND_HOLDS: ReadonlySet<string> = new Set(['transfer', 'atm', 'wallet_load', 'emi', 'refund']);
+
+export function ruleHoldReasonFor(
+  parsed: Pick<ParsedSmsTransaction, 'ruleDisagreement' | 'moneyHint'>,
+): RuleHoldReason | null {
+  if (parsed.ruleDisagreement) return 'rule_disagreement';
+  if (parsed.moneyHint && MONEY_KIND_HOLDS.has(parsed.moneyHint)) return parsed.moneyHint as RuleHoldReason;
+  return null;
+}
+
 /** R5: the seeded "Salary & Wages" category (connection.ts seed). */
 export const SALARY_CATEGORY_ID = 'cat-salary';
 
@@ -51,6 +97,8 @@ export interface SmsAccountSuggestion {
   accountKind: AccountType;
   lastFour: string | null;
   messageCount: number;
+  /** R5g item 18: a template's account_name_override (proposed display name). */
+  accountName?: string;
 }
 
 /** Signature a candidate's source is grouped by when no account matches. */
@@ -490,7 +538,7 @@ export function buildSmsPendingRow(
     sourceReferenceHash: parsed.sourceReferenceHash,
     sanitizedPreview: parsed.sanitizedPreview,
     confidenceScore: parsed.confidenceScore,
-    parserVersion: SMS_PARSER_VERSION,
+    parserVersion: parserVersionFor(parsed),
     // R5d: one-way identities (no SMS content) for cross-run / cross-phone dedupe.
     smsContentHash: parsed.smsContentHash ?? null,
     refDigest: parsed.refDigest ?? null,
@@ -518,6 +566,8 @@ export interface PostSyncApproval {
    * 'card_payment'; R5e turns these into transfers) — and no pair above.
    */
   heldForCardPayment: Transaction[];
+  /** R5g: … or an N1 disagreement / a held template money_kind — and no pair above. */
+  heldForRule: Array<{ transaction: Transaction; reason: RuleHoldReason }>;
 }
 
 /**
@@ -538,23 +588,26 @@ export function autoApproveAfterSync(
   duplicateDismissals: ReadonlyArray<Pick<DuplicateDismissal, 'aId' | 'bId'>> = [],
   /** R5d: ids of new items with moneyHint 'card_payment' (held, never auto-approved). */
   cardPaymentIds: ReadonlySet<string> = new Set(),
+  /** R5g: new items held for an N1 disagreement or a template money_kind. */
+  ruleHolds: ReadonlyMap<string, RuleHoldReason> = new Map(),
 ): PostSyncApproval {
   const eligible = created.filter(
     t => t.status === 'pending' && shouldAutoApprove(mode, threshold, t.confidenceScore),
   );
   if (eligible.length === 0) {
-    return { approve: [], heldForTransfer: [], heldForDuplicate: [], heldForCardPayment: [] };
+    return { approve: [], heldForTransfer: [], heldForDuplicate: [], heldForCardPayment: [], heldForRule: [] };
   }
   const paired = pairedTransactionIds(findTransferPairs(allTransactions, accounts, dismissals));
   const duplicates = duplicatePairIds(findDuplicatePairs(allTransactions, duplicateDismissals));
+  const unpaired = (t: Transaction) => !paired.has(t.id) && !duplicates.has(t.id);
+  const disagreement = (t: Transaction) => ruleHolds.get(t.id) === 'rule_disagreement';
   return {
-    approve: eligible.filter(
-      t => !paired.has(t.id) && !duplicates.has(t.id) && !cardPaymentIds.has(t.id),
-    ),
+    approve: eligible.filter(t => unpaired(t) && !cardPaymentIds.has(t.id) && !ruleHolds.has(t.id)),
     heldForTransfer: eligible.filter(t => paired.has(t.id)),
     heldForDuplicate: eligible.filter(t => !paired.has(t.id) && duplicates.has(t.id)),
-    heldForCardPayment: eligible.filter(
-      t => !paired.has(t.id) && !duplicates.has(t.id) && cardPaymentIds.has(t.id),
-    ),
+    heldForCardPayment: eligible.filter(t => unpaired(t) && cardPaymentIds.has(t.id) && !disagreement(t)),
+    heldForRule: eligible
+      .filter(t => unpaired(t) && ruleHolds.has(t.id) && (disagreement(t) || !cardPaymentIds.has(t.id)))
+      .map(t => ({ transaction: t, reason: ruleHolds.get(t.id) as RuleHoldReason })),
   };
 }
