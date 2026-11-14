@@ -1,0 +1,93 @@
+GROUND FACTS: read the DEVICE PLAN sections of ongoing/roadmap/
+R5-sms-reading-v2.md, R5d-sms-identity-aliases.md, R5g-rules-engine.md,
+and the device lessons in ongoing/roadmap/STATE.md and R4b/R4c device
+reports. Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker
+(branch phase/R5g-rules-engine, all committed). NO code changes, no commit.
+
+PHASE R5-DEVICE — combined device pass for R5 + R5d + R5g on the OWNER'S
+PERSONAL phone (serial 00015365L001524), COUNTS ONLY.
+
+APK: the orchestrator gives the path of the DEBUG-SIGNED 0.10.0-beta build
+in the dispatch message (the owner's install is debug-signed; the
+private-key tester APK would fail with INSTALL_FAILED_UPDATE_INCOMPATIBLE).
+Install with `adb -s 00015365L001524 install -r <apk>` (data kept). On
+INSTALL_FAILED_UPDATE_INCOMPATIBLE or any other failure → STOP. Never
+uninstall, never clear data. Write adb commands inline (no $S variables).
+
+OWNER OKs (filled in by the orchestrator in the dispatch message):
+RESCAN=<yes|no>  AUTOREAD_TOGGLE=<yes|no>. Anything not OK'd = skip and
+report "skipped (no owner OK)".
+
+ABSOLUTE SAFETY (personal phone, real SMS inbox):
+- Before starting: wait until the phone is unlocked with the launcher or
+  Tracker in front for 2 consecutive minutes. Locked = stop; never enter a
+  PIN.
+- Interact ONLY with com.tracker. Before EVERY tap / dump run
+  `adb -s 00015365L001524 shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'`
+  — BOTH lines must contain com.tracker, and a failed check must ABORT
+  that command chain (one action per command, or `|| exit 1`).
+- If another app comes to the front or anything changes that you did not
+  do (the owner is using the phone): stop touching the phone, never press
+  HOME over the owner's app, never inspect other apps. Watch package name
+  + lock state only, up to 10 minutes; resume only after Tracker has been
+  in front and idle for 2 minutes.
+- uiautomator dumps: grep-filter to ONE element / QA row, never print a
+  full dump, `adb shell rm /sdcard/u.xml` after. /sdcard paths only inside
+  `adb shell`.
+- NEVER read/write/push/pull/sqlite3/run-as tracker.db or app data dirs.
+  No screenshots of Tracker. No logcat body output (FATAL/ANR counts
+  only, filtered to com.tracker).
+- Never open, print or store a real SMS, sender, merchant, amount or
+  name. Never open a real "Messages not understood" row. Never tap "Share
+  pattern", "Send on WhatsApp" or "Add as transaction" on real rows. Never
+  send any SMS (real or synthetic) to the phone.
+- Never remove/edit/add/link/unlink/ignore/pair/mark/dismiss/approve/
+  categorise the owner's real accounts or transactions. Never change the
+  owner's settings (SMS sync start, approval mode, auto-read unless
+  AUTOREAD_TOGGLE=yes). Never back up or restore on this phone, never type
+  a password.
+- Real totals/counts of money are never printed: capture into shell
+  variables and print only SAME/DIFFERENT. Item COUNTS (e.g. "M new", "K
+  not understood", linked-number count) may be printed.
+- Synthetic test data only: "QA-Merchant-30", "QA Delete Bank 9999" (create
+  it if missing, delete it at the end), ₹1 amounts. Clean up everything
+  you create. Also remove leftovers from the stopped R4c pass if present:
+  QA-Merchant-20, QA-Merchant-21, QA Wallet 8888 (QA rows only — confirm
+  the exact QA name before deleting).
+
+CHECKS:
+D1 Install + clean launch; no FATAL/ANR for com.tracker since install.
+D2 Settings → About row shows "SMS rules v4 · <N> banks" (print the row).
+D3 Home "reads bank SMS better now" hint: present / absent.
+D4 Before counts: Pending count, "N not understood" link count, Settings
+   "Messages not understood: N".
+D5 Auto-read registration (no SMS): `dumpsys package com.tracker` shows
+   .SmsReceivedReceiver for android.provider.Telephony.SMS_RECEIVED with
+   permission android.permission.BROADCAST_SMS; RECEIVE_SMS requested +
+   granted state. Settings "Read new SMS automatically" state (expect OFF
+   with "Turn on"). Toggle only if AUTOREAD_TOGGLE=yes, then report the
+   permission dialog appeared (do not decide it for the owner — if the
+   system dialog shows, STOP and report; the owner grants by hand).
+D6 Re-scan (only if RESCAN=yes): Settings → "Re-read messages with the
+   new reader". If the estimate dialog appears, report N and proceed (RESCAN
+   =yes covers it). Record only: toast "Scanned N SMS · M new · K not
+   understood"; newest sms_rescan Activity line counts (via rule / via
+   reader / held for disagreement / held per money kind); Pending count of
+   "two readers disagree" cards (must equal held-for-disagreement);
+   not-understood count after. Transactions-screen money total
+   SAME/DIFFERENT vs before (approved items must not change).
+D7 Second re-scan (only if RESCAN=yes): created must be 0.
+D8 Manual Add Record (owner addition B) on QA Delete Bank 9999:
+   "QA-Merchant-30" ₹1 → appears in Transactions (not Pending), Activity
+   "Recorded"; delete it; Pending count unchanged.
+D9 Accounts tab: number of "Linked card / account numbers" entries per
+   account (counts only, no digits, no account names except QA ones).
+D10 Finish: FATAL/ANR count for com.tracker since install, force-stop.
+
+OUTPUT: ongoing/roadmap/R5-device.md — per check: result / skipped
+(reason), counts only, leftovers cleaned, anything unexpected. Leak-scan
+it with the pattern given in the dispatch message (shell only — never
+write it into a repo file). Raw run logs only under the git-ignored log
+paths. Do not commit.
+REPLY ONLY: per check D1–D10 one line; cleanup done yes/no; anything
+unexpected.

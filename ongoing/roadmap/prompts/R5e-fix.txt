@@ -1,0 +1,77 @@
+GROUND FACTS: read ongoing/roadmap/R5e-money-meaning.md (what R5e built),
+ongoing/roadmap/prompts/R5e-money-meaning.txt (the spec, M1-M8, T0-T6),
+ongoing/roadmap/STATE.md (latest decision lines), R3a-transfers.md (twin
+rules, Undo via audit snapshots), R3b-refund-duplicate.md (duplicate hold,
+R3b.1 refunds), R5g-rules-engine.md (chain holds, N1 disagreement rule),
+and the decisions log of ongoing/realtime-persistence/STATE.md (absolute
+privacy rules).
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5e-money-meaning. Stay on it, do not commit. The R5e
+code is uncommitted in the tree; edit it in place. Leave the orchestrator
+docs alone (STATE.md, R5-device.md, prompts/*).
+
+PHASE R5e-FIX — fix the verified review findings and the executor's own
+known limits. CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+FINDINGS: the orchestrator gives the path of a JSON file in the dispatch
+message. It holds 12 findings verified by an adversarial reviewer
+(M1, M2, M4-M8 money; P1-P5 reader hints). Each has scenario, why, fix,
+evidence, verifiedFix and verifiedSeverity. Re-check each against the code;
+if one turns out wrong, say so with evidence and skip it.
+
+KNOWN LIMITS (from the R5e report), also fix:
+K1 A late counterpart SMS (card "payment received", wallet credit) that
+   arrives after the debit was already converted must become that
+   transfer's twin (R3a twin rules), never a second transfer, and never
+   offer "Confirm transfer" again.
+K2 Transaction Detail of a meaning transfer with no twin needs "Undo
+   transfer" (the same exact audit-snapshot Undo as the Snackbar, also
+   removing a rule that confirm created).
+K3 An EMI debit that names both a loan a/c and the owner's bank a/c must
+   use the bank a/c last-4. Keep account-key compatibility: no existing
+   v2/v3 account key may change; keep PARSER_VERSION and
+   ACCOUNT_KEY_NORMALIZER_VERSION unless you prove a key change is needed
+   (then stop and report instead of changing it).
+
+GUIDING RULES for the fixes:
+- A rule or a confirm never moves money twice: duplicate (R3b) pairs, R5g
+  chain parents/children and N1-disagreement holds block automatic
+  conversion; the row stays a held meaning suggestion for the user.
+- Removing holds for converted rows removes only meaning/cardPayment hold
+  reasons, never 'chain' or 'disagreement'.
+- Undo (Snackbar, Detail, R2b link Undo) is exact: rows the action changed
+  return to their snapshot, including twins it hid.
+- R3b.1: an expense with linked refunds is never converted to a transfer
+  (offer only "It's an expense", or tell the user why).
+- An open meaning suggestion is closed or re-resolved when the row's type
+  or account changes; never act on a stale direction.
+- Reader hints (P1-P5) look only at the transaction's own sentence, need
+  word boundaries, and exclude fees/charges, FD/RD maturity and promo or
+  advice text. Hint changes must not change type/amount/last-4/account key.
+
+PRIVACY (absolute, unchanged): no raw SMS bodies or sender numbers stored
+or logged; audits ids/enums only. Fixtures SYNTHETIC only (QA names,
+XX1234/XX9999, refs 000000000xxx, qa.x@okqa). Never write the reference
+app's old brand names; the repo calls it "chitta-ref-app".
+
+METHOD: for each finding, first a failing test with synthetic input
+(the reviewer's scenario), confirm it fails, then fix, confirm it passes.
+Keep the tests (in the normal __tests__ folders). Do not leave temporary
+folders under src/.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (templates change only via
+scripts/rules/build_rules.js, never hand-edit rules.json); cd android &&
+./gradlew assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/
+libexec/openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH;
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+Do NOT run assembleRelease.
+
+OUTPUT: add a "Fix pass" section to ongoing/roadmap/R5e-money-meaning.md:
+per finding/limit — fixed (test name) / skipped (evidence); any new UI
+copy; decisions. Leak-scan the report and the diff with the pattern given
+in the dispatch message (shell only, never write it into a repo file).
+REPLY ONLY: gates yes/no with test counts; per item M1 M2 M4-M8 P1-P5
+K1-K3 fixed/skipped (one line each); files changed; decisions; anything
+surprising.

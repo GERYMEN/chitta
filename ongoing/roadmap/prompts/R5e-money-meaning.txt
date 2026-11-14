@@ -1,0 +1,172 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules"),
+ongoing/roadmap/STATE.md (latest decision lines), R3a-transfers.md (ONE-row
+transfer model, twins, findTransferPairs, Mark as transfer, Undo via audit
+snapshots, countsTowardIncomeExpense), R3b-refund-duplicate.md (refund
+ranker), R2b-new-accounts-pending.md (account suggestions, AddAccount
+prefill), R5-sms-reading-v2.md, R5d-sms-identity-aliases.md (moneyHint,
+counterpartyLastFour, lastDigits, card-payment hold, suffix match),
+R5g-rules-engine.md (money_kind → moneyHint, holds per kind, N1
+disagreement rule), R4e-backup-pie.md (BACKUP_TABLES + completeness test),
+the decisions log of ongoing/realtime-persistence/STATE.md (absolute
+privacy rules), docs/PROJECT.md + docs/DESIGN.md.
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5e-money-meaning (created from phase/R5g-rules-engine).
+Stay on it. Do not switch branches, do not commit. The tree has 3
+uncommitted orchestrator docs (STATE.md, R5-device.md, prompts/
+R5-device.txt) — leave them alone.
+
+PHASE R5e — money meaning: card bill payments, ATM withdrawals, wallet
+top-ups, own-account transfers, EMI, interest, template refunds.
+THIS DISPATCH = CODE + TESTS + GATES ONLY. NO DEVICE WORK (no adb).
+
+WHY: R5d/R5g recognise these SMS (moneyHint 'card_payment' | 'transfer' |
+'atm' | 'wallet_load' | 'emi' | 'refund', money_kind 'interest') but only
+HOLD them in Pending. Recorded as expenses they double count: a credit-card
+bill payment repeats spends already counted on the card; an ATM withdrawal
+or wallet top-up only moves the owner's own money.
+
+DECISIONS (orchestrator defaults 2026-11-14, standard money-manager
+meaning; the owner may override later):
+- M1 card_payment = TRANSFER bank a/c → credit-card account.
+- M2 atm = TRANSFER bank a/c → a 'cash' account.
+- M3 wallet_load = TRANSFER bank a/c → the wallet account ('other' type,
+  institution = wallet, e.g. Paytm / Amazon Pay).
+- M4 transfer (own-account NEFT/IMPS/UPI "to self/own a/c") = TRANSFER
+  to the owner's other account (user picks when it is not unique).
+- M5 emi = EXPENSE, category "EMI & Loans" (new seed `cat-emi`), released
+  from the hold (normal approval rules).
+- M6 interest = INCOME, category "Interest" (new seed `cat-interest`).
+- M7 refund (template money_kind) = INCOME released from the hold, same as
+  reader refunds; the R3b refund ranker suggests the linked expense.
+- M8 the user confirms a meaning once per (bank canonical, kind,
+  counterparty last-4 or institution); a checkbox "Do this automatically
+  next time" (default ON) stores a MEANING RULE. Later matches convert
+  automatically (still pending in manual approval mode; auto-approved in
+  auto mode only when confidence ≥ the threshold).
+- Never auto-create accounts, never convert without either a user confirm
+  or a stored meaning rule, never touch approved rows without the user.
+- No new permission, no new dependency, no network.
+
+PRIVACY (absolute, unchanged): no raw SMS bodies or sender numbers stored
+or logged; meaning rules store bank canonical + kind + last-4 or
+institution id only (same class of data as account_suggestion_decisions);
+audits hold ids/enums only (R3a whitelist sanitizer). Fixtures SYNTHETIC
+only (QA names, XX1234/XX9999, refs 000000000xxx, qa.x@okqa).
+
+METHOD for every task: failing test with synthetic input first, confirm it
+fails, then fix, confirm it passes.
+
+T0 Reader parity: reader v2 (readSms.ts) must set the same moneyHint the
+   templates do, so N1 agreement holds and unknown banks get meaning too:
+   ATM / cash withdrawal debits → 'atm'; bank debits "added to/loaded to
+   <wallet> wallet" → 'wallet_load'; EMI / loan instalment debits → 'emi';
+   "transferred to your own a/c" / "self transfer" → 'transfer'; interest
+   credits ("interest credited", "int. pd") → moneyKind/hint 'interest'
+   (add 'interest' to MoneyHint). moneyHint differences alone are NOT an
+   N1 disagreement (keep R5g's fill-from-reader rule). Do not change any
+   type/amount/last-4/account key result; keep PARSER_VERSION and
+   ACCOUNT_KEY_NORMALIZER_VERSION unless a v2/v3 key would change (it must
+   not). Fixtures: ≥3 per hint incl. negatives (a shop purchase that says
+   "ATM cum debit card" stays a spend — R5-fix U6).
+T1 Counterpart resolution (pure, src/domain/... or features/sms-sync):
+   resolveMeaningTarget(candidate, activeAccounts, meaningRules) →
+   { kind, target: accountId | null, reason: 'rule' | 'unique' |
+   'ambiguous' | 'missing' }:
+   - card_payment: credit_card accounts whose last_four = counterpartyLastFour;
+     else R5d suffix rule on lastDigits; else, when no digits, the only
+     active credit_card account of the same bank canonical. Exactly one →
+     unique; >1 ambiguous; 0 missing.
+   - atm: the only active 'cash' account; else missing/ambiguous.
+   - wallet_load: 'other' accounts whose institution/bank canonical = the
+     wallet institution (from the candidate's counterparty institution);
+     unique/ambiguous/missing.
+   - transfer: other own accounts matched by counterpartyLastFour when
+     present; otherwise ambiguous (user picks).
+   - emi / interest / refund: no target (category / release only).
+   Table tests for every branch.
+T2 Sync integration (syncSms.ts / smsSyncLogic.ts / importSuggestion.ts):
+   - M5/M6/M7: set category (cat-emi / cat-interest), remove the hold for
+     emi / interest / refund.
+   - M1–M4: keep the item pending + held ('meaning' hold, new
+     heldByMoneyKind counts unchanged in shape) and persist a MEANING
+     SUGGESTION row (T4) with the resolved target; if a stored meaning rule
+     matches and the target is unique → convert at insert to the R3a ONE-row
+     transfer (account_id = from, transfer_account_id = to, category
+     cat-transfer, keeps merchant/hash/preview), status per approval mode,
+     audit 'transfer_marked' (R3a shape) with metadata {meaning, rule:true}.
+   - R3a pairing still runs: when the counterpart SMS (card "payment
+     received", wallet credit) exists, the pair suggestion and the meaning
+     suggestion must not both act — confirming one resolves the other
+     (twin rules from R3a). Test both orders.
+   - "Approve all" (Pending) skips items with an open meaning suggestion
+     and its Snackbar says "N need a quick check".
+T3 Pending + Review UI:
+   - A meaning card on the Pending item: chip ("Card bill payment",
+     "Cash withdrawal", "Wallet top-up", "Transfer to own account") +
+     primary action "Confirm transfer to <account display label>" (unique
+     target) or "Choose account" (ambiguous → existing account picker
+     filtered to the right types) or "Add <credit card ••9999 | Cash |
+     <wallet>> account" (missing → existing AddAccount with prefill: type,
+     bank/institution, last-4; on return the target resolves) + secondary
+     "It's an expense" (dismisses the suggestion, releases the hold) +
+     checkbox "Do this automatically next time" (default ON → T4 rule).
+   - Confirm uses the R3a Mark-as-transfer path (single transaction, audit
+     with snapshot, Undo exact). Undo also removes a rule created by that
+     confirm (audit records it).
+   - Settings → "Automatic money rules" list (bank · kind · ••last4 →
+     account) with Remove (audit 'meaning_rule_removed').
+   - ≥48 dp targets, accessibility labels incl. the account label; amounts
+     masked in REDACTED mode as everywhere else.
+T4 Storage: migration 10 (latest is 9; never edit an applied migration):
+   - money_meaning_rules (id TEXT PK, bank_canonical TEXT NOT NULL, kind
+     TEXT NOT NULL, counterparty_key TEXT NOT NULL ('' when none),
+     target_account_id TEXT NOT NULL, created_at TEXT NOT NULL,
+     UNIQUE(bank_canonical, kind, counterparty_key)).
+   - money_meaning_suggestions (transaction_id TEXT PK, kind TEXT NOT NULL,
+     target_account_id TEXT NULL, reason TEXT NOT NULL, created_at TEXT NOT
+     NULL, resolved_at TEXT NULL, resolution TEXT NULL
+     ('transfer'|'expense'|'paired')).
+   - INSERT OR IGNORE seed categories cat-emi "EMI & Loans" (expense),
+     cat-interest "Interest" (income), matching the seed shape in
+     connection.ts.
+   - Both tables in BACKUP_TABLES (restore maps older schemas forward —
+     R4e rules; N-1 = 9 test); completeness test updated. Deleting an
+     account: rules targeting it are removed, open suggestions fall back to
+     'missing'. Deleting a transaction: its suggestion row goes too.
+T5 Existing history (no bodies are stored, so only via re-scan): when a
+   re-scan candidate deduplicates against an EXISTING row (same
+   sourceReferenceHash or content hash) that is a plain expense/income and
+   the candidate has M1–M4 meaning, add a meaning suggestion for that row
+   (never change the row). Review screen gets a "Money meaning" section
+   listing them with the same actions as T3. Counts in the sms_rescan audit
+   ('meaningSuggested'). Approved rows convert only on the user's confirm.
+T6 Totals: prove with tests that a confirmed card bill payment, ATM
+   withdrawal and wallet top-up leave income/expense totals and the
+   Where-it-went donut unchanged while balances move between the two
+   accounts; EMI shows under "EMI & Loans"; interest counts as income.
+
+OUT OF SCOPE: foreign-currency SMS (stay not understood), loan accounts /
+principal vs interest split, pay-later accounts (R5b), budgets (R5c),
+remote rules download, persisting R5g chain suggestions.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (if templates change, edit
+scripts/rules/build_rules.js and regenerate — never hand-edit rules.json);
+cd android && ./gradlew assembleDebug OK (export JAVA_HOME=/opt/homebrew/
+opt/openjdk@17/libexec/openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/
+bin:$PATH; export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools).
+Do NOT run assembleRelease.
+
+OUTPUT: ongoing/roadmap/R5e-money-meaning.md (files, meaning table M1–M8
+with test names, resolution rules, migration 10, UI copy, totals proof,
+decisions, and a DEVICE PLAN for later — counts only, inline over USB with
+a 30 s idle wait and live per-test status (owner preference): meaning
+suggestions count after a re-scan, confirm/undo ONLY on synthetic QA rows
+and QA accounts, never convert a real row without the owner). Leak-scan the
+report with the pattern given in the dispatch message (shell only — never
+write it into a repo file). Never write the reference app's old brand
+names; the repo calls it "chitta-ref-app". Do not commit.
+REPLY ONLY: gates yes/no; files changed count; fixtures added; migration
+number; per task T0–T6 done / not done; decisions you made; anything
+surprising.
