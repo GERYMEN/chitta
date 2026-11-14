@@ -79,9 +79,19 @@ export interface SmsInput {
 /**
  * R5d: what a transaction means beyond its direction (R5e converts these).
  * R5g: a template's money_kind adds transfer / atm / wallet_load / emi /
- * refund — all held from auto-approve like 'card_payment'.
+ * refund. R5e: + 'interest' (income), and the reader sets atm / wallet_load /
+ * emi / transfer / interest itself (T0 parity). card_payment / transfer / atm /
+ * wallet_load stay held until the user confirms a meaning (or a stored meaning
+ * rule converts them); emi / interest / refund only set a category / release.
  */
-export type MoneyHint = 'card_payment' | 'transfer' | 'atm' | 'wallet_load' | 'emi' | 'refund';
+export type MoneyHint =
+  | 'card_payment'
+  | 'transfer'
+  | 'atm'
+  | 'wallet_load'
+  | 'emi'
+  | 'refund'
+  | 'interest';
 
 /** R5g: which reader produced the record ('rule' = a rules.json template). */
 export type ReadSource = 'rule' | 'reader';
@@ -130,6 +140,13 @@ export interface ParsedSmsTransaction {
   lastDigits?: string;
   /** R5d T0e: a credit card bill paid from this bank a/c — held from auto-approve. */
   moneyHint?: MoneyHint;
+  /**
+   * R5e T0: the wallet a bank debit topped up ("added to your Paytm Wallet")
+   * — a public institution id (e.g. 'paytm'), used to find the wallet account.
+   */
+  counterpartyInstitution?: string;
+  /** R5e: a 3-digit mask on the OTHER side (template counterparty_pan, min_digits 3). */
+  counterpartyLastDigits?: string;
   /**
    * R5-fix C1: the EXACT key parser v1 produced for this SMS (frozen v1
    * normalizer over the raw body), so decisions and account matches saved
@@ -246,6 +263,49 @@ const BANK_DEBIT_FROM_RE =
 const CARD_PAYMENT_RE =
   /\bcredit\s*card\b(?:\s*(?:no\.?|number|ending(?:\s*with)?))?\s*[x*#]*\s*(\d{4})\b[^.;]{0,40}?\bpayment\b|\bpayment\s+(?:of|for|towards)\s+(?:your\s+)?(?:[A-Za-z]+\s+){0,3}?credit\s*card\b(?:\s*(?:no\.?|number|ending(?:\s*with)?))?\s*[x*#]*\s*(\d{4})\b/i;
 
+/**
+ * R5e T0: own-account transfer wording ("to your own A/c XX9999") — the
+ * digits (if any) are the OTHER own account.
+ */
+const OWN_ACCOUNT_RE =
+  /\b(?:to|into|from)\s+(?:your\s+|ur\s+)?own\s+(?:[A-Za-z]+\s+){0,2}?(?:a\/?c|acct|account)\b(?:\s*(?:no\.?\s*)?[x*#.]*\s*(\d{4,})\b)?/i;
+// R5e-FIX P4: "to Self Help Group" / "from Self Employed" / "self-service" are payees.
+const SELF_TRANSFER_RE =
+  /\bself[\s-]?transfer\b|\b(?:to|from)\s+self\b(?![\s-]*(?:help|employ|serv|care|made|drive|group))/i;
+
+/**
+ * R5e T0: a bank debit that loads a wallet ("added to your Paytm Wallet",
+ * "top-up of Amazon Pay balance", "load money to QA wallet"). Group 1 = the
+ * wallet's name words, group 2 = 'wallet' | 'balance'.
+ */
+const WALLET_LOAD_RE =
+  /\b(?:add(?:ed)?|load(?:ed|ing)?|top(?:ped)?[\s-]?up|recharg(?:e|ed))\b(?:\s+money)?\s+(?:to|in|into|on|of|for)\s+(?:your\s+|ur\s+)?((?:[A-Za-z]+\s+){0,3}?)(wallet|balance)\b/i;
+/** Wallet institutions a "… balance" top-up may name (a plain "balance" never counts). */
+const WALLET_INSTITUTIONS: ReadonlySet<string> = new Set(['paytm', 'amazonpay']);
+
+/** R5e T0: an EMI / loan instalment debit — not "No Cost EMI" / "convert to EMI" advice. */
+const EMI_RE = /\bemi\b|\bloan\s+(?:instal+ment|repayment)\b|\binstal+ment\b/i;
+// R5e-FIX P5: promo cues ("pay via EMI", "EMI available at 0%", "easy EMIs", "starting at").
+const NOT_EMI_RE =
+  /\bno[\s-]?cost\s+emi\b|\bconvert(?:ed)?\b[^.;]{0,40}?\bemi\b|\beligible\b[^.;]{0,40}?\bemi\b|\b(?:available|pay\s+via|easy|starting|at\s+0\s*%|plans?)\b[^.;]{0,30}?\bemis?\b|\bemis?\b[^.;]{0,30}?\b(?:available|at\s+0\s*%|starting|plans?|options?)\b/i;
+
+/** R5e-FIX K3: "Loan A/c XX0099" — a loan account named beside the debited bank a/c. */
+const LOAN_ACCOUNT_RE = /\bloan\s+(?:a\/?c|acct|account)\b\s*(?:no\.?\s*)?[x*#.]*\s*(\d{4,})\b/i;
+/** R5e-FIX K3: "debited from (your) A/c XX1234" (the bank a/c the money left). */
+const DEBITED_FROM_ACCOUNT_RE =
+  /\b(?:debited|deducted)\b[^.;]{0,40}?\bfrom\s+(?:your\s+|ur\s+)?(?:(?!loan\b)[A-Za-z]+\s+){0,3}?(?:a\/?c|acct|account)\b\s*(?:no\.?\s*)?[x*#.]*\s*(\d{4})\b/i;
+
+/**
+ * R5e T0: an interest credit ("Interest of Rs … credited", "towards interest",
+ * "Int.Pd"). R5e-FIX P1: only an interest POSTING — never an FD / RD maturity
+ * or closure (principal + interest), "interest free", or a narration that
+ * merely mentions interest.
+ */
+const INTEREST_POSTING_RE =
+  /\binterest\b[^;]{0,30}?\bcredited\b|\b(?:towards|as|for)\s+(?:the\s+)?interest\b/i;
+const INT_PD_RE = /\bint\.?\s*pd\b/i;
+const NOT_INTEREST_POSTING_RE = /\b(?:principal|maturity|matured|closure|closed|free)\b/i;
+
 /** U2: a charge / penalty debit is real money out even when it names a failure. */
 const CHARGE_RE = /\b(?:charges?|fees?|penalty|penal|bounce)\b/i;
 
@@ -326,6 +386,22 @@ function coreOf(body: string, bound: BoundTxn): string {
   while (start > 0 && !isSentenceBreak(body, start - 1)) start--;
   while (end < body.length && !isSentenceBreak(body, end)) end++;
   return body.slice(start, end);
+}
+
+/**
+ * R5e-FIX P3/P5: the transaction's own clause — its sentence cut at the first
+ * ", " / " - " / " – " after the bound verb and amount, so an advice or promo
+ * clause joined by a comma ("…, add money to wallet and earn cashback") never
+ * adds a meaning.
+ */
+function clauseOf(body: string, bound: BoundTxn, core: string): string {
+  const coreStart = body.indexOf(core);
+  if (coreStart < 0) return core;
+  const after = Math.max(bound.verb.end, bound.amount.end) - coreStart;
+  const cut = /,\s|\s[-–]\s/g;
+  cut.lastIndex = Math.max(0, after);
+  const hit = cut.exec(core);
+  return hit ? core.slice(0, hit.index) : core;
 }
 
 function futureSpans(body: string): Array<{ start: number; end: number }> {
@@ -529,9 +605,12 @@ export function readSmsWithReader(msg: SmsInput, options: SmsReadOptions = {}): 
       : account.moneyHint === 'card_payment'
       ? 'txn_debit'
       : labelForBound(bound, body, sender);
+    // R5e T0: the same meaning hints the templates give (never changes the
+    // type, amount, last-4 or account key — only adds the hint).
+    const meant = refund ? account : withMeaningHint(account, body, core, clauseOf(body, bound, core), direction);
     return result(label, {
       institution,
-      transaction: buildTransaction(msg, body, sender, bound, label, account, options.salt ?? null),
+      transaction: buildTransaction(msg, body, sender, bound, label, meant, options.salt ?? null),
     });
   }
 
@@ -566,6 +645,58 @@ interface ReadAccount {
   counterpartyLastFour?: string;
   lastDigits?: string;
   moneyHint?: MoneyHint;
+  /** R5e T0: the wallet a bank debit loaded. */
+  counterpartyInstitution?: string;
+}
+
+/**
+ * R5e T0 — reader parity with the templates' money_kind. Debits: ATM cash
+ * withdrawal → 'atm', a wallet load → 'wallet_load', an EMI / loan instalment
+ * → 'emi', own-account / self transfer → 'transfer'. Credits: own-account /
+ * self transfer → 'transfer', interest → 'interest'. A hint already set
+ * (R5d card payment, T0b wallet credit) wins. `core` = the transaction's own
+ * sentence (footers / advisories never add a meaning).
+ */
+function withMeaningHint(
+  account: ReadAccount,
+  body: string,
+  core: string,
+  clause: string,
+  direction: Direction,
+): ReadAccount {
+  if (account.moneyHint) return account;
+  const ownTransfer = (): ReadAccount | null => {
+    const own = OWN_ACCOUNT_RE.exec(clause);
+    if (!own && !SELF_TRANSFER_RE.test(clause)) return null;
+    const digits = own?.[1] ? lastFourOfRun(own[1]) : null;
+    const counterparty =
+      account.counterpartyLastFour ?? (digits && digits !== account.lastFour ? digits : undefined);
+    return { ...account, moneyHint: 'transfer', ...(counterparty ? { counterpartyLastFour: counterparty } : {}) };
+  };
+  if (direction === 'debit') {
+    // R5e-FIX P2/P3: the transaction clause only, and never an ATM fee.
+    if (isAtmCashWithdrawal(clause) && !CHARGE_RE.test(core)) return { ...account, moneyHint: 'atm' };
+    const wallet = WALLET_LOAD_RE.exec(clause);
+    if (wallet) {
+      const institution = bankCanonicalForText(wallet[1] ?? '');
+      const isWallet = wallet[2].toLowerCase() === 'wallet' || WALLET_INSTITUTIONS.has(institution);
+      if (isWallet) {
+        return {
+          ...account,
+          moneyHint: 'wallet_load',
+          ...(institution !== 'unknown' ? { counterpartyInstitution: institution } : {}),
+        };
+      }
+    }
+    if (EMI_RE.test(core) && !NOT_EMI_RE.test(core)) return { ...account, moneyHint: 'emi' };
+    return ownTransfer() ?? account;
+  }
+  const transfer = ownTransfer();
+  if (transfer) return transfer;
+  if ((INTEREST_POSTING_RE.test(core) || INT_PD_RE.test(body)) && !NOT_INTEREST_POSTING_RE.test(core)) {
+    return { ...account, moneyHint: 'interest' };
+  }
+  return account;
 }
 
 function lastFourOfRun(digits: string): string {
@@ -593,6 +724,8 @@ function accountFor(
           lastFour: null,
           bankCanonical: sender.institution,
           counterpartyLastFour: counterparty,
+          // R5e T0: a wallet loaded from a bank a/c (template money_kind wallet_load).
+          moneyHint: 'wallet_load',
         };
       }
       // Another (own) account is named outside the "from … a/c" phrase.
@@ -604,6 +737,17 @@ function accountFor(
       }
     }
   } else {
+    // R5e-FIX K3: "EMI … for your Loan A/c XX0099 … debited from your A/c
+    // XX1234" — the money left the bank a/c; the loan a/c is the other side.
+    // Only when the v2 key picked the loan a/c (the key itself is unchanged).
+    const loan = EMI_RE.test(body) ? LOAN_ACCOUNT_RE.exec(body) : null;
+    const debitedFrom = loan ? DEBITED_FROM_ACCOUNT_RE.exec(body) : null;
+    if (loan && debitedFrom) {
+      const loanFour = lastFourOfRun(loan[1]);
+      if (v2.lastFour === loanFour && debitedFrom[1] !== loanFour) {
+        return { ...v2, lastFour: debitedFrom[1] };
+      }
+    }
     const bankDebit = BANK_DEBIT_FROM_RE.exec(body);
     const card = CARD_PAYMENT_RE.exec(body);
     if (bankDebit && card) {
@@ -679,6 +823,7 @@ function buildTransaction(
     ...(account.counterpartyLastFour ? { counterpartyLastFour: account.counterpartyLastFour } : {}),
     ...(account.lastDigits ? { lastDigits: account.lastDigits } : {}),
     ...(account.moneyHint ? { moneyHint: account.moneyHint } : {}),
+    ...(account.counterpartyInstitution ? { counterpartyInstitution: account.counterpartyInstitution } : {}),
     legacyKey: normalizeAccountKeyV1(msg.body ?? ''),
   };
 }

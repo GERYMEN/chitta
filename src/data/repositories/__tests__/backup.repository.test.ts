@@ -196,9 +196,8 @@ describeSql('backup repository (real SQLite)', () => {
     expect(target.rows('sms_deleted_refs')).toEqual([]);
   });
 
-  it('N-1 → N specifically (R5d): a v8 backup has no identity columns; they restore as NULL', async () => {
-    const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(8);
+  it('R5d: a v8 backup has no identity columns; they restore as NULL', async () => {
+    const version = 8;
     const tables = rowsAt(version);
     expect(Object.keys(tables.transactions[0])).not.toContain('sms_content_hash');
     expect(Object.keys(tables.sms_deleted_refs[0])).not.toContain('ref_key');
@@ -235,6 +234,39 @@ describeSql('backup repository (real SQLite)', () => {
     expect(target.rows('app_settings').find(row => row.key === 'sms_identity_salt')?.value).toBe(
       tables.app_settings.find(row => row.key === 'sms_identity_salt')?.value,
     );
+  });
+
+  it('N-1 → N specifically (R5e): a v9 backup has no meaning tables; they restore empty and the EMI / Interest seeds are replayed', async () => {
+    const version = CURRENT_SCHEMA_VERSION - 1;
+    expect(version).toBe(9);
+    const tables = rowsAt(version);
+    expect(tables.money_meaning_rules).toBeUndefined();
+    expect(tables.money_meaning_suggestions).toBeUndefined();
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
+    expect(target.rows('money_meaning_rules')).toEqual([]);
+    expect(target.rows('money_meaning_suggestions')).toEqual([]);
+    const ids = target.rows('categories').map(row => row.id);
+    expect(ids).toEqual(expect.arrayContaining(['cat-emi', 'cat-interest']));
+  });
+
+  it('R5e: a v10 backup carries the meaning rules + suggestions exactly', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    expect(tables.money_meaning_rules.length).toBeGreaterThan(0);
+    expect(tables.money_meaning_suggestions.length).toBeGreaterThan(0);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('money_meaning_rules')).toEqual(tables.money_meaning_rules);
+    expect(target.rows('money_meaning_suggestions')).toEqual(tables.money_meaning_suggestions);
   });
 
   it('a backup without migration 7 (v6) still restores', async () => {

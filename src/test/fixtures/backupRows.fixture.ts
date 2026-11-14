@@ -101,6 +101,15 @@ export const FULL_BACKUP_ROWS: BackupTables = {
   ],
   transfer_pair_dismissals: [{ debit_id: 'qa-t1', credit_id: 'qa-t4', dismissed_at: T1 }],
   duplicate_pair_dismissals: [{ a_id: 'qa-t1', b_id: 'qa-t2', dismissed_at: T1 }],
+  // R5e: a meaning rule (bank id + kind + last-4 → account) and two
+  // suggestions (one open, one closed by a confirm). Synthetic ids only.
+  money_meaning_rules: [
+    { id: 'qa-rule-1', bank_canonical: 'hdfc', kind: 'card_payment', counterparty_key: '9999', target_account_id: 'acc-qa-2', created_at: T1 },
+  ],
+  money_meaning_suggestions: [
+    { transaction_id: 'qa-t2', kind: 'atm', target_account_id: null, reason: 'missing', bank_canonical: 'hdfc', counterparty_key: '', created_at: T1, resolved_at: null, resolution: null },
+    { transaction_id: 'qa-t3', kind: 'card_payment', target_account_id: 'acc-qa-2', reason: 'rule', bank_canonical: 'hdfc', counterparty_key: '9999', created_at: T1, resolved_at: T1, resolution: 'transfer' },
+  ],
   // R5-fix C4: a deleted SMS item's reference hash (synthetic id/date).
   sms_deleted_refs: [
     {

@@ -2,6 +2,8 @@ import { Transaction, TransactionType } from '../transactions/transaction.types'
 import { Account, AccountType } from '../accounts/account.types';
 import { AuditMetadata, SmsRunCounts } from './audit.types';
 import { TransferRowSnapshot } from '../transfers/transfer.rules';
+import type { MeaningRowSnapshot } from '../meaning/meaning.rules';
+import { MEANING_KINDS, MeaningKind } from '../meaning/meaning.types';
 
 /**
  * Rebuild a metadata payload from whitelisted fields only, so an object
@@ -133,6 +135,36 @@ export function sanitizeAuditMetadata(
         items: Number.isInteger(items) && items >= 0 ? items : 0,
       };
     }
+    case 'transfer_marked':
+      return {
+        kind: 'transfer_marked',
+        transaction_id: String(metadata.transaction_id),
+        twin_id: idOrNull(metadata.twin_id),
+        meaning: meaningOrDefault(metadata.meaning),
+        rule: metadata.rule === true,
+        previous: {
+          transfer: sanitizeMeaningSnapshot(metadata.previous.transfer),
+          twin: metadata.previous.twin ? sanitizeMeaningSnapshot(metadata.previous.twin) : null,
+        },
+        rule_id: idOrNull(metadata.rule_id),
+        rule_created: metadata.rule_created === true,
+        previous_rule_target: idOrNull(metadata.previous_rule_target),
+        ...(metadata.twin_added === true ? { twin_added: true } : {}),
+      };
+    case 'transfer_unmarked':
+      return {
+        kind: 'transfer_unmarked',
+        transaction_id: String(metadata.transaction_id),
+        twin_id: idOrNull(metadata.twin_id),
+        meaning: meaningOrDefault(metadata.meaning),
+        ...(metadata.twin_only === true ? { twin_only: true } : {}),
+      };
+    case 'meaning_rule_removed':
+      return {
+        kind: 'meaning_rule_removed',
+        meaning: meaningOrDefault(metadata.meaning),
+        bankCanonical: /^[a-z]{1,20}$/.test(String(metadata.bankCanonical)) ? String(metadata.bankCanonical) : 'unknown',
+      };
     default:
       return null;
   }
@@ -164,7 +196,7 @@ function sanitizeRunCounts(counts: Partial<SmsRunCounts> | null | undefined): Sm
     notUnderstood: n(counts?.notUnderstood),
     autoApproved: n(counts?.autoApproved),
   };
-  for (const key of ['viaRule', 'viaReader', 'heldForRuleDisagreement'] as const) {
+  for (const key of ['viaRule', 'viaReader', 'heldForRuleDisagreement', 'meaningSuggested'] as const) {
     if (counts?.[key] !== undefined) out[key] = n(counts[key]);
   }
   return out;
@@ -182,6 +214,17 @@ function sanitizeRowSnapshot(snapshot: TransferRowSnapshot): TransferRowSnapshot
       snapshot.linkedTransactionId == null ? null : String(snapshot.linkedTransactionId),
     linkKind: snapshot.linkKind ?? null,
   };
+}
+
+/** R5e: a meaning row snapshot = the transfer snapshot + the account id. */
+function sanitizeMeaningSnapshot(snapshot: MeaningRowSnapshot): MeaningRowSnapshot {
+  return { ...sanitizeRowSnapshot(snapshot), accountId: String(snapshot.accountId) };
+}
+
+function meaningOrDefault(value: unknown): MeaningKind {
+  return typeof value === 'string' && (MEANING_KINDS as ReadonlyArray<string>).includes(value)
+    ? (value as MeaningKind)
+    : 'transfer';
 }
 
 const ACCOUNT_KINDS: ReadonlySet<string> = new Set(['bank', 'cash', 'credit_card', 'upi', 'other']);

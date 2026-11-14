@@ -15,6 +15,7 @@ import {
   resolveCategoryIdForSms,
   RuleHoldReason,
   ruleHoldReasonFor,
+  isMeaningHold,
 } from './smsSyncLogic';
 import { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
 import { SuggestionGroup } from './suggestionGroups';
@@ -24,6 +25,7 @@ import { smsDeletedRefsRepository } from '../../data/repositories/smsDeletedRefs
 import { suggestionCandidatesRepository } from '../../data/repositories/suggestionCandidates.repository';
 import { useNewAccountsStore } from './newAccountsStore';
 import { openPendingForAccount } from '../../app/navigation/navigationRef';
+import { applyMoneyMeanings } from './moneyMeaning';
 
 export type PendingRowInput = Omit<CreateTransactionInput, 'accountId'>;
 
@@ -52,6 +54,8 @@ export function preparePendingRows(
       parsed.merchantName,
       rules,
       parsed.salary === true,
+      // R5e: EMI → "EMI & Loans", interest → "Interest" (same as Sync SMS).
+      parsed.moneyHint,
     );
     if (categoryId == null) continue;
     seen.add(parsed.sourceReferenceHash);
@@ -121,6 +125,16 @@ async function runImport(
     transactions: rows,
   });
 
+  // R5e T2: the same money meaning step as Sync SMS (rule → transfer, else
+  // a suggestion). Converted rows are released from the meaning holds below.
+  const factsById = new Map<string, ParsedSmsTransaction>();
+  const itemByRef = new Map(items.map(item => [item.sourceReferenceHash, item]));
+  for (const t of result.transactions) {
+    const item = t.sourceReferenceHash != null ? itemByRef.get(t.sourceReferenceHash) : undefined;
+    if (item) factsById.set(t.id, item);
+  }
+  const meaning = await applyMoneyMeanings(result.transactions, factsById);
+
   // Opt-in auto mode: exactly the Sync SMS rule and path (system actor).
   // R3a/R3b: items that form a possible transfer or duplicate pair stay pending.
   const latest = useTransactionsStore.getState();
@@ -145,8 +159,14 @@ async function runImport(
     const reason = t.sourceReferenceHash != null ? holdByRef.get(t.sourceReferenceHash) : undefined;
     if (reason) ruleHolds.set(t.id, reason);
   }
+  // R5e-FIX M2: only the meaning holds are released — never 'chain' / N1.
+  for (const id of meaning.converted) {
+    cardPaymentIds.delete(id);
+    if (isMeaningHold(ruleHolds.get(id))) ruleHolds.delete(id);
+  }
+  const liveById = new Map(latest.transactions.map(t => [t.id, t]));
   const { approve: toApprove } = autoApproveAfterSync(
-    result.transactions,
+    result.transactions.map(t => liveById.get(t.id) ?? t),
     latest.transactions,
     latest.accounts,
     latest.transferDismissals,
@@ -222,6 +242,9 @@ export async function undoLinkSuggestion(
   group: SuggestionGroup,
   outcome: SuggestionImportOutcome,
 ): Promise<number> {
+  // R5e-FIX M4: a row the link did NOT insert that a transfer / meaning step
+  // of the link touched (e.g. hidden as a twin) comes back exactly first.
+  await useTransactionsStore.getState().releaseLinkedCounterparts(outcome.transactionIds);
   const store = useTransactionsStore.getState();
   const ids = new Set(outcome.transactionIds);
   const rows = store.transactions.filter(

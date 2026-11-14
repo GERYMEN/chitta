@@ -163,6 +163,36 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
     sinceVersion: 8,
     columns: { source_reference_hash: 8, deleted_at: 8, sms_content_hash: 9, ref_key: 9 },
   },
+  {
+    // R5e: "Do this automatically next time" meaning rules (bank id + kind +
+    // last-4 / wallet id → account).
+    name: 'money_meaning_rules',
+    sinceVersion: 10,
+    columns: {
+      id: 10,
+      bank_canonical: 10,
+      kind: 10,
+      counterparty_key: 10,
+      target_account_id: 10,
+      created_at: 10,
+    },
+  },
+  {
+    // R5e: one meaning suggestion per transaction (open or closed).
+    name: 'money_meaning_suggestions',
+    sinceVersion: 10,
+    columns: {
+      transaction_id: 10,
+      kind: 10,
+      target_account_id: 10,
+      reason: 10,
+      bank_canonical: 10,
+      counterparty_key: 10,
+      created_at: 10,
+      resolved_at: 10,
+      resolution: 10,
+    },
+  },
 ];
 
 /**

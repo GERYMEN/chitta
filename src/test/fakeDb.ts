@@ -35,6 +35,7 @@ const PRIMARY_KEY: Record<string, string[]> = {
   sms_unparsed: ['sms_id', 'sms_date'],
   account_suggestion_candidates: ['bank_canonical', 'account_kind', 'last_four'],
   sms_deleted_refs: ['source_reference_hash'],
+  money_meaning_suggestions: ['transaction_id'],
 };
 
 function keyFor(table: string, row: Row): string {

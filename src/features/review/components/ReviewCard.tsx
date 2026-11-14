@@ -5,6 +5,7 @@ import { colors, radii, spacing, typography } from '../../../theme';
 import { useTransferPairs } from '../../transfers/useTransferPairs';
 import { useDuplicatePairs } from '../../duplicates/useDuplicatePairs';
 import { toReviewLabel } from '../../duplicates/duplicateLabels';
+import { useMeaningReviewItems } from '../../meaning/useMeaningReview';
 
 /**
  * Home nudge (R3a transfers + R3b duplicates): "N to review — Review ›",
@@ -20,7 +21,9 @@ export function ReviewCard({
 }) {
   const transferPairs = useTransferPairs();
   const duplicatePairs = useDuplicatePairs();
-  const count = transferPairs.length + duplicatePairs.length;
+  // R5e T5: + money meanings waiting on approved rows.
+  const meaningItems = useMeaningReviewItems();
+  const count = transferPairs.length + duplicatePairs.length + meaningItems.length;
   if (count === 0) return null;
   const label = toReviewLabel(count);
 

@@ -6,6 +6,8 @@ import { asNumber, asString, SqlRow } from '../mappers/coerce';
 import { parseAuditMetadata } from '../mappers/audit.mapper';
 import { auditRepository } from './audit.repository';
 import { updateTransactionTx } from './transaction.repository';
+import type { MeaningSuggestion } from '../../domain/meaning/meaning.types';
+import { meaningRepository } from './meaning.repository';
 
 /**
  * R3a transfer pairing persistence. Each money change writes both rows and
@@ -42,10 +44,13 @@ async function confirmPair(
   debit: Transaction,
   credit: Transaction,
   previous: TransferPairPrevious,
+  /** R5e: meaning suggestions of either row, closed as 'paired' (same transaction). */
+  meaningSuggestions: ReadonlyArray<MeaningSuggestion> = [],
 ): Promise<void> {
   await getDatabase().transaction(async tx => {
     await updateTransactionTx(tx, debit);
     await updateTransactionTx(tx, credit);
+    await meaningRepository.setSuggestionsTx(tx, meaningSuggestions);
     await auditRepository.insert(tx, {
       eventType: 'transfer_paired',
       actor: 'user',
@@ -57,10 +62,16 @@ async function confirmPair(
 }
 
 /** "Undo transfer": write both restored rows + one 'transfer_unpaired' audit row. */
-async function undoPair(debit: Transaction, credit: Transaction): Promise<void> {
+async function undoPair(
+  debit: Transaction,
+  credit: Transaction,
+  /** R5e: meaning suggestions the confirm closed as 'paired', reopened. */
+  meaningSuggestions: ReadonlyArray<MeaningSuggestion> = [],
+): Promise<void> {
   await getDatabase().transaction(async tx => {
     await updateTransactionTx(tx, debit);
     await updateTransactionTx(tx, credit);
+    await meaningRepository.setSuggestionsTx(tx, meaningSuggestions);
     await auditRepository.insert(tx, {
       eventType: 'transfer_unpaired',
       actor: 'user',
@@ -74,7 +85,7 @@ async function undoPair(debit: Transaction, credit: Transaction): Promise<void> 
 /** The newest 'transfer_paired' payload recorded for this transfer (Undo source). */
 async function latestPairing(
   debitId: string,
-): Promise<Extract<AuditMetadata, { kind: 'transfer_paired' }> | null> {
+): Promise<{ metadata: Extract<AuditMetadata, { kind: 'transfer_paired' }>; eventAt: string } | null> {
   const result = await getDatabase().execute(
     'SELECT * FROM audit_events WHERE transaction_id = ?',
     [debitId],
@@ -88,7 +99,9 @@ async function latestPairing(
     );
   for (const row of paired) {
     const metadata = parseAuditMetadata(row.metadata_json);
-    if (metadata?.kind === 'transfer_paired' && metadata.debit_id === debitId) return metadata;
+    if (metadata?.kind === 'transfer_paired' && metadata.debit_id === debitId) {
+      return { metadata, eventAt: asString(row.event_at) };
+    }
   }
   return null;
 }

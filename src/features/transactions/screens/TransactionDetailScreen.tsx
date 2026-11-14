@@ -3,9 +3,17 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TransactionDetailActions, TransactionDetailContent } from '../components/TransactionDetailContent';
+import {
+  TransactionDetailActions,
+  TransactionDetailContent,
+} from '../components/TransactionDetailContent';
 import { Icon } from '../../../shared/icons';
-import { HeaderBackButton, HeaderSpacer, showDialog, showSnackbar } from '../../../shared/ui';
+import {
+  HeaderBackButton,
+  HeaderSpacer,
+  showDialog,
+  showSnackbar,
+} from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { RootStackParamList } from '../../../app/navigation/routes';
@@ -15,7 +23,10 @@ import { TransferAccountPickerSheet } from '../../transfers/components/TransferA
 import { findTransferTwin } from '../../../domain/transfers/transfer.rules';
 import { RefundCandidateSheet } from '../../refunds/components/RefundCandidateSheet';
 import { DuplicatePickerSheet } from '../../duplicates/components/DuplicatePickerSheet';
-import { REFUND_LINK_ERROR_TEXT, refundsFor } from '../../../domain/refunds/refund.rules';
+import {
+  REFUND_LINK_ERROR_TEXT,
+  refundsFor,
+} from '../../../domain/refunds/refund.rules';
 import { hiddenDuplicatesOf } from '../../../domain/duplicates/duplicate.rules';
 import { merchantHistory } from '../../../domain/insights/insights.rules';
 import { normalizeMerchant } from '../../../domain/merchants/normalizeMerchant';
@@ -40,7 +51,9 @@ export function TransactionDetailScreen() {
   );
   const approve = useTransactionsStore(state => state.approve);
   const reject = useTransactionsStore(state => state.reject);
-  const deleteTransaction = useTransactionsStore(state => state.deleteTransaction);
+  const deleteTransaction = useTransactionsStore(
+    state => state.deleteTransaction,
+  );
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [transferPickerOpen, setTransferPickerOpen] = useState(false);
   const [refundPickerOpen, setRefundPickerOpen] = useState(false);
@@ -50,7 +63,9 @@ export function TransactionDetailScreen() {
 
   // R4 (T5): merchant history in the selected period — approved income /
   // expense rows only (never pending, transfers, twins or hidden duplicates).
-  const merchantKey = transaction ? normalizeMerchant(transaction.merchantName) : '';
+  const merchantKey = transaction
+    ? normalizeMerchant(transaction.merchantName)
+    : '';
   const showMerchantChip =
     transaction !== undefined &&
     transaction.status === 'approved' &&
@@ -58,7 +73,10 @@ export function TransactionDetailScreen() {
     countsTowardIncomeExpense(transaction) &&
     merchantKey !== '';
   const history = useMemo(
-    () => (showMerchantChip ? merchantHistory(allTransactions, merchantKey, range) : null),
+    () =>
+      showMerchantChip
+        ? merchantHistory(allTransactions, merchantKey, range)
+        : null,
     [showMerchantChip, allTransactions, merchantKey, range],
   );
   const merchantChip =
@@ -66,13 +84,17 @@ export function TransactionDetailScreen() {
       ? {
           label: merchantChipLabel(
             history,
-            transaction.type === 'income' && !isLinkedRefund(transaction) ? 'income' : 'spend',
+            transaction.type === 'income' && !isLinkedRefund(transaction)
+              ? 'income'
+              : 'spend',
             period,
           ),
           onPress: () => {
             useTransactionsStore
               .getState()
-              .setTransactionFilters(merchantFilterFor(transaction.merchantName));
+              .setTransactionFilters(
+                merchantFilterFor(transaction.merchantName),
+              );
             navigation.navigate('Tabs', { screen: 'Transactions' });
           },
         }
@@ -82,13 +104,18 @@ export function TransactionDetailScreen() {
   async function handleLinkRefund(expenseId: string) {
     setRefundPickerOpen(false);
     if (!transaction) return;
-    const error = await useTransactionsStore.getState().linkRefund(transaction.id, expenseId);
+    const error = await useTransactionsStore
+      .getState()
+      .linkRefund(transaction.id, expenseId);
     if (error === null) {
       showSnackbar({ message: 'Linked as a refund' });
     } else {
       showDialog({
         title: 'Could not link this refund',
-        message: error === 'missing' ? 'That item no longer exists.' : REFUND_LINK_ERROR_TEXT[error],
+        message:
+          error === 'missing'
+            ? 'That item no longer exists.'
+            : REFUND_LINK_ERROR_TEXT[error],
         icon: 'alert-circle-outline',
         actions: [{ label: 'OK', variant: 'primary' }],
       });
@@ -97,7 +124,11 @@ export function TransactionDetailScreen() {
 
   async function handleUnlinkRefund(refundId: string) {
     const ok = await useTransactionsStore.getState().unlinkRefund(refundId);
-    showSnackbar({ message: ok ? 'Refund unlinked — counts as income again' : 'Could not unlink' });
+    showSnackbar({
+      message: ok
+        ? 'Refund unlinked — counts as income again'
+        : 'Could not unlink',
+    });
   }
 
   // R3b: manual "Mark as duplicate of…" — the picked row is kept, this one hidden.
@@ -105,7 +136,9 @@ export function TransactionDetailScreen() {
     setDuplicatePickerOpen(false);
     if (!transaction) return;
     const duplicateId = transaction.id;
-    const ok = await useTransactionsStore.getState().markDuplicate(keptId, duplicateId);
+    const ok = await useTransactionsStore
+      .getState()
+      .markDuplicate(keptId, duplicateId);
     if (!ok) {
       showSnackbar({ message: 'Could not mark as a duplicate' });
       return;
@@ -118,23 +151,38 @@ export function TransactionDetailScreen() {
     const ok = await useTransactionsStore
       .getState()
       .restoreDuplicate(duplicateId, { dismiss: true });
-    showSnackbar({ message: ok ? 'Restored — not a duplicate' : 'Could not restore this item' });
+    showSnackbar({
+      message: ok
+        ? 'Restored — not a duplicate'
+        : 'Could not restore this item',
+    });
   }
 
   // R3a: "Mark as transfer" — expense: pick "to"; income: pick "from".
   async function handleMarkAsTransfer(otherAccountId: string) {
     setTransferPickerOpen(false);
     if (!transaction) return;
-    const ok = await useTransactionsStore.getState().markAsTransfer(transaction.id, otherAccountId);
-    showSnackbar({ message: ok ? 'Marked as a transfer' : 'Could not mark as a transfer' });
+    const ok = await useTransactionsStore
+      .getState()
+      .markAsTransfer(transaction.id, otherAccountId);
+    showSnackbar({
+      message: ok ? 'Marked as a transfer' : 'Could not mark as a transfer',
+    });
   }
 
   // R3a: "Undo transfer" — both rows of the SMS pair go back exactly as they were.
+  // R5e-FIX K2: a money-meaning transfer with no twin — the one item goes back.
   function handleUndoTransfer(transferId: string) {
+    const paired =
+      findTransferTwin(
+        useTransactionsStore.getState().transactions,
+        transferId,
+      ) !== null;
     showDialog({
       title: 'Undo transfer?',
-      message:
-        'Both SMS items go back exactly as they were before you confirmed the transfer (status, type and category).',
+      message: paired
+        ? 'Both SMS items go back exactly as they were before you confirmed the transfer (status, type and category).'
+        : 'This item goes back exactly as it was before it was recorded as a transfer (status, type, account and category). An automatic rule made by that confirm is removed too.',
       icon: 'undo-variant',
       actions: [
         { label: 'Cancel', variant: 'ghost' },
@@ -142,8 +190,12 @@ export function TransactionDetailScreen() {
           label: 'Undo transfer',
           variant: 'primary',
           onPress: async () => {
-            const ok = await useTransactionsStore.getState().undoTransfer(transferId);
-            showSnackbar({ message: ok ? 'Transfer undone' : 'Could not undo this transfer' });
+            const ok = await useTransactionsStore
+              .getState()
+              .undoTransfer(transferId);
+            showSnackbar({
+              message: ok ? 'Transfer undone' : 'Could not undo this transfer',
+            });
           },
         },
       ],
@@ -154,7 +206,9 @@ export function TransactionDetailScreen() {
     setCategoryPickerOpen(false);
     if (!transaction || categoryId === transaction.categoryId) return;
     const before = transaction;
-    await useTransactionsStore.getState().updateTransaction(before.id, { categoryId });
+    await useTransactionsStore
+      .getState()
+      .updateTransaction(before.id, { categoryId });
     promptRememberCategory({
       transactionId: before.id,
       merchantName: before.merchantName,
@@ -173,17 +227,26 @@ export function TransactionDetailScreen() {
         title: 'Unlink refunds first',
         message: `This expense has ${linkedRefunds.length} linked refund${
           linkedRefunds.length === 1 ? '' : 's'
-        }. Open ${linkedRefunds.length === 1 ? 'it' : 'each one'} and tap Unlink refund, then delete the expense.`,
+        }. Open ${
+          linkedRefunds.length === 1 ? 'it' : 'each one'
+        } and tap Unlink refund, then delete the expense.`,
         icon: 'link-variant',
         actions: [{ label: 'OK', variant: 'primary' }],
       });
       return;
     }
-    const hiddenCount = hiddenDuplicatesOf(state.transactions, transactionId).length;
+    const hiddenCount = hiddenDuplicatesOf(
+      state.transactions,
+      transactionId,
+    ).length;
     const paired =
-      current?.type === 'transfer' && findTransferTwin(state.transactions, transactionId) !== null;
+      current?.type === 'transfer' &&
+      findTransferTwin(state.transactions, transactionId) !== null;
     showDialog({
-      title: current?.type === 'transfer' ? 'Delete transfer?' : 'Delete transaction?',
+      title:
+        current?.type === 'transfer'
+          ? 'Delete transfer?'
+          : 'Delete transaction?',
       message: paired
         ? 'This permanently removes the transfer and moves both balances back. The SMS credit it was paired with stays hidden — use Undo transfer instead to get both SMS items back.'
         : hiddenCount > 0
@@ -245,11 +308,17 @@ export function TransactionDetailScreen() {
             reject(t.id);
             navigation.goBack();
           }}
-          onEdit={t => navigation.navigate('EditTransaction', { transactionId: t.id })}
+          onEdit={t =>
+            navigation.navigate('EditTransaction', { transactionId: t.id })
+          }
           onDelete={t => handleDelete(t.id)}
           onChangeCategory={() => setCategoryPickerOpen(true)}
-          onOpenTransfer={id => navigation.push('TransactionDetail', { transactionId: id })}
-          onOpenTransaction={id => navigation.push('TransactionDetail', { transactionId: id })}
+          onOpenTransfer={id =>
+            navigation.push('TransactionDetail', { transactionId: id })
+          }
+          onOpenTransaction={id =>
+            navigation.push('TransactionDetail', { transactionId: id })
+          }
           merchantChip={merchantChip}
         />
       </ScrollView>
@@ -264,7 +333,9 @@ export function TransactionDetailScreen() {
             reject(t.id);
             navigation.goBack();
           }}
-          onEdit={t => navigation.navigate('EditTransaction', { transactionId: t.id })}
+          onEdit={t =>
+            navigation.navigate('EditTransaction', { transactionId: t.id })
+          }
           onDelete={t => handleDelete(t.id)}
           onMarkAsTransfer={() => setTransferPickerOpen(true)}
           onUndoTransfer={t => handleUndoTransfer(t.id)}

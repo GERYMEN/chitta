@@ -31,6 +31,7 @@ import {
   SmsAccountSuggestion,
   SmsBackfill,
   SuggestionDecisions,
+  isMeaningHold,
 } from './smsSyncLogic';
 import { loadSmsIdentitySalt } from './smsIdentitySalt';
 import { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
@@ -61,6 +62,8 @@ import {
 } from './rules/chaining';
 import { bankCanonicalForText } from './normalizeAccountKey';
 import type { Account } from '../../domain/accounts/account.types';
+import type { MeaningSuggestion } from '../../domain/meaning/meaning.types';
+import { applyMoneyMeanings, buildExistingRowIndex, suggestionForExistingRow } from './moneyMeaning';
 
 /**
  * R5g item 21: run each chained child's rule against live + pending SMS rows
@@ -116,6 +119,10 @@ export interface SmsSyncResult {
   /** R5g: new items built from a template record / by the reader alone. */
   viaRule: number;
   viaReader: number;
+  /** R5e: new items a stored meaning rule turned into transfers. */
+  meaningConverted: number;
+  /** R5e T5: meaning suggestions added to EXISTING rows (re-scan / overlap). */
+  meaningSuggested: number;
   /** R4b: the user pressed Cancel — items already inserted are kept. */
   cancelled: boolean;
   /** R4b: the user said no to the large-scan warning — nothing was read. */
@@ -261,6 +268,8 @@ function emptyResult(declined: boolean): SmsSyncResult {
     heldForChain: 0,
     viaRule: 0,
     viaReader: 0,
+    meaningConverted: 0,
+    meaningSuggested: 0,
     cancelled: false,
     declined,
     notUnderstood: 0,
@@ -390,6 +399,11 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const chainChildren: ChainChild[] = [];
   const runFacts = new Map<string, ParsedSmsTransaction>();
   const unmatchedAll: ParsedSmsTransaction[] = [];
+  // R5e T5: a deduplicated candidate with a meaning suggests it for the
+  // EXISTING row it matched (never changes that row).
+  const existingIndex = buildExistingRowIndex(store.transactions);
+  const knownMeaning = new Set(store.meaningSuggestions.map(s => s.transactionId));
+  const historySuggestions: MeaningSuggestion[] = [];
   let cursor = firstCursor(window);
 
   while (!cancel.cancelled) {
@@ -431,7 +445,22 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
         // R5d: old key / content hash (+ lazy backfill), then the reference
         // guard — two SMS with the same reference, type and amount are one
         // transaction, in this run AND against earlier runs (counted as skipped).
-        if (checkSmsCandidate(dedupe, candidate, backfill) !== 'new') continue;
+        if (checkSmsCandidate(dedupe, candidate, backfill) !== 'new') {
+          const latestState = useTransactionsStore.getState();
+          const history = suggestionForExistingRow(
+            candidate,
+            existingIndex,
+            knownMeaning,
+            latestState.accounts,
+            latestState.meaningRules,
+            new Date().toISOString(),
+          );
+          if (history) {
+            historySuggestions.push(history);
+            knownMeaning.add(history.transactionId);
+          }
+          continue;
+        }
         rememberSmsCandidate(dedupe, candidate);
         candidates.push(candidate);
       }
@@ -469,6 +498,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
         parsed.merchantName,
         latestStore.merchantRules,
         parsed.salary === true,
+        parsed.moneyHint,
       );
       if (categoryId == null) continue;
 
@@ -500,18 +530,32 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
 
   // R3a T4: auto-approve only AFTER every new pending item is in, so a new
   // item that pairs as a possible transfer stays pending for the user.
-  const latest = useTransactionsStore.getState();
+  const beforeChains = useTransactionsStore.getState();
   if (chainChildren.length > 0) {
-    const outcomes = resolveChains(chainChildren, latest.transactions, latest.accounts, runFacts);
+    const outcomes = resolveChains(chainChildren, beforeChains.transactions, beforeChains.accounts, runFacts);
     for (const outcome of outcomes) if (outcome.hold && !ruleHolds.has(outcome.childId)) ruleHolds.set(outcome.childId, 'chain');
     const chains = useChainSuggestions.getState();
     // A child that found its parent completes an "incomplete" parent.
     for (const outcome of outcomes) if (outcome.parentId) chains.remove(outcome.parentId);
     chains.add(outcomes, now());
   }
+  // R5e T2: M1–M4 meanings — a stored rule converts (released from the
+  // hold), anything else is a persisted suggestion (still held).
+  const meaning = await applyMoneyMeanings(createdRows, runFacts);
+  // R5e-FIX M2: only the meaning holds are released — never 'chain' / N1.
+  for (const id of meaning.converted) {
+    cardPaymentIds.delete(id);
+    if (isMeaningHold(ruleHolds.get(id))) ruleHolds.delete(id);
+  }
+  if (historySuggestions.length > 0) {
+    await useTransactionsStore.getState().addMeaningSuggestions(historySuggestions);
+  }
+  const latest = useTransactionsStore.getState();
+  const liveById = new Map(latest.transactions.map(t => [t.id, t]));
+  const createdNow = createdRows.map(row => liveById.get(row.id) ?? row);
   const { approve: toApprove, heldForTransfer, heldForDuplicate, heldForCardPayment, heldForRule } =
     autoApproveAfterSync(
-      createdRows,
+      createdNow,
       latest.transactions,
       latest.accounts,
       latest.transferDismissals,
@@ -565,6 +609,8 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
               viaRule,
               viaReader: created - viaRule,
               heldForRuleDisagreement: ruleHoldCounts.heldForRuleDisagreement,
+              // R5e T5: meaning suggestions added to existing rows.
+              meaningSuggested: historySuggestions.length,
             },
           },
         },
@@ -614,6 +660,8 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     ...ruleHoldCounts,
     viaRule,
     viaReader: created - viaRule,
+    meaningConverted: meaning.converted.size,
+    meaningSuggested: historySuggestions.length,
     cancelled: !completed,
     declined: false,
     notUnderstood,

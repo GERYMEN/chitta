@@ -555,3 +555,56 @@ describe('R4b activity copy', () => {
     expect(mode.impact?.text).toBe('Was From install date');
   });
 });
+
+describe('R5e money meaning sentences', () => {
+  const TRANSFER = { merchantName: 'QA-Merchant-61', amountMinor: 500000, type: 'transfer' as const };
+  const BANK = { name: 'QA Bank', lastFour: '1234' };
+  const CARD = { name: 'QA Card', lastFour: '9999' };
+  const previous = {
+    transfer: { type: 'expense' as const, status: 'pending' as const, categoryId: 'cat-uncategorised', approvedAt: null, transferAccountId: null, linkedTransactionId: null, linkKind: null, accountId: 'acc-1' },
+    twin: null,
+  };
+  const marked = (rule: boolean) =>
+    event({
+      eventType: 'transfer_marked',
+      metadata: { kind: 'transfer_marked', transaction_id: 'txn-1', twin_id: null, meaning: 'card_payment', rule, previous, rule_id: null, rule_created: false, previous_rule_target: null },
+    });
+
+  it('a confirmed meaning reads "You moved ₹ •••• from A to B"; a rule says so', () => {
+    const user = describeRaw(marked(false), { transaction: TRANSFER, account: BANK, transferAccount: CARD });
+    expect(user.sentence).toBe(`You moved ${MASKED_AMOUNT} from QA Bank ••1234 to QA Card ••9999`);
+    expect(user.impact).toEqual({ text: 'Confirmed as a transfer · not income or expense', tone: 'neutral' });
+    const auto = describeRaw(marked(true), { transaction: TRANSFER, account: BANK, transferAccount: CARD });
+    expect(auto.impact?.text).toBe('Recorded by your automatic rule · not income or expense');
+    expect(user.icon).toBe('swap-horizontal');
+  });
+
+  it('undo and rule removal (counts / ids only)', () => {
+    const undo = describeRaw(
+      event({ eventType: 'transfer_unmarked', metadata: { kind: 'transfer_unmarked', transaction_id: 'txn-1', twin_id: null, meaning: 'atm' } }),
+      { transaction: { ...TRANSFER, type: 'expense' } },
+    );
+    expect(undo.sentence).toBe(`You undid a transfer of ${MASKED_AMOUNT}`);
+    expect(undo.impact?.text).toBe('Restored as it was');
+    const removed = describeRaw(
+      event({ eventType: 'meaning_rule_removed', transactionId: null, metadata: { kind: 'meaning_rule_removed', meaning: 'atm', bankCanonical: 'sbi' } }),
+    );
+    expect(removed.sentence).toBe('You removed an automatic money rule for SBI SMS');
+  });
+
+  it('R5e-FIX K1: a late twin joining a transfer, and undoing only that twin', () => {
+    const joined = describeRaw(
+      event({
+        eventType: 'transfer_marked',
+        metadata: { kind: 'transfer_marked', transaction_id: 'txn-1', twin_id: 'txn-2', meaning: 'card_payment', rule: false, previous, rule_id: null, rule_created: false, previous_rule_target: null, twin_added: true },
+      }),
+      { transaction: TRANSFER, account: BANK, transferAccount: CARD },
+    );
+    expect(joined.impact?.text).toBe('Matching alert joined this transfer · not income or expense');
+    const undo = describeRaw(
+      event({ eventType: 'transfer_unmarked', metadata: { kind: 'transfer_unmarked', transaction_id: 'txn-1', twin_id: 'txn-2', meaning: 'card_payment', twin_only: true } }),
+      { transaction: TRANSFER },
+    );
+    expect(undo.impact?.text).toBe('Matching alert restored as it was');
+  });
+});

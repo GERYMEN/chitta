@@ -1,5 +1,8 @@
 import { AuditFeedEvent, SmsRunCounts } from '../../domain/audit/audit.types';
-import { Transaction, TransactionType } from '../../domain/transactions/transaction.types';
+import {
+  Transaction,
+  TransactionType,
+} from '../../domain/transactions/transaction.types';
 import { Account } from '../../domain/accounts/account.types';
 import { Category } from '../../domain/categories/category.types';
 import { categoryLabel } from '../../domain/categories/category.rules';
@@ -17,7 +20,12 @@ import {
  * string the feed shows comes from here and is unit-tested.
  */
 
-export type ImpactTone = 'income' | 'expense' | 'pending' | 'negative' | 'neutral';
+export type ImpactTone =
+  | 'income'
+  | 'expense'
+  | 'pending'
+  | 'negative'
+  | 'neutral';
 
 export interface ActivityItem {
   id: string;
@@ -33,7 +41,10 @@ export interface ActivityItem {
 
 export interface ActivityContext {
   /** Live transaction, if it still exists. */
-  transaction?: Pick<Transaction, 'merchantName' | 'amountMinor' | 'type'> | null;
+  transaction?: Pick<
+    Transaction,
+    'merchantName' | 'amountMinor' | 'type'
+  > | null;
   account?: Pick<Account, 'name' | 'lastFour'> | null;
   /**
    * R3a: for a transfer subject — `account` is the "from" account and this
@@ -101,6 +112,9 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   account_linked: 'link-variant',
   account_unlinked: 'link-variant-off',
   auto_read: 'message-badge-outline',
+  transfer_marked: 'swap-horizontal',
+  transfer_unmarked: 'undo-variant',
+  meaning_rule_removed: 'playlist-remove',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -129,11 +143,17 @@ interface Subject {
 }
 
 function amountLabel(amountMinor: number, show: boolean): string {
-  return show ? formatRupeesFromMinor(amountMinor, { showPaise: true }) : MASKED_AMOUNT;
+  return show
+    ? formatRupeesFromMinor(amountMinor, { showPaise: true })
+    : MASKED_AMOUNT;
 }
 
 /** Signed amount, or the mask (no sign either — the amount stays private). */
-function flowAmount(amountMinor: number, type: TransactionType, show: boolean): string {
+function flowAmount(
+  amountMinor: number,
+  type: TransactionType,
+  show: boolean,
+): string {
   return show ? signedAmount(amountMinor, type) : MASKED_AMOUNT;
 }
 
@@ -141,10 +161,17 @@ function flowAmount(amountMinor: number, type: TransactionType, show: boolean): 
  * "-₹50.00" for an expense, "+₹50.00" for income (DESIGN.md flow notation).
  * R3a: a transfer has no sign (it is neither in nor out of your money).
  */
-export function signedAmount(amountMinor: number, type: TransactionType): string {
-  if (type === 'transfer') return formatRupeesFromMinor(amountMinor, { showPaise: true });
+export function signedAmount(
+  amountMinor: number,
+  type: TransactionType,
+): string {
+  if (type === 'transfer')
+    return formatRupeesFromMinor(amountMinor, { showPaise: true });
   return type === 'income'
-    ? formatRupeesFromMinor(amountMinor, { showPaise: true, showPositiveSign: true })
+    ? formatRupeesFromMinor(amountMinor, {
+        showPaise: true,
+        showPositiveSign: true,
+      })
     : formatRupeesFromMinor(-amountMinor, { showPaise: true });
 }
 
@@ -153,7 +180,9 @@ export function transferSideLabel(
   account: Pick<Account, 'name' | 'lastFour'> | null | undefined,
 ): string {
   if (!account) return 'an account';
-  return account.lastFour ? `${account.name} ••${redactLast4(account.lastFour)}` : account.name;
+  return account.lastFour
+    ? `${account.name} ••${redactLast4(account.lastFour)}`
+    : account.name;
 }
 
 /** R3a: "You moved ₹ •••• from A to B" (masked unless amounts are shown). */
@@ -163,25 +192,37 @@ export function movedSentence(
   to: Pick<Account, 'name' | 'lastFour'> | null | undefined,
   show: boolean,
 ): string {
-  return `You moved ${amountLabel(amountMinor, show)} from ${transferSideLabel(from)} to ${transferSideLabel(to)}`;
+  return `You moved ${amountLabel(amountMinor, show)} from ${transferSideLabel(
+    from,
+  )} to ${transferSideLabel(to)}`;
 }
 
 const TRANSFER_NOTE = 'not income or expense';
 
-export function accountShortLabel(account: Pick<Account, 'name' | 'lastFour'> | null | undefined): string {
+export function accountShortLabel(
+  account: Pick<Account, 'name' | 'lastFour'> | null | undefined,
+): string {
   if (!account) return 'an account';
   return account.lastFour ? `••${redactLast4(account.lastFour)}` : account.name;
 }
 
 function fieldList(fields: ReadonlyArray<string>): string {
   const labels = fields.map(field => FIELD_LABEL[field] ?? field);
-  return labels.length > 0 ? `Changed ${labels.join(', ')}` : 'No visible changes';
+  return labels.length > 0
+    ? `Changed ${labels.join(', ')}`
+    : 'No visible changes';
 }
 
-function balanceImpact(subject: Subject | null, show: boolean): ActivityItem['impact'] {
+function balanceImpact(
+  subject: Subject | null,
+  show: boolean,
+): ActivityItem['impact'] {
   if (!subject) return null;
   if (subject.type === 'transfer') {
-    return { text: `Moved between your accounts · ${TRANSFER_NOTE}`, tone: 'neutral' };
+    return {
+      text: `Moved between your accounts · ${TRANSFER_NOTE}`,
+      tone: 'neutral',
+    };
   }
   return {
     text: `Balance ${flowAmount(subject.amountMinor, subject.type, show)}`,
@@ -189,7 +230,10 @@ function balanceImpact(subject: Subject | null, show: boolean): ActivityItem['im
   };
 }
 
-function subjectFor(event: AuditFeedEvent, context: ActivityContext): Subject | null {
+function subjectFor(
+  event: AuditFeedEvent,
+  context: ActivityContext,
+): Subject | null {
   const base: Subject | null = context.transaction
     ? context.transaction
     : event.metadata?.kind === 'deleted'
@@ -199,7 +243,11 @@ function subjectFor(event: AuditFeedEvent, context: ActivityContext): Subject | 
   // The deleted event's own snapshot is already "as it was"; others take the
   // event-time type when known (B4).
   if (event.metadata?.kind === 'deleted' || !context.typeAtEvent) return base;
-  return { merchantName: base.merchantName, amountMinor: base.amountMinor, type: context.typeAtEvent };
+  return {
+    merchantName: base.merchantName,
+    amountMinor: base.amountMinor,
+    type: context.typeAtEvent,
+  };
 }
 
 /** The type an event recorded itself (B4 metadata; none on pre-R4 events). */
@@ -265,6 +313,20 @@ export function typesAtEventTime(
       typeNow.set(metadata.debit_id, 'transfer');
       continue;
     }
+    // R5e: a confirmed money meaning — same shape as a pairing (twin optional).
+    if (metadata?.kind === 'transfer_marked') {
+      result.set(event.id, 'transfer');
+      typeNow.set(metadata.transaction_id, metadata.previous.transfer.type);
+      if (metadata.twin_id && metadata.previous.twin)
+        typeNow.set(metadata.twin_id, metadata.previous.twin.type);
+      continue;
+    }
+    if (metadata?.kind === 'transfer_unmarked') {
+      const after = known(metadata.transaction_id, event);
+      if (after) result.set(event.id, after);
+      typeNow.set(metadata.transaction_id, 'transfer');
+      continue;
+    }
     if (!id) continue;
     const at = recordedType(event) ?? known(id, event);
     if (!at) continue;
@@ -304,14 +366,23 @@ export function describeActivity(
   const show = (options.showAmounts ?? false) && !hideNames;
   const rawSubject = subjectFor(event, context);
   const subject =
-    rawSubject && hideNames ? { ...rawSubject, merchantName: REDACTED_TEXT } : rawSubject;
+    rawSubject && hideNames
+      ? { ...rawSubject, merchantName: REDACTED_TEXT }
+      : rawSubject;
   const what = subjectText(subject, show);
   const merchant = subject ? subject.merchantName : null;
-  const categoryName = context.category ? categoryLabel(context.category) : 'a category';
+  const categoryName = context.category
+    ? categoryLabel(context.category)
+    : 'a category';
   const accountLabel = accountShortLabel(context.account);
   const isTransfer = subject?.type === 'transfer';
   const moved = subject
-    ? movedSentence(subject.amountMinor, context.account, context.transferAccount, show)
+    ? movedSentence(
+        subject.amountMinor,
+        context.account,
+        context.transferAccount,
+        show,
+      )
     : 'You moved money between your accounts';
   let sentence: string;
   let impact: ActivityItem['impact'] = null;
@@ -320,7 +391,10 @@ export function describeActivity(
     case 'created':
       if (isTransfer) {
         sentence = moved;
-        impact = { text: `Between your accounts · ${TRANSFER_NOTE}`, tone: 'neutral' };
+        impact = {
+          text: `Between your accounts · ${TRANSFER_NOTE}`,
+          tone: 'neutral',
+        };
         break;
       }
       sentence = `You added ${what}`;
@@ -333,7 +407,10 @@ export function describeActivity(
       break;
     case 'transfer_paired':
       sentence = moved;
-      impact = { text: `Confirmed as a transfer · ${TRANSFER_NOTE}`, tone: 'neutral' };
+      impact = {
+        text: `Confirmed as a transfer · ${TRANSFER_NOTE}`,
+        tone: 'neutral',
+      };
       break;
     case 'transfer_unpaired':
       sentence = subject
@@ -341,9 +418,62 @@ export function describeActivity(
         : 'You undid a transfer';
       impact = { text: 'Both items restored as they were', tone: 'neutral' };
       break;
+    case 'transfer_marked': {
+      // R5e: a card bill / cash withdrawal / wallet top-up / own transfer.
+      const md =
+        event.metadata?.kind === 'transfer_marked' ? event.metadata : null;
+      const byRule = md?.rule;
+      sentence = moved;
+      // R5e-FIX K1: a late matching SMS joined an existing transfer as its twin.
+      impact = md?.twin_added
+        ? {
+            text: `Matching alert joined this transfer · ${TRANSFER_NOTE}`,
+            tone: 'neutral',
+          }
+        : {
+            text: `${
+              byRule
+                ? 'Recorded by your automatic rule'
+                : 'Confirmed as a transfer'
+            } · ${TRANSFER_NOTE}`,
+            tone: 'neutral',
+          };
+      break;
+    }
+    case 'transfer_unmarked': {
+      const twinOnly =
+        event.metadata?.kind === 'transfer_unmarked' &&
+        event.metadata.twin_only;
+      sentence = subject
+        ? `You undid a transfer of ${amountLabel(subject.amountMinor, show)}`
+        : 'You undid a transfer';
+      impact = {
+        text: twinOnly
+          ? 'Matching alert restored as it was'
+          : 'Restored as it was',
+        tone: 'neutral',
+      };
+      break;
+    }
+    case 'meaning_rule_removed': {
+      const md =
+        event.metadata?.kind === 'meaning_rule_removed' ? event.metadata : null;
+      sentence = md
+        ? `You removed an automatic money rule for ${institutionDisplayName(
+            md.bankCanonical,
+          )} SMS`
+        : 'You removed an automatic money rule';
+      impact = {
+        text: 'Matching SMS will be asked about again',
+        tone: 'neutral',
+      };
+      break;
+    }
     case 'refund_linked':
     case 'refund_unlinked': {
-      const refundAmount = subject ? amountLabel(subject.amountMinor, show) : MASKED_AMOUNT;
+      const refundAmount = subject
+        ? amountLabel(subject.amountMinor, show)
+        : MASKED_AMOUNT;
       const original = context.linkedTransaction
         ? hideNames
           ? REDACTED_TEXT
@@ -370,7 +500,8 @@ export function describeActivity(
     case 'detected': {
       sentence = `Detected ${what} from SMS`;
       const confidence =
-        event.metadata?.kind === 'detected' && event.metadata.confidence !== null
+        event.metadata?.kind === 'detected' &&
+        event.metadata.confidence !== null
           ? ` · ${Math.round(event.metadata.confidence)}% match`
           : '';
       impact = { text: `Waiting for approval${confidence}`, tone: 'pending' };
@@ -402,26 +533,43 @@ export function describeActivity(
       impact = { text: 'Not counted in balance', tone: 'neutral' };
       break;
     case 'edited': {
-      const fields = event.metadata?.kind === 'edited' ? event.metadata.fields : [];
-      if (isTransfer && fields.includes('type') && fields.includes('transferAccountId')) {
+      const fields =
+        event.metadata?.kind === 'edited' ? event.metadata.fields : [];
+      if (
+        isTransfer &&
+        fields.includes('type') &&
+        fields.includes('transferAccountId')
+      ) {
         // R3a "Mark as transfer" converted an income/expense.
         sentence = moved;
-        impact = { text: `Marked as a transfer · ${TRANSFER_NOTE}`, tone: 'neutral' };
+        impact = {
+          text: `Marked as a transfer · ${TRANSFER_NOTE}`,
+          tone: 'neutral',
+        };
         break;
       }
-      sentence = `You edited ${subject ? subject.merchantName : 'a transaction'}`;
+      sentence = `You edited ${
+        subject ? subject.merchantName : 'a transaction'
+      }`;
       impact = { text: fieldList(fields), tone: 'neutral' };
       break;
     }
     case 'deleted': {
       sentence = `You deleted ${what}`;
-      const snapshot = event.metadata?.kind === 'deleted' ? event.metadata : event.deletedSnapshot;
+      const snapshot =
+        event.metadata?.kind === 'deleted'
+          ? event.metadata
+          : event.deletedSnapshot;
       impact =
         snapshot?.status === 'approved' && snapshot.type === 'transfer'
           ? { text: 'Balances moved back', tone: 'negative' }
           : snapshot?.status === 'approved'
           ? {
-              text: `No longer in balance (was ${flowAmount(snapshot.amountMinor, snapshot.type, show)})`,
+              text: `No longer in balance (was ${flowAmount(
+                snapshot.amountMinor,
+                snapshot.type,
+                show,
+              )})`,
               tone: 'negative',
             }
           : { text: 'Removed from records', tone: 'negative' };
@@ -434,13 +582,20 @@ export function describeActivity(
     case 'account_updated':
       sentence = `You updated account ${accountLabel}`;
       impact = {
-        text: fieldList(event.metadata?.kind === 'account_updated' ? event.metadata.fields : []),
+        text: fieldList(
+          event.metadata?.kind === 'account_updated'
+            ? event.metadata.fields
+            : [],
+        ),
         tone: 'neutral',
       };
       break;
     case 'account_removed':
       sentence = `You removed account ${accountLabel}`;
-      impact = { text: 'Left totals · its transactions are kept', tone: 'negative' };
+      impact = {
+        text: 'Left totals · its transactions are kept',
+        tone: 'negative',
+      };
       break;
     case 'account_restored':
       sentence = `You restored account ${accountLabel}`;
@@ -457,7 +612,10 @@ export function describeActivity(
       break;
     case 'rule_deleted':
       sentence = `You removed a merchant rule for ${categoryName}`;
-      impact = { text: 'Future SMS items go to Uncategorised', tone: 'neutral' };
+      impact = {
+        text: 'Future SMS items go to Uncategorised',
+        tone: 'neutral',
+      };
       break;
     case 'category_created':
       sentence = `You created category ${categoryName}`;
@@ -466,16 +624,26 @@ export function describeActivity(
     case 'category_updated':
       sentence = `You updated category ${categoryName}`;
       impact = {
-        text: fieldList(event.metadata?.kind === 'category_updated' ? event.metadata.fields : []),
+        text: fieldList(
+          event.metadata?.kind === 'category_updated'
+            ? event.metadata.fields
+            : [],
+        ),
         tone: 'neutral',
       };
       break;
     case 'category_archived':
-      sentence = `You archived category ${context.category?.name ?? 'a category'}`;
-      impact = { text: 'Hidden from pickers · items keep their label', tone: 'neutral' };
+      sentence = `You archived category ${
+        context.category?.name ?? 'a category'
+      }`;
+      impact = {
+        text: 'Hidden from pickers · items keep their label',
+        tone: 'neutral',
+      };
       break;
     case 'backup_restored': {
-      const counts = event.metadata?.kind === 'backup_restored' ? event.metadata.counts : {};
+      const counts =
+        event.metadata?.kind === 'backup_restored' ? event.metadata.counts : {};
       const n = counts.transactions ?? 0;
       sentence = 'You restored Tracker from a backup';
       impact = {
@@ -487,24 +655,36 @@ export function describeActivity(
     case 'account_linked':
     case 'account_unlinked': {
       const md =
-        event.metadata?.kind === 'account_linked' || event.metadata?.kind === 'account_unlinked'
+        event.metadata?.kind === 'account_linked' ||
+        event.metadata?.kind === 'account_unlinked'
           ? event.metadata
           : null;
-      const from = md ? `${institutionDisplayName(md.bankCanonical)} SMS` : 'SMS';
+      const from = md
+        ? `${institutionDisplayName(md.bankCanonical)} SMS`
+        : 'SMS';
       const n = md?.items ?? 0;
       if (event.eventType === 'account_linked') {
         sentence = `You linked ${from} to ${accountLabel}`;
-        impact = { text: `${n} item${n === 1 ? '' : 's'} added to Pending · future SMS go there`, tone: 'neutral' };
+        impact = {
+          text: `${n} item${
+            n === 1 ? '' : 's'
+          } added to Pending · future SMS go there`,
+          tone: 'neutral',
+        };
       } else {
         sentence = `You undid linking ${from} to ${accountLabel}`;
-        impact = { text: `${n} pending item${n === 1 ? '' : 's'} removed`, tone: 'neutral' };
+        impact = {
+          text: `${n} pending item${n === 1 ? '' : 's'} removed`,
+          tone: 'neutral',
+        };
       }
       break;
     }
     case 'sms_rescan':
     case 'auto_read': {
       const counts =
-        event.metadata?.kind === 'sms_rescan' || event.metadata?.kind === 'auto_read'
+        event.metadata?.kind === 'sms_rescan' ||
+        event.metadata?.kind === 'auto_read'
           ? event.metadata.counts
           : { scanned: 0, created: 0, notUnderstood: 0, autoApproved: 0 };
       const described = describeSmsRun(event.eventType, counts);
@@ -534,19 +714,30 @@ export function describeSmsRun(
   counts: SmsRunCounts,
 ): Pick<ActivityItem, 'sentence' | 'impact'> {
   const parts = [`${counts.created} new`];
-  if (counts.notUnderstood > 0) parts.push(`${counts.notUnderstood} not understood`);
-  if (counts.autoApproved > 0) parts.push(`${counts.autoApproved} auto-approved`);
+  if (counts.notUnderstood > 0)
+    parts.push(`${counts.notUnderstood} not understood`);
+  if (counts.autoApproved > 0)
+    parts.push(`${counts.autoApproved} auto-approved`);
   // R5g: two readers disagreed — those items wait in Pending for a check.
-  if ((counts.heldForRuleDisagreement ?? 0) > 0) parts.push(`${counts.heldForRuleDisagreement} to check`);
+  if ((counts.heldForRuleDisagreement ?? 0) > 0)
+    parts.push(`${counts.heldForRuleDisagreement} to check`);
   if (type === 'auto_read') {
     return {
       sentence: `Read automatically: ${parts.join(' · ')}`,
-      impact: { text: 'New SMS arrived · new items wait in Pending', tone: 'pending' },
+      impact: {
+        text: 'New SMS arrived · new items wait in Pending',
+        tone: 'pending',
+      },
     };
   }
   return {
-    sentence: `You re-read your messages with the new reader: ${parts.join(' · ')}`,
-    impact: { text: `Scanned ${counts.scanned} SMS · existing items unchanged`, tone: 'neutral' },
+    sentence: `You re-read your messages with the new reader: ${parts.join(
+      ' · ',
+    )}`,
+    impact: {
+      text: `Scanned ${counts.scanned} SMS · existing items unchanged`,
+      tone: 'neutral',
+    },
   };
 }
 
@@ -557,8 +748,16 @@ function describeSettingsChange(
   if (metadata?.kind !== 'settings_changed') {
     return { sentence: 'You changed approval settings', impact: null };
   }
-  if (metadata.key === 'sms_sync_start_at' || metadata.key === 'sms_sync_start_mode') {
-    return describeSyncStartChange(event.actor, metadata.key, metadata.from, metadata.to);
+  if (
+    metadata.key === 'sms_sync_start_at' ||
+    metadata.key === 'sms_sync_start_mode'
+  ) {
+    return describeSyncStartChange(
+      event.actor,
+      metadata.key,
+      metadata.from,
+      metadata.to,
+    );
   }
   if (metadata.key === 'sms_auto_read') {
     return {
@@ -571,7 +770,10 @@ function describeSettingsChange(
   }
   if (metadata.key === 'approval_mode') {
     return {
-      sentence: metadata.to === 'auto' ? 'You turned on auto-approve' : 'You turned off auto-approve',
+      sentence:
+        metadata.to === 'auto'
+          ? 'You turned on auto-approve'
+          : 'You turned off auto-approve',
       impact: { text: 'Applies to future SMS syncs', tone: 'neutral' },
     };
   }
@@ -630,14 +832,21 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 
 /** "Just now", "5 min ago", "3 h ago" (same day), else the time of day. */
-export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+export function formatRelativeTime(
+  iso: string,
+  now: Date = new Date(),
+): string {
   const date = new Date(iso);
   const diffMs = now.getTime() - date.getTime();
   if (diffMs < 60_000) return 'Just now';
   const minutes = Math.floor(diffMs / 60_000);
   if (minutes < 60) return `${minutes} min ago`;
   if (isSameDay(date, now)) return `${Math.floor(minutes / 60)} h ago`;
-  return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return date.toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 export function dayHeading(iso: string, now: Date = new Date()): string {

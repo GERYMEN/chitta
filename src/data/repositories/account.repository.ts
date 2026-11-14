@@ -192,6 +192,17 @@ async function softDelete(
         VALUES (?, ?, ?, 'deleted', ?, ?, ?)`,
       [key.bankCanonical, key.accountKind, key.lastFour, id, key.normalizerVersion, nowMs],
     );
+    // R5e T4: meaning rules that target this account are removed; open
+    // meaning suggestions that pointed at it fall back to 'missing'.
+    await tx.execute('DELETE FROM money_meaning_rules WHERE target_account_id = ?', [id]);
+    const pointing = await tx.execute('SELECT * FROM money_meaning_suggestions WHERE target_account_id = ?', [id]);
+    for (const row of pointing.rows ?? []) {
+      if (row.resolved_at != null) continue;
+      await tx.execute(
+        'UPDATE money_meaning_suggestions SET target_account_id = NULL, reason = ? WHERE transaction_id = ?',
+        ['missing', String(row.transaction_id)],
+      );
+    }
     await writeAudit(tx, id, audit);
   });
 

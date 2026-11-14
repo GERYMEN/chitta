@@ -67,6 +67,13 @@ function mergeAgreeing(rule: ParsedSmsTransaction, reader: ParsedSmsTransaction)
       ? { counterpartyLastFour: rule.counterpartyLastFour ?? reader.counterpartyLastFour }
       : {}),
     ...(rule.moneyHint ?? reader.moneyHint ? { moneyHint: rule.moneyHint ?? reader.moneyHint } : {}),
+    // R5e: the wallet a bank debit loaded / a 3-digit counterparty mask.
+    ...(rule.counterpartyInstitution ?? reader.counterpartyInstitution
+      ? { counterpartyInstitution: rule.counterpartyInstitution ?? reader.counterpartyInstitution }
+      : {}),
+    ...(rule.counterpartyLastDigits ?? reader.counterpartyLastDigits
+      ? { counterpartyLastDigits: rule.counterpartyLastDigits ?? reader.counterpartyLastDigits }
+      : {}),
   };
 }
 

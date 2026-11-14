@@ -62,11 +62,14 @@ export function autoApproveEligible(
   pending: ReadonlyArray<Transaction>,
   mode: ApprovalMode,
   threshold: number,
+  /** R5e: items with an open money meaning wait for a quick check. */
+  openMeaningIds: ReadonlySet<string> = new Set(),
 ): Transaction[] {
   return pending.filter(
     t =>
       t.status === 'pending' &&
       t.sourceType === 'sms' &&
+      !openMeaningIds.has(t.id) &&
       shouldAutoApprove(mode, threshold, t.confidenceScore),
   );
 }
@@ -86,12 +89,13 @@ export function autoApproveButtonState(
   mode: ApprovalMode,
   threshold: number,
   pending: ReadonlyArray<Transaction>,
+  openMeaningIds: ReadonlySet<string> = new Set(),
 ): AutoApproveButtonState {
   const clamped = clampThreshold(threshold);
   if (mode !== 'auto') {
     return { visible: false, count: 0, disabled: true, hint: null, threshold: clamped };
   }
-  const count = autoApproveEligible(pending, mode, threshold).length;
+  const count = autoApproveEligible(pending, mode, threshold, openMeaningIds).length;
   if (count > 0) {
     return { visible: true, count, disabled: false, hint: null, threshold: clamped };
   }
@@ -118,8 +122,10 @@ export function approveAllEligible(
   accounts: ReadonlyArray<Pick<Account, 'id' | 'deletedAt'>>,
   transferDismissals: ReadonlyArray<Pick<TransferDismissal, 'debitId' | 'creditId'>>,
   duplicateDismissals: ReadonlyArray<Pick<DuplicateDismissal, 'aId' | 'bId'>>,
+  /** R5e: items with an open money meaning (card bill / ATM / wallet / own transfer). */
+  openMeaningIds: ReadonlySet<string> = new Set(),
 ): Transaction[] {
-  const pending = visible.filter(t => t.status === 'pending');
+  const pending = visible.filter(t => t.status === 'pending' && !openMeaningIds.has(t.id));
   if (pending.length === 0) return [];
   const paired = pairedTransactionIds(
     findTransferPairs(allTransactions, accounts, transferDismissals),
@@ -132,6 +138,9 @@ export function approveAllConfirmTitle(count: number): string {
   return `Approve all ${count} item${count === 1 ? '' : 's'}?`;
 }
 
-export function approvedSnackbarText(count: number): string {
-  return `Approved ${count}`;
+/** R4b snackbar; R5e: + "N need a quick check" for skipped money-meaning items. */
+export function approvedSnackbarText(count: number, needCheck: number = 0): string {
+  const check = needCheck > 0 ? `${needCheck} ${needCheck === 1 ? 'needs' : 'need'} a quick check` : '';
+  if (count === 0 && check) return check;
+  return check ? `Approved ${count} · ${check}` : `Approved ${count}`;
 }

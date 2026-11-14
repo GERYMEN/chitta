@@ -13,6 +13,7 @@ import { categoryLabel, UNCATEGORISED_ID } from '../../../domain/categories/cate
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 import { isRuleDisagreementRow } from '../../sms-sync/smsSyncLogic';
 import { isWaitingForMatchingAlert, useChainSuggestions } from '../../sms-sync/rules/chaining';
+import { MeaningCard } from '../../meaning/components/MeaningCard';
 
 /** R5g N1: the template and the reader read this SMS differently. */
 export const RULE_DISAGREEMENT_NOTE = 'Check this one: two readers disagree';
@@ -45,6 +46,10 @@ export function PendingTransactionCard({
 }: PendingTransactionCardProps) {
   const categories = useTransactionsStore(state => state.categories);
   const chainSuggestions = useChainSuggestions(state => state.suggestions);
+  // R5e T3: an open money meaning (card bill / ATM / wallet / own transfer).
+  const meaning = useTransactionsStore(state =>
+    state.meaningSuggestions.find(s => s.transactionId === transaction.id && s.resolvedAt == null),
+  );
   useRedacted(); // R4c
 
   const category = categories.find(c => c.id === transaction.categoryId);
@@ -89,6 +94,8 @@ export function PendingTransactionCard({
           tone={tier === 'high' ? 'approved' : 'pending'}
         />
       </View>
+
+      {meaning ? <MeaningCard suggestion={meaning} transaction={transaction} /> : null}
 
       <View style={styles.actions}>
         <Button

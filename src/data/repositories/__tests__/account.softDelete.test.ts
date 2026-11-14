@@ -67,8 +67,11 @@ describe('accountRepository soft delete / restore (D10)', () => {
 
     expect(transactionCount).toBe(1);
     const w = writes();
-    expect(w).toHaveLength(2);
+    // + R5e T4: meaning rules that target the account go (same transaction).
+    expect(w).toHaveLength(3);
     expect(w.every(c => c.inTransaction)).toBe(true);
+    expect(w[2].sql).toBe('DELETE FROM money_meaning_rules WHERE target_account_id = ?');
+    expect(w[2].params).toEqual(['acc-qa']);
 
     expect(w[0].sql).toBe('UPDATE accounts SET deleted_at = ?, updated_at = ? WHERE id = ?');
     expect(typeof w[0].params[0]).toBe('number');

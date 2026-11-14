@@ -250,4 +250,16 @@ describe('approveAllEligible (R4b Approve all N)', () => {
     expect(approveAllConfirmTitle(4)).toBe('Approve all 4 items?');
     expect(approvedSnackbarText(4)).toBe('Approved 4');
   });
+
+  it('R5e: items with an open money meaning are skipped; the snackbar says "N need a quick check"', () => {
+    const plain = txn({ amountMinor: 1111 });
+    const meaning = txn({ amountMinor: 2222 });
+    const all = [plain, meaning];
+    expect(approveAllEligible(all, all, accounts, [], [], new Set([meaning.id])).map(t => t.id)).toEqual([plain.id]);
+    expect(autoApproveEligible(all.map(t => ({ ...t, sourceType: 'sms' as const, confidenceScore: 95 })), 'auto', 90, new Set([meaning.id])).map(t => t.id)).toEqual([plain.id]);
+    expect(approvedSnackbarText(1, 1)).toBe('Approved 1 · 1 needs a quick check');
+    expect(approvedSnackbarText(3, 2)).toBe('Approved 3 · 2 need a quick check');
+    expect(approvedSnackbarText(0, 2)).toBe('2 need a quick check');
+    expect(approvedSnackbarText(4, 0)).toBe('Approved 4');
+  });
 });

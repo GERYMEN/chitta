@@ -72,3 +72,46 @@ describe('R3a audit metadata', () => {
     expect(changedTransactionFields(before, { transferAccountId: null })).toEqual([]);
   });
 });
+
+describe('R5e audit metadata (transfer_marked / transfer_unmarked / meaning_rule_removed)', () => {
+  it('keeps ids, enums and snapshot fields only — merchant / SMS text / amounts / last-4 are dropped', () => {
+    const leaky = {
+      kind: 'transfer_marked',
+      transaction_id: 't1',
+      twin_id: null,
+      meaning: 'card_payment',
+      rule: true,
+      previous: {
+        transfer: { ...SNAP, accountId: 'acc-1', merchantName: 'QA SECRET PAYEE', amountMinor: 500000 },
+        twin: null,
+      },
+      rule_id: 'mrule-1',
+      rule_created: false,
+      previous_rule_target: 'acc-2',
+      sanitizedPreview: 'Rs.5,000 debited SECRET-SMS',
+      counterpartyKey: '9999',
+    } as unknown as AuditMetadata;
+    const clean = sanitizeAuditMetadata(leaky);
+    expect(clean).toEqual({
+      kind: 'transfer_marked',
+      transaction_id: 't1',
+      twin_id: null,
+      meaning: 'card_payment',
+      rule: true,
+      previous: { transfer: { ...SNAP, accountId: 'acc-1' }, twin: null },
+      rule_id: 'mrule-1',
+      rule_created: false,
+      previous_rule_target: 'acc-2',
+    });
+    expect(JSON.stringify(clean)).not.toMatch(/SECRET|9999|500000/);
+  });
+
+  it('unknown meaning / bank values never pass through', () => {
+    expect(
+      sanitizeAuditMetadata({ kind: 'meaning_rule_removed', meaning: 'evil', bankCanonical: 'QA BANK 9999' } as unknown as AuditMetadata),
+    ).toEqual({ kind: 'meaning_rule_removed', meaning: 'transfer', bankCanonical: 'unknown' });
+    expect(
+      sanitizeAuditMetadata({ kind: 'transfer_unmarked', transaction_id: 't1', twin_id: 'c1', meaning: 'atm', extra: 'x' } as unknown as AuditMetadata),
+    ).toEqual({ kind: 'transfer_unmarked', transaction_id: 't1', twin_id: 'c1', meaning: 'atm' });
+  });
+});

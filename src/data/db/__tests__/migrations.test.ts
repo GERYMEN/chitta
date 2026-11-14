@@ -270,7 +270,7 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS sms_deleted_refs \(\s*source_reference_hash TEXT PRIMARY KEY,\s*deleted_at TEXT NOT NULL\s*\)/);
   });
 
-  it('R5d: migration 9 only adds the identity columns + indexes, rewrites nothing, and is the last migration', () => {
+  it('R5d: migration 9 only adds the identity columns + indexes and rewrites nothing', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m9 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 9);
     const sqls: string[] = m9.statements.map((st: string | { sql: string }) =>
@@ -287,7 +287,40 @@ describe('runMigrations versioning', () => {
     const joined = sqls.join('\n');
     expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b|\bINSERT\b/);
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(9);
+  });
+
+  it('R5e: migration 10 creates the meaning tables + seeds EMI & Loans / Interest (bound params), rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m10 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 10);
+    const sqls: string[] = m10.statements.map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql));
+    const joined = sqls.join('\n');
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS money_meaning_rules/);
+    expect(joined).toMatch(/UNIQUE \(bank_canonical, kind, counterparty_key\)/);
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS money_meaning_suggestions/);
+    expect(joined).toMatch(/transaction_id TEXT PRIMARY KEY/);
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b|\bALTER\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b|\bamount\b|\bmerchant\b/i);
+    const seeds = m10.statements.filter((st: string | { sql: string }) => typeof st !== 'string');
+    expect(seeds.map((st: { sql: string; params: unknown[] }) => st.params)).toEqual([
+      ['cat-emi', 'EMI & Loans', 'expense', 'calendar-sync-outline'],
+      ['cat-interest', 'Interest', 'income', 'percent-outline'],
+    ]);
+    for (const st of seeds) {
+      expect(st.sql).toBe('INSERT OR IGNORE INTO categories (id, name, parent_id, type, icon, is_system) VALUES (?, ?, NULL, ?, ?, 1)');
+    }
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(10);
+  });
+
+  it('R5e: runs migration 10 exactly once and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+    const { runMigrations } = require('../connection');
+    await runMigrations();
+    await runMigrations();
+    expect(executed.filter(sql => /CREATE TABLE IF NOT EXISTS money_meaning_rules/.test(sql))).toHaveLength(1);
+    expect(executed.filter(sql => /CREATE TABLE IF NOT EXISTS money_meaning_suggestions/.test(sql))).toHaveLength(1);
+    expect(appliedVersions.has(10)).toBe(true);
   });
 
   it('R5: runs migration 8 exactly once and records it', async () => {

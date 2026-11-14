@@ -13,15 +13,25 @@ import { useTransactionsStore } from '../../transactions/state/transactionsStore
 import { parseSmsReference } from '../../sms-sync/smsReference';
 import { OriginalSmsView } from './OriginalSmsView';
 import { categoryLabel } from '../../../domain/categories/category.rules';
-import { findTransferTwin, isPairCandidate } from '../../../domain/transfers/transfer.rules';
+import {
+  findTransferTwin,
+  isPairCandidate,
+} from '../../../domain/transfers/transfer.rules';
 import { transferRouteLabel } from '../../transfers/transferLabels';
 import { isLinkedRefund } from '../../../domain/transactions/transaction.rules';
-import { canLinkAsRefund, refundsFor } from '../../../domain/refunds/refund.rules';
+import {
+  canLinkAsRefund,
+  refundsFor,
+} from '../../../domain/refunds/refund.rules';
 import {
   duplicatePickerOptions,
   hiddenDuplicatesOf,
 } from '../../../domain/duplicates/duplicate.rules';
-import { refundedLabel, refundForLabel, refundRowLine } from '../../refunds/refundLabels';
+import {
+  refundedLabel,
+  refundForLabel,
+  refundRowLine,
+} from '../../refunds/refundLabels';
 import { hiddenDuplicatesLabel } from '../../duplicates/duplicateLabels';
 import { MerchantHistoryChip } from '../../insights/components/MerchantHistoryChip';
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
@@ -54,12 +64,16 @@ export interface TransactionDetailContentProps {
 }
 
 /** R3a: the kept SMS credit half of a confirmed transfer pair. */
-export function isTransferTwin(transaction: Pick<Transaction, 'linkKind'>): boolean {
+export function isTransferTwin(
+  transaction: Pick<Transaction, 'linkKind'>,
+): boolean {
   return transaction.linkKind === 'transfer_twin';
 }
 
 /** R3b: a row hidden as a duplicate of another (rejected, link_kind 'duplicate'). */
-export function isHiddenDuplicate(transaction: Pick<Transaction, 'linkKind'>): boolean {
+export function isHiddenDuplicate(
+  transaction: Pick<Transaction, 'linkKind'>,
+): boolean {
   return transaction.linkKind === 'duplicate';
 }
 
@@ -85,7 +99,7 @@ export interface TransactionDetailActionsProps {
   onDelete?: (transaction: Transaction) => void;
   /** R3a: approved income/expense → "Mark as transfer". */
   onMarkAsTransfer?: (transaction: Transaction) => void;
-  /** R3a: a transfer confirmed from an SMS pair → "Undo transfer". */
+  /** R3a: a transfer confirmed from an SMS pair (R5e-FIX K2: or a money meaning) → "Undo transfer". */
   onUndoTransfer?: (transaction: Transaction) => void;
   /** R3b: pending/approved unlinked income → "Link to original expense". */
   onLinkRefund?: (transaction: Transaction) => void;
@@ -117,6 +131,9 @@ export function TransactionDetailActions({
 }: TransactionDetailActionsProps) {
   const isPending = transaction.status === 'pending';
   const transactions = useTransactionsStore(state => state.transactions);
+  const meaningSuggestions = useTransactionsStore(
+    state => state.meaningSuggestions,
+  );
   // The twin is reached only from Activity; it has no actions of its own.
   if (isTransferTwin(transaction)) return null;
   // R3b: a hidden duplicate (reached from Activity / the kept row) can only be restored.
@@ -127,14 +144,24 @@ export function TransactionDetailActions({
           label="Not a duplicate"
           variant="ghost"
           onPress={() => onRestoreDuplicate(transaction)}
-          icon={<Icon name="backup-restore" size={18} color={colors.onSurface} />}
+          icon={
+            <Icon name="backup-restore" size={18} color={colors.onSurface} />
+          }
           testID="detail-restore-duplicate"
         />
       </View>
     ) : null;
   }
   const isPaired =
-    transaction.type === 'transfer' && findTransferTwin(transactions, transaction.id) !== null;
+    transaction.type === 'transfer' &&
+    findTransferTwin(transactions, transaction.id) !== null;
+  // R5e-FIX K2: a transfer recorded from a money meaning (confirm or rule)
+  // offers "Undo transfer" even with no twin.
+  const isMeaningTransfer =
+    transaction.type === 'transfer' &&
+    meaningSuggestions.some(
+      s => s.transactionId === transaction.id && s.resolution === 'transfer',
+    );
   // R3b.1: an expense with linked refunds is not offered "Mark as transfer".
   const canMark =
     transaction.status === 'approved' &&
@@ -145,7 +172,8 @@ export function TransactionDetailActions({
   const canUnlinkRefund = isLinkedRefund(transaction) && onUnlinkRefund;
   // Offered only when there is something it could be a duplicate of.
   const canMarkDuplicate =
-    onMarkDuplicate && duplicatePickerOptions(transaction, transactions).length > 0;
+    onMarkDuplicate &&
+    duplicatePickerOptions(transaction, transactions).length > 0;
 
   return (
     <View style={styles.actions}>
@@ -163,7 +191,9 @@ export function TransactionDetailActions({
           label="Unlink refund"
           variant="ghost"
           onPress={() => onUnlinkRefund(transaction)}
-          icon={<Icon name="link-variant-off" size={18} color={colors.onSurface} />}
+          icon={
+            <Icon name="link-variant-off" size={18} color={colors.onSurface} />
+          }
           testID="detail-unlink-refund"
         />
       ) : null}
@@ -172,7 +202,9 @@ export function TransactionDetailActions({
           label="Mark as duplicate of…"
           variant="ghost"
           onPress={() => onMarkDuplicate(transaction)}
-          icon={<Icon name="content-duplicate" size={18} color={colors.onSurface} />}
+          icon={
+            <Icon name="content-duplicate" size={18} color={colors.onSurface} />
+          }
           testID="detail-mark-duplicate"
         />
       ) : null}
@@ -181,11 +213,13 @@ export function TransactionDetailActions({
           label="Mark as transfer"
           variant="ghost"
           onPress={() => onMarkAsTransfer(transaction)}
-          icon={<Icon name="swap-horizontal" size={18} color={colors.onSurface} />}
+          icon={
+            <Icon name="swap-horizontal" size={18} color={colors.onSurface} />
+          }
           testID="detail-mark-transfer"
         />
       ) : null}
-      {isPaired && onUndoTransfer ? (
+      {(isPaired || isMeaningTransfer) && onUndoTransfer ? (
         <Button
           label="Undo transfer"
           variant="ghost"
@@ -197,20 +231,42 @@ export function TransactionDetailActions({
       {isPending ? (
         <>
           <Button
-            label={`Approve Transaction (${formatRupeesFromMinor(transaction.amountMinor)})`}
+            label={`Approve Transaction (${formatRupeesFromMinor(
+              transaction.amountMinor,
+            )})`}
             variant="brand"
             onPress={() => onApprove(transaction)}
           />
           <View style={styles.secondaryActions}>
-            <Button label="Edit" variant="ghost" onPress={() => onEdit(transaction)} style={styles.secondaryButton} />
-            <Button label="Reject" variant="destructive" onPress={() => onReject(transaction)} style={styles.secondaryButton} />
+            <Button
+              label="Edit"
+              variant="ghost"
+              onPress={() => onEdit(transaction)}
+              style={styles.secondaryButton}
+            />
+            <Button
+              label="Reject"
+              variant="destructive"
+              onPress={() => onReject(transaction)}
+              style={styles.secondaryButton}
+            />
           </View>
         </>
       ) : (
         <View style={styles.secondaryActions}>
-          <Button label="Edit" variant="ghost" onPress={() => onEdit(transaction)} style={styles.secondaryButton} />
+          <Button
+            label="Edit"
+            variant="ghost"
+            onPress={() => onEdit(transaction)}
+            style={styles.secondaryButton}
+          />
           {onDelete ? (
-            <Button label="Delete" variant="destructive" onPress={() => onDelete(transaction)} style={styles.secondaryButton} />
+            <Button
+              label="Delete"
+              variant="destructive"
+              onPress={() => onDelete(transaction)}
+              style={styles.secondaryButton}
+            />
           ) : null}
         </View>
       )}
@@ -239,7 +295,9 @@ export function TransactionDetailContent({
 }: TransactionDetailContentProps) {
   // R4c: names, note, SMS text, amounts and last-4 masked in the feedback screenshot.
   useRedacted();
-  const [transparencyOpen, setTransparencyOpen] = useState(variant === 'screen');
+  const [transparencyOpen, setTransparencyOpen] = useState(
+    variant === 'screen',
+  );
   const [auditOpen, setAuditOpen] = useState(false);
   const categories = useTransactionsStore(state => state.categories);
   const accounts = useTransactionsStore(state => state.accounts);
@@ -251,9 +309,13 @@ export function TransactionDetailContent({
   const tier = confidenceTier(transaction.confidenceScore);
   const isPending = transaction.status === 'pending';
   const confidencePercent =
-    transaction.confidenceScore !== null ? Math.round(transaction.confidenceScore) : null;
+    transaction.confidenceScore !== null
+      ? Math.round(transaction.confidenceScore)
+      : null;
   const smsReference =
-    transaction.sourceType === 'sms' ? parseSmsReference(transaction.sourceReferenceHash) : null;
+    transaction.sourceType === 'sms'
+      ? parseSmsReference(transaction.sourceReferenceHash)
+      : null;
   const isTransfer = transaction.type === 'transfer';
   const twin = isTransferTwin(transaction);
   const toAccount = isTransfer
@@ -266,39 +328,71 @@ export function TransactionDetailContent({
     (hiddenDuplicate || isRefund) && transaction.linkedTransactionId
       ? transactions.find(t => t.id === transaction.linkedTransactionId) ?? null
       : null;
-  const refunds = transaction.type === 'expense' ? refundsFor(transactions, transaction.id) : [];
+  const refunds =
+    transaction.type === 'expense'
+      ? refundsFor(transactions, transaction.id)
+      : [];
   const refundedTotal = refunds.reduce((sum, r) => sum + r.amountMinor, 0);
   const hiddenDuplicates =
-    hiddenDuplicate || twin ? [] : hiddenDuplicatesOf(transactions, transaction.id);
+    hiddenDuplicate || twin
+      ? []
+      : hiddenDuplicatesOf(transactions, transaction.id);
 
   return (
     <View style={styles.container}>
       {twin ? (
-        <Chip label="Part of a transfer" tone="neutral" icon={<Icon name="swap-horizontal" size={14} color={colors.secondary} />} />
+        <Chip
+          label="Part of a transfer"
+          tone="neutral"
+          icon={
+            <Icon name="swap-horizontal" size={14} color={colors.secondary} />
+          }
+        />
       ) : hiddenDuplicate ? (
-        <Chip label="Duplicate · hidden" tone="neutral" icon={<Icon name="content-duplicate" size={14} color={colors.secondary} />} />
+        <Chip
+          label="Duplicate · hidden"
+          tone="neutral"
+          icon={
+            <Icon name="content-duplicate" size={14} color={colors.secondary} />
+          }
+        />
       ) : isPending ? (
-        <Chip label="Pending Approval" tone="pending" icon={<Icon name="clock-outline" size={14} color="#B7791F" />} />
+        <Chip
+          label="Pending Approval"
+          tone="pending"
+          icon={<Icon name="clock-outline" size={14} color="#B7791F" />}
+        />
       ) : transaction.status === 'rejected' ? (
-        <Chip label="Rejected" tone="rejected" icon={<Icon name="close-circle-outline" size={14} color="#6C757D" />} />
+        <Chip
+          label="Rejected"
+          tone="rejected"
+          icon={<Icon name="close-circle-outline" size={14} color="#6C757D" />}
+        />
       ) : (
-        <Chip label="Approved" tone="approved" icon={<Icon name="check-circle-outline" size={14} color="#00A827" />} />
+        <Chip
+          label="Approved"
+          tone="approved"
+          icon={<Icon name="check-circle-outline" size={14} color="#00A827" />}
+        />
       )}
 
       {twin ? (
         <Card style={styles.fieldsCard} testID="transfer-twin-notice">
           <Text style={styles.cardTitle}>Part of a transfer</Text>
           <Text style={styles.transparencyMeta}>
-            This credit was confirmed as the receiving side of a transfer between your
-            accounts. It is kept only so SMS sync never adds it again — it is not in any list,
-            total or balance.
+            This credit was confirmed as the receiving side of a transfer
+            between your accounts. It is kept only so SMS sync never adds it
+            again — it is not in any list, total or balance.
           </Text>
           {transaction.linkedTransactionId && onOpenTransfer ? (
             <Text
               style={styles.linkText}
-              onPress={() => onOpenTransfer(transaction.linkedTransactionId as string)}
+              onPress={() =>
+                onOpenTransfer(transaction.linkedTransactionId as string)
+              }
               accessibilityRole="link"
-              testID="transfer-twin-open">
+              testID="transfer-twin-open"
+            >
               View transfer ›
             </Text>
           ) : null}
@@ -308,18 +402,22 @@ export function TransactionDetailContent({
       {hiddenDuplicate ? (
         <Card style={styles.fieldsCard} testID="duplicate-notice">
           <Text style={styles.cardTitle}>
-            {linkedRow ? `Duplicate of ${redactText(linkedRow.merchantName)}` : 'Duplicate'}
+            {linkedRow
+              ? `Duplicate of ${redactText(linkedRow.merchantName)}`
+              : 'Duplicate'}
           </Text>
           <Text style={styles.transparencyMeta}>
-            You marked this as the same money recorded twice. It is kept only so SMS sync never
-            adds it again — it is not in any list, total or balance.
+            You marked this as the same money recorded twice. It is kept only so
+            SMS sync never adds it again — it is not in any list, total or
+            balance.
           </Text>
           {linkedRow && onOpenTransaction ? (
             <Text
               style={styles.linkText}
               onPress={() => onOpenTransaction(linkedRow.id)}
               accessibilityRole="link"
-              testID="duplicate-open-kept">
+              testID="duplicate-open-kept"
+            >
               View the kept item ›
             </Text>
           ) : null}
@@ -330,18 +428,26 @@ export function TransactionDetailContent({
         <Card style={styles.fieldsCard} testID="refund-notice">
           <Text style={styles.cardTitle}>Refund</Text>
           <Text style={styles.transparencyMeta}>
-            Not counted as income — it reduces what you spent. Your balance still includes it.
+            Not counted as income — it reduces what you spent. Your balance
+            still includes it.
           </Text>
           {linkedRow ? (
             <Text
               style={styles.linkText}
-              onPress={onOpenTransaction ? () => onOpenTransaction(linkedRow.id) : undefined}
+              onPress={
+                onOpenTransaction
+                  ? () => onOpenTransaction(linkedRow.id)
+                  : undefined
+              }
               accessibilityRole="link"
-              testID="refund-open-expense">
+              testID="refund-open-expense"
+            >
               {refundForLabel(linkedRow)} ›
             </Text>
           ) : (
-            <Text style={styles.transparencyMeta}>The original expense was deleted.</Text>
+            <Text style={styles.transparencyMeta}>
+              The original expense was deleted.
+            </Text>
           )}
         </Card>
       ) : null}
@@ -352,11 +458,22 @@ export function TransactionDetailContent({
           {refunds.map(refund => (
             <Pressable
               key={refund.id}
-              onPress={onOpenTransaction ? () => onOpenTransaction(refund.id) : undefined}
+              onPress={
+                onOpenTransaction
+                  ? () => onOpenTransaction(refund.id)
+                  : undefined
+              }
               accessibilityRole="link"
               accessibilityLabel={`Refund ${refundRowLine(refund)}`}
-              style={({ pressed }) => [styles.detailRow, styles.tappableRow, pressed && styles.pressed]}>
-              <Text style={styles.detailLabel}>{redactText(refund.merchantName)}</Text>
+              style={({ pressed }) => [
+                styles.detailRow,
+                styles.tappableRow,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.detailLabel}>
+                {redactText(refund.merchantName)}
+              </Text>
               <Text style={styles.linkText}>{refundRowLine(refund)} ›</Text>
             </Pressable>
           ))}
@@ -365,22 +482,36 @@ export function TransactionDetailContent({
 
       {hiddenDuplicates.length > 0 ? (
         <Pressable
-          onPress={onOpenTransaction ? () => onOpenTransaction(hiddenDuplicates[0].id) : undefined}
+          onPress={
+            onOpenTransaction
+              ? () => onOpenTransaction(hiddenDuplicates[0].id)
+              : undefined
+          }
           accessibilityRole="link"
           testID="hidden-duplicates-link"
-          style={({ pressed }) => [styles.hiddenLink, pressed && styles.pressed]}>
+          style={({ pressed }) => [
+            styles.hiddenLink,
+            pressed && styles.pressed,
+          ]}
+        >
           <Icon name="content-duplicate" size={18} color={colors.secondary} />
-          <Text style={styles.hiddenLinkText}>{hiddenDuplicatesLabel(hiddenDuplicates.length)}</Text>
+          <Text style={styles.hiddenLinkText}>
+            {hiddenDuplicatesLabel(hiddenDuplicates.length)}
+          </Text>
           <Text style={styles.linkText}>View ›</Text>
         </Pressable>
       ) : null}
 
       <View style={styles.summary}>
-        <View style={[styles.avatar, { backgroundColor: visual.backgroundColor }]}>
+        <View
+          style={[styles.avatar, { backgroundColor: visual.backgroundColor }]}
+        >
           <Icon name={visual.icon} size={28} color={visual.iconColor} />
         </View>
         <View style={styles.merchantRow}>
-          <Text style={styles.merchant}>{redactText(transaction.merchantName)}</Text>
+          <Text style={styles.merchant}>
+            {redactText(transaction.merchantName)}
+          </Text>
           {confidencePercent !== null ? (
             <Chip label={`${confidencePercent}% match`} tone="approved" />
           ) : null}
@@ -405,7 +536,9 @@ export function TransactionDetailContent({
             }
             tone={transaction.type === 'income' ? 'approved' : 'neutral'}
           />
-          {isPending ? <Chip label="Not counted in balance" tone="pending" /> : null}
+          {isPending ? (
+            <Chip label="Not counted in balance" tone="pending" />
+          ) : null}
         </View>
         {isTransfer ? (
           <Text style={styles.metaLine} testID="transfer-route">
@@ -413,11 +546,15 @@ export function TransactionDetailContent({
           </Text>
         ) : null}
         <Text style={styles.metaLine}>
-          {formatTransactionTimestamp(transaction.occurredAt)} · {CHANNEL_LABEL[transaction.paymentMethod]}
+          {formatTransactionTimestamp(transaction.occurredAt)} ·{' '}
+          {CHANNEL_LABEL[transaction.paymentMethod]}
           {account && !isTransfer ? ` · ${accountDisplayLabel(account)}` : ''}
         </Text>
         {merchantChip ? (
-          <MerchantHistoryChip label={merchantChip.label} onPress={merchantChip.onPress} />
+          <MerchantHistoryChip
+            label={merchantChip.label}
+            onPress={merchantChip.onPress}
+          />
         ) : null}
       </View>
 
@@ -439,9 +576,16 @@ export function TransactionDetailContent({
           <Pressable
             onPress={() => onChangeCategory(transaction)}
             accessibilityRole="button"
-            accessibilityLabel={`Category ${categoryLabel(category)}. Change category`}
+            accessibilityLabel={`Category ${categoryLabel(
+              category,
+            )}. Change category`}
             testID="detail-category-row"
-            style={({ pressed }) => [styles.detailRow, styles.tappableRow, pressed && styles.pressed]}>
+            style={({ pressed }) => [
+              styles.detailRow,
+              styles.tappableRow,
+              pressed && styles.pressed,
+            ]}
+          >
             <Text style={styles.detailLabel}>Category</Text>
             <View style={styles.tappableValue}>
               <Text style={styles.detailValue} numberOfLines={2}>
@@ -461,14 +605,25 @@ export function TransactionDetailContent({
         ) : (
           <DetailRow label="Account" value={accountDisplayLabel(account)} />
         )}
-        <DetailRow label="Date & Time" value={formatTransactionTimestamp(transaction.occurredAt)} />
-        {transaction.note ? <DetailRow label="Personal Note" value={redactText(transaction.note)} /> : null}
+        <DetailRow
+          label="Date & Time"
+          value={formatTransactionTimestamp(transaction.occurredAt)}
+        />
+        {transaction.note ? (
+          <DetailRow
+            label="Personal Note"
+            value={redactText(transaction.note)}
+          />
+        ) : null}
       </Card>
 
       <Card style={styles.fieldsCard}>
         <View style={styles.transparencyHeader}>
           <Text style={styles.cardTitle}>Detection Transparency</Text>
-          <Text style={styles.linkText} onPress={() => setTransparencyOpen(!transparencyOpen)}>
+          <Text
+            style={styles.linkText}
+            onPress={() => setTransparencyOpen(!transparencyOpen)}
+          >
             {transparencyOpen ? 'Hide' : 'Show'}
           </Text>
         </View>
@@ -479,32 +634,47 @@ export function TransactionDetailContent({
               <View style={styles.transparencyCell}>
                 <Text style={styles.transparencyLabel}>Detected From</Text>
                 <Text style={styles.transparencyValue}>
-                  {transaction.sourceType === 'sms' ? 'SMS' : transaction.sourceType === 'notification' ? 'Notification' : 'Manual Entry'}
+                  {transaction.sourceType === 'sms'
+                    ? 'SMS'
+                    : transaction.sourceType === 'notification'
+                    ? 'Notification'
+                    : 'Manual Entry'}
                 </Text>
               </View>
               <View style={styles.transparencyCell}>
                 <Text style={styles.transparencyLabel}>Confidence</Text>
                 <Text style={styles.transparencyValue}>
-                  {confidencePercent !== null ? `${confidencePercent}% ${TIER_LABEL[tier]}` : 'N/A'}
+                  {confidencePercent !== null
+                    ? `${confidencePercent}% ${TIER_LABEL[tier]}`
+                    : 'N/A'}
                 </Text>
               </View>
             </View>
             <Text style={styles.transparencyMeta}>
-              Parser: {transaction.parserVersion ?? 'unknown'} · Ref ID: {redactText(transaction.sourceReferenceHash) ?? '—'}
+              Parser: {transaction.parserVersion ?? 'unknown'} · Ref ID:{' '}
+              {redactText(transaction.sourceReferenceHash) ?? '—'}
             </Text>
 
             {transaction.sanitizedPreview ? (
               <View style={styles.sourceBox}>
                 <Text style={styles.sourceLabel}>SANITIZED SOURCE MESSAGE</Text>
-                <Text style={styles.sourceText}>&ldquo;{redactText(transaction.sanitizedPreview)}&rdquo;</Text>
-                <Text style={styles.sourceFootnote}>Zero credentials stored · Sanitized entirely on-device</Text>
+                <Text style={styles.sourceText}>
+                  &ldquo;{redactText(transaction.sanitizedPreview)}&rdquo;
+                </Text>
+                <Text style={styles.sourceFootnote}>
+                  Zero credentials stored · Sanitized entirely on-device
+                </Text>
               </View>
             ) : null}
 
             {smsReference ? <OriginalSmsView reference={smsReference} /> : null}
 
-            <Text style={styles.linkText} onPress={() => setAuditOpen(!auditOpen)}>
-              {auditOpen ? 'Hide' : 'Show'} Advanced Cryptographic &amp; Audit Logs
+            <Text
+              style={styles.linkText}
+              onPress={() => setAuditOpen(!auditOpen)}
+            >
+              {auditOpen ? 'Hide' : 'Show'} Advanced Cryptographic &amp; Audit
+              Logs
             </Text>
             {auditOpen ? (
               <Text style={styles.transparencyMeta}>

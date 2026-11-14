@@ -174,6 +174,8 @@ describe('R5 sync: run kinds + audit (counts only)', () => {
         viaRule: 0,
         viaReader: 1,
         heldForRuleDisagreement: 0,
+        // R5e T5: meaning suggestions added to existing rows (none here).
+        meaningSuggested: 0,
       },
     });
     expect(useTransactionsStore.getState().smsLastSyncedAt).toBeNull();

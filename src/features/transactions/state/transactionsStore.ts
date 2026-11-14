@@ -29,6 +29,7 @@ import {
 } from '../../../domain/refunds/refund.rules';
 import {
   DuplicateDismissal,
+  findDuplicatePairs,
   markDuplicate as buildDuplicateMarking,
   restoreDuplicate as buildDuplicateRestore,
 } from '../../../domain/duplicates/duplicate.rules';
@@ -61,7 +62,8 @@ import {
   UndoLinkInput,
 } from '../../../data/repositories/suggestion.repository';
 import type { AccountKey } from '../../sms-sync/normalizeAccountKey';
-import { SMS_USER_ADDED_PARSER_VERSION } from '../../sms-sync/smsSyncLogic';
+import { isRuleDisagreementRow, SMS_USER_ADDED_PARSER_VERSION } from '../../sms-sync/smsSyncLogic';
+import { chainDuplicatePairs, useChainSuggestions } from '../../sms-sync/rules/chaining';
 import { settingsRepository } from '../../../data/repositories/settings.repository';
 import {
   ApprovalMode,
@@ -97,6 +99,21 @@ import {
 } from '../../../domain/settings/smsSyncStart.rules';
 import { smsSyncRepository } from '../../../data/repositories/smsSync.repository';
 import { DEFAULT_PERIOD } from '../../../domain/periods/period.rules';
+import { meaningRepository, MeaningRuleWrite } from '../../../data/repositories/meaning.repository';
+import type { MeaningRule, MeaningSuggestion } from '../../../domain/meaning/meaning.types';
+import {
+  buildMeaningConversion,
+  buildMeaningTwinAttach,
+  candidateFromSuggestion,
+  isInTransferPair,
+  lateMeaningTransfer,
+  meaningCounterpart,
+  meaningPartner,
+  meaningSideOf,
+  planMeaningRule,
+  undoMeaningConversion,
+} from '../../../domain/meaning/meaning.rules';
+import { generateId } from '../../../shared/utils/id';
 
 /** R3a: Add Record → Transfer / Edit transfer form values (paise, ISO date). */
 export interface TransferInput {
@@ -274,6 +291,43 @@ interface TransactionsState {
   restoreDuplicate: (duplicateId: string, options?: { dismiss?: boolean }) => Promise<boolean>;
   /** R3b: "Not duplicates" on a suggestion. */
   dismissDuplicatePair: (aId: string, bId: string) => Promise<void>;
+  /** R5e: "Do this automatically next time" meaning rules. */
+  meaningRules: MeaningRule[];
+  /** R5e: one meaning suggestion per transaction (open or closed). */
+  meaningSuggestions: MeaningSuggestion[];
+  /** R5e: new suggestions from sync / re-scan (an existing one is kept). */
+  addMeaningSuggestions: (rows: ReadonlyArray<MeaningSuggestion>) => Promise<void>;
+  /**
+   * R5e T3: "Confirm transfer to <account>" — the item becomes an R3a
+   * transfer (one db.transaction, audit 'transfer_marked' with snapshots).
+   * `remember` stores / re-points the meaning rule. False when not allowed.
+   */
+  confirmMeaning: (transactionId: string, targetAccountId: string, options?: { remember?: boolean }) => Promise<boolean>;
+  /**
+   * R5e T2: a stored meaning rule converts a NEW pending item at insert
+   * (status kept: still pending in manual mode). A pending counterpart SMS
+   * on the target becomes its twin; an approved one is never touched (the
+   * item stays a suggestion). False when it did not convert.
+   */
+  convertByMeaningRule: (transactionId: string, rule: MeaningRule) => Promise<boolean>;
+  /** R5e T3: "It's an expense" / "It's income" — closes the suggestion (no money change). */
+  dismissMeaning: (transactionId: string) => Promise<boolean>;
+  /** R5e T3: Undo of a confirmed meaning — exact restore, suggestion reopened, rule reverted. */
+  undoMeaning: (transferId: string) => Promise<boolean>;
+  /**
+   * R5e-FIX K1 (sync): a late counterpart SMS becomes the existing meaning
+   * transfer's twin — never a second transfer. False when not allowed (N1
+   * disagreement, duplicate / chain hold, or the transfer already has one).
+   */
+  attachMeaningTwin: (transactionId: string, transferId: string) => Promise<boolean>;
+  /**
+   * R5e-FIX M4: before an R2b link's rows are deleted, undo every transfer
+   * pairing / meaning conversion that ties them to rows the link did NOT
+   * insert, so those rows come back exactly.
+   */
+  releaseLinkedCounterparts: (insertedIds: ReadonlyArray<string>) => Promise<void>;
+  /** R5e T3: Settings → Automatic money rules → Remove. */
+  removeMeaningRule: (ruleId: string) => Promise<void>;
 }
 
 function transitionLocal(
@@ -312,15 +366,25 @@ function rulesToMap(rules: ReadonlyArray<MerchantRule>): Record<string, string> 
 }
 
 async function loadAll() {
-  const [transactions, accounts, categories, rules, transferDismissals, duplicateDismissals] =
-    await Promise.all([
-      transactionRepository.listAll(),
-      accountRepository.listAllAccounts(),
-      categoryRepository.listAll(),
-      merchantRuleRepository.listAll(),
-      transferRepository.listDismissals(),
-      linkRepository.listDuplicateDismissals(),
-    ]);
+  const [
+    transactions,
+    accounts,
+    categories,
+    rules,
+    transferDismissals,
+    duplicateDismissals,
+    meaningRules,
+    meaningSuggestions,
+  ] = await Promise.all([
+    transactionRepository.listAll(),
+    accountRepository.listAllAccounts(),
+    categoryRepository.listAll(),
+    merchantRuleRepository.listAll(),
+    transferRepository.listDismissals(),
+    linkRepository.listDuplicateDismissals(),
+    meaningRepository.listRules(),
+    meaningRepository.listSuggestions(),
+  ]);
   return {
     transactions,
     accounts,
@@ -328,19 +392,121 @@ async function loadAll() {
     merchantRules: rulesToMap(rules),
     transferDismissals,
     duplicateDismissals,
+    meaningRules,
+    meaningSuggestions,
   };
+}
+
+/** R5e: suggestion rows closed by a confirm — the item's own, plus its twin's (if open). */
+function closeSuggestions(
+  suggestions: ReadonlyArray<MeaningSuggestion>,
+  ownId: string,
+  twinId: string | null,
+  now: string,
+  fallback: MeaningSuggestion | null,
+): MeaningSuggestion[] {
+  const out: MeaningSuggestion[] = [];
+  const own = suggestions.find(s => s.transactionId === ownId) ?? fallback;
+  if (own) out.push({ ...own, resolvedAt: now, resolution: 'transfer' });
+  if (twinId) {
+    const twin = suggestions.find(s => s.transactionId === twinId && s.resolvedAt == null);
+    if (twin) out.push({ ...twin, resolvedAt: now, resolution: 'paired' });
+  }
+  return out;
+}
+
+/** R3b.1: an expense with linked refunds never changes type (to a transfer either). */
+function refundBlocked(t: Transaction, transactions: ReadonlyArray<Transaction>): boolean {
+  return linkedEditError(t, { type: 'transfer', amountMinor: t.amountMinor }, transactions) !== null;
+}
+
+/**
+ * R5e-FIX M1 / M2 / M8 — what blocks an AUTOMATIC (rule / sync) meaning
+ * step, so the row stays a held suggestion for the user: an N1
+ * disagreement, an R3b duplicate pair (incl. chaining duplicates), or an R5g
+ * chain outcome — except a chain 'transfer_twin' whose two sides are exactly
+ * the row and its partner (that is the move the chain describes).
+ */
+function automaticMeaningBlocked(
+  state: Pick<TransactionsState, 'transactions' | 'duplicateDismissals'>,
+  row: Transaction,
+  partner: Transaction | null,
+): boolean {
+  if (isRuleDisagreementRow(row) || (partner && isRuleDisagreementRow(partner))) return true;
+  const chains = useChainSuggestions.getState().suggestions;
+  const duplicates = findDuplicatePairs(state.transactions, state.duplicateDismissals, undefined, chainDuplicatePairs(chains));
+  const ids = new Set([row.id, ...(partner ? [partner.id] : [])]);
+  if (duplicates.some(p => ids.has(p.first.id) || ids.has(p.second.id))) return true;
+  return chains.some(c => {
+    const touches = ids.has(c.childId) || (c.parentId != null && ids.has(c.parentId));
+    if (!touches) return false;
+    const exactTwin =
+      c.kind === 'transfer_twin' && partner != null && c.parentId != null && ids.has(c.childId) && ids.has(c.parentId);
+    return !exactTwin;
+  });
+}
+
+function mergeSuggestions(
+  current: ReadonlyArray<MeaningSuggestion>,
+  changed: ReadonlyArray<MeaningSuggestion>,
+): MeaningSuggestion[] {
+  const byId = new Map(changed.map(s => [s.transactionId, s]));
+  const kept = current.map(s => byId.get(s.transactionId) ?? s);
+  const known = new Set(current.map(s => s.transactionId));
+  return [...kept, ...changed.filter(s => !known.has(s.transactionId))];
 }
 
 /** R5-fix C10: the hydrate currently running (shared by concurrent callers). */
 let hydrateInFlight: Promise<void> | null = null;
 
-export const useTransactionsStore = create<TransactionsState>((set, get) => ({
+export const useTransactionsStore = create<TransactionsState>((set, get) => {
+  /**
+   * R5e-FIX K1: hide `row` as the existing meaning transfer's twin (R3a twin
+   * rules) — one db.transaction with a 'transfer_marked {twin_added}' audit
+   * (ids / enums only); the row's open suggestion closes as 'paired'.
+   */
+  async function writeTwinAttach(row: Transaction, transfer: Transaction, actor: 'user' | 'system'): Promise<boolean> {
+    const state = get();
+    const mark = await meaningRepository.latestMark(transfer.id);
+    if (!mark || mark.metadata.twin_id || findTransferTwin(state.transactions, transfer.id)) return false;
+    const now = new Date().toISOString();
+    const built = buildMeaningTwinAttach(row, transfer, now);
+    if (!built) return false;
+    const closed = state.meaningSuggestions
+      .filter(s => s.transactionId === row.id && s.resolvedAt == null)
+      .map(s => ({ ...s, resolvedAt: now, resolution: 'paired' as const }));
+    await meaningRepository.confirm({
+      transfer,
+      twin: built.twin,
+      suggestions: closed,
+      rule: null,
+      audit: {
+        actor,
+        meaning: mark.metadata.meaning,
+        rule: actor === 'system',
+        previous: built.previous,
+        ruleId: null,
+        ruleCreated: false,
+        previousRuleTarget: null,
+        twinAdded: true,
+      },
+    });
+    set(current => ({
+      transactions: current.transactions.map(t => (t.id === built.twin.id ? built.twin : t)),
+      meaningSuggestions: mergeSuggestions(current.meaningSuggestions, closed),
+    }));
+    return true;
+  }
+
+  return {
   transactions: [],
   accounts: [],
   categories: [],
   merchantRules: {},
   transferDismissals: [],
   duplicateDismissals: [],
+  meaningRules: [],
+  meaningSuggestions: [],
   isHydrated: false,
   hasOnboarded: false,
   userName: '',
@@ -726,6 +892,16 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set(state => ({
       transactions: state.transactions.map(t => (t.id === id ? updated : t)),
     }));
+    // R5e-FIX M6: a type change makes an open meaning stale (its direction
+    // came from the old type) — close it; it never acts on the new type.
+    const open = existing && patch.type != null && patch.type !== existing.type
+      ? get().meaningSuggestions.find(s => s.transactionId === id && s.resolvedAt == null)
+      : undefined;
+    if (open) {
+      const closed: MeaningSuggestion = { ...open, resolvedAt: new Date().toISOString(), resolution: 'expense' };
+      await meaningRepository.resolveSuggestion(closed);
+      set(state => ({ meaningSuggestions: mergeSuggestions(state.meaningSuggestions, [closed]) }));
+    }
     return true;
   },
 
@@ -793,6 +969,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     const ids = new Set(input.pending.map(row => row.id));
     set(state => ({
       transactions: state.transactions.filter(t => !ids.has(t.id)),
+      meaningSuggestions: state.meaningSuggestions.filter(s => !ids.has(s.transactionId)),
     }));
     return removed;
   },
@@ -974,17 +1151,26 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     const debit = byId.get(debitId);
     const credit = byId.get(creditId);
     if (!debit || !credit) return false;
-    const confirmation = buildPairConfirmation(debit, credit, new Date().toISOString());
+    const now = new Date().toISOString();
+    const confirmation = buildPairConfirmation(debit, credit, now);
     if (!confirmation) return false;
+    // R5e: confirming the pair resolves both rows' open meaning suggestions.
+    const paired = get()
+      .meaningSuggestions.filter(
+        s => (s.transactionId === debitId || s.transactionId === creditId) && s.resolvedAt == null,
+      )
+      .map(s => ({ ...s, resolvedAt: now, resolution: 'paired' as const }));
     await transferRepository.confirmPair(
       confirmation.debit,
       confirmation.credit,
       confirmation.previous,
+      paired,
     );
     set(state => ({
       transactions: state.transactions.map(t =>
         t.id === debitId ? confirmation.debit : t.id === creditId ? confirmation.credit : t,
       ),
+      meaningSuggestions: mergeSuggestions(state.meaningSuggestions, paired),
     }));
     return true;
   },
@@ -998,18 +1184,272 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     const transactions = get().transactions;
     const debit = transactions.find(t => t.id === transferId);
     const twin = findTransferTwin(transactions, transferId);
-    if (!debit || !twin) return false;
-    const pairing = await transferRepository.latestPairing(transferId);
-    if (!pairing || pairing.credit_id !== twin.id) return false;
-    const restored = undoTransferPair(debit, twin, pairing.previous, new Date().toISOString());
+    if (!debit || debit.type !== 'transfer') return false;
+    const pairing = twin ? await transferRepository.latestPairing(transferId) : null;
+    // R5e: a transfer made by a confirmed meaning undoes through its own
+    // 'transfer_marked' snapshot when that is the newest. R5e-FIX K2: also
+    // with no twin; K1: a late twin comes back first, then the conversion —
+    // "Undo transfer" brings back every SMS item exactly as it was.
+    const mark = await meaningRepository.latestMark(transferId);
+    if (mark && (!pairing || (pairing.eventAt ?? '') <= mark.eventAt)) {
+      let next: typeof mark | null = mark;
+      while (next) {
+        if (!(await get().undoMeaning(transferId))) return false;
+        if (!next.metadata.twin_added) return true;
+        next = await meaningRepository.latestMark(transferId);
+      }
+      return true;
+    }
+    if (!twin || !pairing || pairing.metadata.credit_id !== twin.id) return false;
+    const now = new Date().toISOString();
+    const restored = undoTransferPair(debit, twin, pairing.metadata.previous, now);
     if (!restored) return false;
-    await transferRepository.undoPair(restored.debit, restored.credit);
+    // R5e: suggestions the pair confirm closed as 'paired' open again.
+    const reopened = get()
+      .meaningSuggestions.filter(
+        s => (s.transactionId === debit.id || s.transactionId === twin.id) && s.resolution === 'paired',
+      )
+      .map(s => ({ ...s, resolvedAt: null, resolution: null }));
+    await transferRepository.undoPair(restored.debit, restored.credit, reopened);
     set(state => ({
       transactions: state.transactions.map(t =>
         t.id === restored.debit.id ? restored.debit : t.id === restored.credit.id ? restored.credit : t,
       ),
+      meaningSuggestions: mergeSuggestions(state.meaningSuggestions, reopened),
     }));
     return true;
+  },
+
+  addMeaningSuggestions: async rows => {
+    const known = new Set(get().meaningSuggestions.map(s => s.transactionId));
+    const fresh = rows.filter(s => !known.has(s.transactionId));
+    if (fresh.length === 0) return;
+    await meaningRepository.addSuggestions(fresh);
+    set(state => ({ meaningSuggestions: mergeSuggestions(state.meaningSuggestions, fresh) }));
+  },
+
+  confirmMeaning: async (transactionId, targetAccountId, options = {}) => {
+    const state = get();
+    const row = state.transactions.find(t => t.id === transactionId);
+    const suggestion = state.meaningSuggestions.find(s => s.transactionId === transactionId && s.resolvedAt == null);
+    if (!row || !suggestion) return false;
+    if (!activeAccounts(state.accounts).some(a => a.id === targetAccountId)) return false;
+    // R5e-FIX M6: the suggestion's direction must still match the item's type.
+    if (meaningSideOf(row.type) !== candidateFromSuggestion(suggestion, row.accountId).side) return false;
+    // R5e-FIX M5 (R3b.1): an expense with linked refunds never becomes a transfer.
+    if (refundBlocked(row, state.transactions)) return false;
+    const now = new Date().toISOString();
+    // R3a twin rules: the counterpart SMS on the target becomes the twin —
+    // R5e-FIX M2: also outside R3a's 24 h (the same move's other alert).
+    const partner =
+      meaningPartner(row, targetAccountId, state.transactions, state.accounts, state.transferDismissals) ??
+      meaningCounterpart(row, suggestion.kind, targetAccountId, state.transactions, state.meaningSuggestions);
+    if (partner && refundBlocked(partner, state.transactions)) return false;
+    if (!partner) {
+      // R5e-FIX K1: the move is already a transfer — this row is its late twin.
+      const late = lateMeaningTransfer(row, suggestion.kind, state.transactions, state.meaningSuggestions);
+      const other = late ? (row.type === 'income' ? late.accountId : late.transferAccountId) : null;
+      if (late && other === targetAccountId) return writeTwinAttach(row, late, 'user');
+    }
+    const conversion = buildMeaningConversion(row, targetAccountId, partner, now, { approve: true });
+    if (!conversion) return false;
+    const plan = options.remember
+      ? planMeaningRule(state.meaningRules, suggestion, targetAccountId, generateId('mrule'), now)
+      : null;
+    const twinId = conversion.twin?.id ?? null;
+    const otherId = conversion.transfer.id === transactionId ? twinId : conversion.transfer.id;
+    const closed = closeSuggestions(state.meaningSuggestions, transactionId, otherId, now, null);
+    await meaningRepository.confirm({
+      transfer: conversion.transfer,
+      twin: conversion.twin,
+      suggestions: closed,
+      rule: plan?.write ?? null,
+      audit: {
+        actor: 'user',
+        meaning: suggestion.kind,
+        rule: false,
+        previous: conversion.previous,
+        ruleId: plan?.ruleId ?? null,
+        ruleCreated: plan?.created ?? false,
+        previousRuleTarget: plan?.previousTarget ?? null,
+      },
+    });
+    set(current => ({
+      transactions: current.transactions.map(t =>
+        t.id === conversion.transfer.id ? conversion.transfer : conversion.twin && t.id === conversion.twin.id ? conversion.twin : t,
+      ),
+      meaningSuggestions: mergeSuggestions(current.meaningSuggestions, closed),
+      meaningRules: applyRuleWrite(current.meaningRules, plan?.write ?? null),
+    }));
+    return true;
+  },
+
+  convertByMeaningRule: async (transactionId, rule) => {
+    const state = get();
+    const row = state.transactions.find(t => t.id === transactionId);
+    if (!row || row.status !== 'pending') return false;
+    if (!activeAccounts(state.accounts).some(a => a.id === rule.targetAccountId)) return false;
+    // R5e-FIX M6: the rule's side ('in:' key) must match the item's type.
+    if (meaningSideOf(row.type) !== candidateFromSuggestion(rule, row.accountId).side) return false;
+    if (refundBlocked(row, state.transactions)) return false;
+    let partner = meaningPartner(row, rule.targetAccountId, state.transactions, state.accounts, state.transferDismissals);
+    // A pair with ANOTHER account is a different reading — both wait for the user.
+    if (!partner && isInTransferPair(row.id, state.transactions, state.accounts, state.transferDismissals)) return false;
+    if (!partner) {
+      // R5e-FIX K1: already a transfer → never a second one (sync attaches the twin).
+      if (lateMeaningTransfer(row, rule.kind, state.transactions, state.meaningSuggestions)) return false;
+      // R5e-FIX M2: the same move's other alert outside R3a's 24 h is the partner.
+      partner = meaningCounterpart(row, rule.kind, rule.targetAccountId, state.transactions, state.meaningSuggestions);
+    }
+    // Never touch an approved row without the user.
+    if (partner && (partner.status !== 'pending' || refundBlocked(partner, state.transactions))) return false;
+    // R5e-FIX M1 / M2 / M8: duplicates, chain holds and N1 disagreements wait for the user.
+    if (automaticMeaningBlocked(state, row, partner)) return false;
+    const now = new Date().toISOString();
+    const conversion = buildMeaningConversion(row, rule.targetAccountId, partner, now, { approve: false });
+    if (!conversion) return false;
+    const own: MeaningSuggestion = {
+      transactionId,
+      kind: rule.kind,
+      targetAccountId: rule.targetAccountId,
+      reason: 'rule',
+      bankCanonical: rule.bankCanonical,
+      counterpartyKey: rule.counterpartyKey,
+      createdAt: now,
+      resolvedAt: null,
+      resolution: null,
+    };
+    const otherId = conversion.transfer.id === transactionId ? conversion.twin?.id ?? null : conversion.transfer.id;
+    const closed = closeSuggestions(state.meaningSuggestions, transactionId, otherId, now, own);
+    await meaningRepository.confirm({
+      transfer: conversion.transfer,
+      twin: conversion.twin,
+      suggestions: closed,
+      rule: null,
+      audit: {
+        actor: 'system',
+        meaning: rule.kind,
+        rule: true,
+        previous: conversion.previous,
+        ruleId: rule.id,
+        ruleCreated: false,
+        previousRuleTarget: rule.targetAccountId,
+      },
+    });
+    set(current => ({
+      transactions: current.transactions.map(t =>
+        t.id === conversion.transfer.id ? conversion.transfer : conversion.twin && t.id === conversion.twin.id ? conversion.twin : t,
+      ),
+      meaningSuggestions: mergeSuggestions(current.meaningSuggestions, closed),
+    }));
+    return true;
+  },
+
+  dismissMeaning: async transactionId => {
+    const suggestion = get().meaningSuggestions.find(s => s.transactionId === transactionId && s.resolvedAt == null);
+    if (!suggestion) return false;
+    const closed: MeaningSuggestion = { ...suggestion, resolvedAt: new Date().toISOString(), resolution: 'expense' };
+    await meaningRepository.resolveSuggestion(closed);
+    set(state => ({ meaningSuggestions: mergeSuggestions(state.meaningSuggestions, [closed]) }));
+    return true;
+  },
+
+  undoMeaning: async transferId => {
+    const state = get();
+    const transfer = state.transactions.find(t => t.id === transferId);
+    if (!transfer) return false;
+    const mark = await meaningRepository.latestMark(transferId);
+    if (!mark) return false;
+    const md = mark.metadata;
+    const twin = md.twin_id ? state.transactions.find(t => t.id === md.twin_id) ?? null : null;
+    const now = new Date().toISOString();
+    const restored = undoMeaningConversion(transfer, twin, md.previous, now);
+    if (!restored) return false;
+    if (md.twin_added && restored.twin) {
+      // R5e-FIX K1: only the late twin comes back; the transfer is untouched.
+      const back = restored.twin;
+      const reopenedTwin = state.meaningSuggestions
+        .filter(s => s.transactionId === back.id && s.resolution === 'paired')
+        .map(s => ({ ...s, resolvedAt: null, resolution: null }));
+      await meaningRepository.undo({
+        transfer,
+        twin: back,
+        suggestions: reopenedTwin,
+        rule: null,
+        meaning: md.meaning,
+        twinOnly: true,
+      });
+      set(current => ({
+        transactions: current.transactions.map(t => (t.id === back.id ? back : t)),
+        meaningSuggestions: mergeSuggestions(current.meaningSuggestions, reopenedTwin),
+      }));
+      return true;
+    }
+    const ids = new Set([transfer.id, ...(twin ? [twin.id] : [])]);
+    const reopened = state.meaningSuggestions
+      .filter(s => ids.has(s.transactionId) && (s.resolution === 'transfer' || s.resolution === 'paired'))
+      .map(s => ({ ...s, resolvedAt: null, resolution: null }));
+    // Undo also removes the rule this confirm created (or re-points it back).
+    let rule: MeaningRuleWrite | null = null;
+    if (md.rule_id && !md.rule) {
+      const current = state.meaningRules.find(r => r.id === md.rule_id);
+      if (md.rule_created && current) rule = { op: 'delete', id: md.rule_id };
+      else if (!md.rule_created && current && md.previous_rule_target && current.targetAccountId !== md.previous_rule_target) {
+        rule = { op: 'retarget', id: md.rule_id, targetAccountId: md.previous_rule_target };
+      }
+    }
+    await meaningRepository.undo({
+      transfer: restored.transfer,
+      twin: restored.twin,
+      suggestions: reopened,
+      rule,
+      meaning: md.meaning,
+    });
+    set(current => ({
+      transactions: current.transactions.map(t =>
+        t.id === restored.transfer.id ? restored.transfer : restored.twin && t.id === restored.twin.id ? restored.twin : t,
+      ),
+      meaningSuggestions: mergeSuggestions(current.meaningSuggestions, reopened),
+      meaningRules: applyRuleWrite(current.meaningRules, rule),
+    }));
+    return true;
+  },
+
+  attachMeaningTwin: async (transactionId, transferId) => {
+    const state = get();
+    const row = state.transactions.find(t => t.id === transactionId);
+    const transfer = state.transactions.find(t => t.id === transferId);
+    if (!row || !transfer || row.status !== 'pending') return false;
+    if (refundBlocked(row, state.transactions) || automaticMeaningBlocked(state, row, transfer)) return false;
+    return writeTwinAttach(row, transfer, 'system');
+  },
+
+  releaseLinkedCounterparts: async insertedIds => {
+    const inserted = new Set(insertedIds);
+    for (const id of insertedIds) {
+      const current = get().transactions;
+      const row = current.find(t => t.id === id);
+      if (!row) continue;
+      if (row.type === 'transfer') {
+        // An inserted row became the transfer of a pre-existing twin.
+        const twin = findTransferTwin(current, row.id);
+        if (twin && !inserted.has(twin.id)) await get().undoTransfer(row.id);
+        continue;
+      }
+      if (row.linkKind !== 'transfer_twin' || !row.linkedTransactionId || inserted.has(row.linkedTransactionId)) continue;
+      // An inserted row hidden as the twin of a pre-existing transfer: a late
+      // twin (K1) only detaches; a pairing / conversion it took part in undoes.
+      const mark = await meaningRepository.latestMark(row.linkedTransactionId);
+      if (mark?.metadata.twin_added && mark.metadata.twin_id === row.id) await get().undoMeaning(row.linkedTransactionId);
+      else await get().undoTransfer(row.linkedTransactionId);
+    }
+  },
+
+  removeMeaningRule: async ruleId => {
+    const rule = get().meaningRules.find(r => r.id === ruleId);
+    if (!rule) return;
+    await meaningRepository.removeRule(rule);
+    set(state => ({ meaningRules: state.meaningRules.filter(r => r.id !== ruleId) }));
   },
 
   linkRefund: async (refundId, expenseId) => {
@@ -1086,7 +1526,18 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     const dismissal = await linkRepository.dismissDuplicatePair(aId, bId);
     set(state => ({ duplicateDismissals: [...state.duplicateDismissals, dismissal] }));
   },
-}));
+  };
+});
+
+/** R5e: the in-memory rules after a confirm / undo wrote one. */
+function applyRuleWrite(rules: ReadonlyArray<MeaningRule>, write: MeaningRuleWrite | null): MeaningRule[] {
+  if (!write) return [...rules];
+  if (write.op === 'insert') return [...rules.filter(r => r.id !== write.rule.id), write.rule];
+  if (write.op === 'retarget') {
+    return rules.map(r => (r.id === write.id ? { ...r, targetAccountId: write.targetAccountId } : r));
+  }
+  return rules.filter(r => r.id !== write.id);
+}
 
 /** R3b: live refunds linked to an expense (used by Detail + the delete guard). */
 export function linkedRefundsOf(

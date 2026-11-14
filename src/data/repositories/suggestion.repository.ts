@@ -120,6 +120,8 @@ async function undoLink(input: UndoLinkInput): Promise<number> {
     );
     for (const row of input.pending) {
       await tx.execute('DELETE FROM transactions WHERE id = ?', [row.id]);
+      // R5e T4: a removed row's meaning suggestion goes with it.
+      await tx.execute('DELETE FROM money_meaning_suggestions WHERE transaction_id = ?', [row.id]);
       await auditRepository.insert(tx, {
         eventType: 'deleted',
         actor: 'user',

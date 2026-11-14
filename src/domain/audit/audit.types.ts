@@ -2,6 +2,8 @@ import type { TransactionStatus, TransactionType } from '../transactions/transac
 import type { AccountType } from '../accounts/account.types';
 import type { TransferPairPrevious } from '../transfers/transfer.rules';
 import type { DuplicateRowSnapshot } from '../duplicates/duplicate.rules';
+import type { MeaningConversionPrevious } from '../meaning/meaning.rules';
+import type { MeaningKind } from '../meaning/meaning.types';
 
 /**
  * Every money-changing action writes exactly one audit event (R1).
@@ -50,7 +52,14 @@ export type AuditEventType =
   | 'auto_read'
   /** R5: New Accounts Found → "Link to existing account" / its Undo. */
   | 'account_linked'
-  | 'account_unlinked';
+  | 'account_unlinked'
+  /**
+   * R5e: a money meaning confirmed (by the user, or a stored meaning rule)
+   * turned an SMS item into an R3a transfer / its Undo; a meaning rule removed.
+   */
+  | 'transfer_marked'
+  | 'transfer_unmarked'
+  | 'meaning_rule_removed';
 
 export type AuditActor = 'system' | 'user';
 
@@ -163,7 +172,41 @@ export type AuditMetadata =
       bankCanonical: string;
       accountKind: AccountType;
       items: number;
-    };
+    }
+  /**
+   * R5e (R3a shape): ids + the previous enum/id/timestamp fields of the
+   * transfer row (and its twin, if the counterpart SMS was hidden) so Undo
+   * restores them exactly; the meaning kind; `rule` = converted by a stored
+   * meaning rule; the rule this confirm created / re-pointed (Undo removes /
+   * re-points it). Never merchant text, SMS text, amounts or last-4.
+   */
+  | {
+      kind: 'transfer_marked';
+      transaction_id: string;
+      twin_id: string | null;
+      meaning: MeaningKind;
+      rule: boolean;
+      previous: MeaningConversionPrevious;
+      rule_id: string | null;
+      rule_created: boolean;
+      previous_rule_target: string | null;
+      /**
+       * R5e-FIX K1: a late counterpart SMS was hidden as this existing
+       * transfer's twin (the transfer itself did not change). Undo of this
+       * mark only brings that row back.
+       */
+      twin_added?: boolean;
+    }
+  | {
+      kind: 'transfer_unmarked';
+      transaction_id: string;
+      twin_id: string | null;
+      meaning: MeaningKind;
+      /** R5e-FIX K1: only the late twin came back (the transfer stays). */
+      twin_only?: boolean;
+    }
+  /** R5e: Settings → Automatic money rules → Remove (enum + public bank id only). */
+  | { kind: 'meaning_rule_removed'; meaning: MeaningKind; bankCanonical: string };
 
 /** R5: counts of one reader run. */
 export interface SmsRunCounts {
@@ -175,6 +218,8 @@ export interface SmsRunCounts {
   viaRule?: number;
   viaReader?: number;
   heldForRuleDisagreement?: number;
+  /** R5e T5: meaning suggestions added to EXISTING rows by a re-scan. */
+  meaningSuggested?: number;
 }
 
 export interface AuditEvent {

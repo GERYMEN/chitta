@@ -52,6 +52,17 @@ const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
     iconColor: colors.secondary,
     backgroundColor: colors.secondaryContainer,
   },
+  // R5e: EMI & Loans (expense) / Interest (income) system categories.
+  'cat-emi': {
+    icon: 'calendar-sync-outline',
+    iconColor: colors.onSurfaceVariant,
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  'cat-interest': {
+    icon: 'percent-outline',
+    iconColor: colors.primary,
+    backgroundColor: colors.primaryContainer + '33',
+  },
   'cat-uncategorised': {
     icon: 'help-circle-outline',
     iconColor: transactionStateColors.pending.fg,

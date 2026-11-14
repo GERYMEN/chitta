@@ -26,6 +26,7 @@ import {
 } from '../pendingGroups';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { useSmsReaderStore, visibleUnparsed } from '../../sms-sync/smsReaderStore';
+import { openMeaningIds } from '../../../domain/meaning/meaning.rules';
 
 type Filter = 'all' | 'expense' | 'income';
 
@@ -52,6 +53,9 @@ export function PendingScreen() {
   const transactions = useTransactionsStore(state => state.transactions);
   const transferDismissals = useTransactionsStore(state => state.transferDismissals);
   const duplicateDismissals = useTransactionsStore(state => state.duplicateDismissals);
+  // R5e: items with an open money meaning wait for a quick check.
+  const meaningSuggestions = useTransactionsStore(state => state.meaningSuggestions);
+  const openMeaning = useMemo(() => openMeaningIds(meaningSuggestions), [meaningSuggestions]);
   // R5: "N not understood" link (counts only).
   const unparsedRows = useSmsReaderStore(state => state.unparsed);
   const notUnderstoodCount = useMemo(
@@ -93,12 +97,17 @@ export function PendingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visible, accounts, redacted],
   );
-  const autoState = autoApproveButtonState(approvalMode, threshold, visible);
+  const autoState = autoApproveButtonState(approvalMode, threshold, visible, openMeaning);
   // R4b: "Approve all N" — visible items not in a possible transfer/duplicate pair.
+  // R5e: … and without an open money meaning ("N need a quick check").
   const approveAllTargets = useMemo(
     () =>
-      approveAllEligible(visible, transactions, accounts, transferDismissals, duplicateDismissals),
-    [visible, transactions, accounts, transferDismissals, duplicateDismissals],
+      approveAllEligible(visible, transactions, accounts, transferDismissals, duplicateDismissals, openMeaning),
+    [visible, transactions, accounts, transferDismissals, duplicateDismissals, openMeaning],
+  );
+  const needCheck = useMemo(
+    () => visible.filter(t => t.status === 'pending' && openMeaning.has(t.id)).length,
+    [visible, openMeaning],
   );
   const filteredAccount = accountFilter ? accounts.find(a => a.id === accountFilter) : undefined;
 
@@ -112,7 +121,7 @@ export function PendingScreen() {
   }, [refresh]);
 
   function confirmAutoApprove() {
-    const targets = autoApproveEligible(visible, approvalMode, threshold);
+    const targets = autoApproveEligible(visible, approvalMode, threshold, openMeaning);
     if (targets.length === 0) return;
     showDialog({
       title: autoApproveConfirmTitle(targets.length, autoState.threshold),
@@ -157,7 +166,7 @@ export function PendingScreen() {
     showDialog({
       title: approveAllConfirmTitle(targets.length),
       message:
-        'They will count toward your balances. Possible transfers and duplicates stay in Pending. You can undo for 5 seconds.',
+        'They will count toward your balances. Possible transfers, duplicates and items that need a quick check stay in Pending. You can undo for 5 seconds.',
       icon: 'check-all',
       actions: [
         { label: 'Cancel', variant: 'ghost' },
@@ -169,9 +178,12 @@ export function PendingScreen() {
             try {
               const store = useTransactionsStore.getState();
               const snapshots = await store.approveAll(targets);
-              if (snapshots.length === 0) return;
+              if (snapshots.length === 0) {
+                if (needCheck > 0) showSnackbar({ message: approvedSnackbarText(0, needCheck) });
+                return;
+              }
               showSnackbar({
-                message: approvedSnackbarText(snapshots.length),
+                message: approvedSnackbarText(snapshots.length, needCheck),
                 actionLabel: 'Undo',
                 onAction: async () => {
                   await useTransactionsStore.getState().undoApprovals(snapshots);

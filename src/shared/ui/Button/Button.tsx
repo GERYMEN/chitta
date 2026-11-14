@@ -22,6 +22,8 @@ export interface ButtonProps {
   icon?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  /** Spoken label when it should say more than the visible label (R5e). */
+  accessibilityLabel?: string;
 }
 
 /**
@@ -41,12 +43,14 @@ export function Button({
   icon,
   style,
   testID,
+  accessibilityLabel,
 }: ButtonProps) {
   const variantStyle = VARIANT_STYLES[variant];
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: disabled || loading }}
       disabled={disabled || loading}
       onPress={onPress}

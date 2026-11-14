@@ -176,6 +176,8 @@ async function remove(
 ): Promise<void> {
   await getDatabase().transaction(async tx => {
     await tx.execute('DELETE FROM transactions WHERE id = ?', [id]);
+    // R5e T4: its money meaning suggestion goes with it.
+    await tx.execute('DELETE FROM money_meaning_suggestions WHERE transaction_id = ?', [id]);
     // R5-fix C4: a deleted SMS item leaves its reference hash (no content) so
     // a re-scan / the 1-day overlap never recreates it.
     if (smsTombstone) {

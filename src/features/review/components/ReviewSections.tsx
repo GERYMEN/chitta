@@ -9,7 +9,11 @@ import { useTransferPairs } from '../../transfers/useTransferPairs';
 import { useDuplicatePairs } from '../../duplicates/useDuplicatePairs';
 import { TransferPairCard } from '../../transfers/components/TransferPairCard';
 import { DuplicatePairCard } from '../../duplicates/components/DuplicatePairCard';
-import { useRedacted } from '../../../shared/privacy/redaction';
+import { redactText, useRedacted } from '../../../shared/privacy/redaction';
+import { AmountText } from '../../../shared/ui/AmountText';
+import { formatTransactionTimestamp } from '../../../shared/utils/date';
+import { useMeaningReviewItems } from '../../meaning/useMeaningReview';
+import { MeaningCard } from '../../meaning/components/MeaningCard';
 
 /**
  * R3a "Looks like a transfer" + R3b "Possible duplicates" — shared by Pending
@@ -28,6 +32,15 @@ export function ReviewSections({
   useRedacted(); // R4c: pair cards re-render masked in the feedback screenshot
   const allTransferPairs = useTransferPairs();
   const allDuplicatePairs = useDuplicatePairs();
+  // R5e T5: money meanings found by a re-scan on APPROVED rows.
+  const allMeaningItems = useMeaningReviewItems();
+  const meaningItems = useMemo(
+    () =>
+      accountId
+        ? allMeaningItems.filter(item => item.transaction.accountId === accountId)
+        : allMeaningItems,
+    [allMeaningItems, accountId],
+  );
   const [busy, setBusy] = useState(false);
 
   const transferPairs = useMemo(
@@ -95,12 +108,34 @@ export function ReviewSections({
       showSnackbar({ message: 'Kept both items' });
     });
 
-  if (transferPairs.length === 0 && duplicatePairs.length === 0) {
+  if (transferPairs.length === 0 && duplicatePairs.length === 0 && meaningItems.length === 0) {
     return emptyText ? <Text style={styles.empty}>{emptyText}</Text> : null;
   }
 
   return (
     <View>
+      {meaningItems.length > 0 ? (
+        <View style={styles.section} testID="meaning-section">
+          <Text style={styles.header} testID="meaning-header">
+            Money meaning · {meaningItems.length}
+          </Text>
+          <Text style={styles.hint}>
+            Recorded as spending or income, but the money only moved between your own accounts.
+            Nothing changes until you confirm.
+          </Text>
+          {meaningItems.map(({ suggestion, transaction }) => (
+            <View key={transaction.id} style={styles.meaningItem}>
+              <View style={styles.meaningRow}>
+                <Text style={styles.meaningTitle} numberOfLines={1}>
+                  {redactText(transaction.merchantName)} · {formatTransactionTimestamp(transaction.occurredAt)}
+                </Text>
+                <AmountText amountMinor={transaction.amountMinor} type={transaction.type} variant="labelLg" />
+              </View>
+              <MeaningCard suggestion={suggestion} transaction={transaction} />
+            </View>
+          ))}
+        </View>
+      ) : null}
       {transferPairs.length > 0 ? (
         <View style={styles.section} testID="transfer-pairs-section">
           <Text style={styles.header} testID="transfer-pairs-header">
@@ -160,6 +195,19 @@ const styles = StyleSheet.create({
   hint: {
     ...typography.bodyMd,
     color: colors.outline,
+  },
+  meaningItem: {
+    gap: spacing.xs,
+  },
+  meaningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  meaningTitle: {
+    ...typography.labelLg,
+    color: colors.onSurface,
+    flex: 1,
   },
   empty: {
     ...typography.bodyMd,

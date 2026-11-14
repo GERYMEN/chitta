@@ -23,6 +23,7 @@ import { lastBackupLabel } from '../../backup/backupLabels';
 import { useSmsReaderStore, visibleUnparsed } from '../../sms-sync/smsReaderStore';
 import { effectiveAutoRead } from '../../sms-sync/autoRead/autoReadRules';
 import { rulesAboutLabel } from '../../sms-sync/rules/rulesLoader';
+import { MeaningRulesSection } from '../../meaning/components/MeaningRulesSection';
 
 export interface ProfileSettingsSheetProps {
   visible: boolean;
@@ -305,6 +306,8 @@ export function ProfileSettingsSheet({
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>
       ) : null}
+      {/* R5e: stored meaning rules ("Do this automatically next time"). */}
+      <MeaningRulesSection />
       {onOpenNotUnderstood ? (
         <Pressable
           onPress={onOpenNotUnderstood}

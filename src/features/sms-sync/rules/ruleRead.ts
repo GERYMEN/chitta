@@ -72,6 +72,8 @@ const MONEY_HINTS: Partial<Record<RuleMoneyKind, MoneyHint>> = {
   wallet_load: 'wallet_load',
   emi: 'emi',
   refund: 'refund',
+  // R5e: interest credits get a meaning too (income, category "Interest").
+  interest: 'interest',
 };
 
 const NON_TXN_ACCOUNTS: ReadonlySet<RuleAccountType> = new Set(['loan', 'utility', 'insurance']);
@@ -271,6 +273,7 @@ function buildTransaction(
     refDigest: ref && ctx.salt ? refDigestFor(ctx.salt, ref) : null,
     ...(contentHash ? { smsContentHash: `${contentHash}${suffix}` } : {}),
     ...(counterparty.lastFour ? { counterpartyLastFour: counterparty.lastFour } : {}),
+    ...(counterparty.lastDigits ? { counterpartyLastDigits: counterparty.lastDigits } : {}),
     ...(pan.lastDigits ? { lastDigits: pan.lastDigits } : {}),
     ...(moneyHint ? { moneyHint } : {}),
     legacyKey: normalizeAccountKeyV1(ctx.msg.body ?? ''),

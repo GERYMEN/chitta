@@ -5,6 +5,7 @@ import { BottomSheet } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, spacing, typography } from '../../../theme';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
+import type { AccountType } from '../../../domain/accounts/account.types';
 import {
   selectActiveAccounts,
   useTransactionsStore,
@@ -21,17 +22,26 @@ export function TransferAccountPickerSheet({
   excludeAccountId,
   direction,
   onSelect,
+  allowedTypes,
+  body,
 }: {
   visible: boolean;
   onClose: () => void;
   excludeAccountId: string;
   direction: 'to' | 'from';
   onSelect: (accountId: string) => void;
+  /** R5e "Choose account": only the account types the meaning allows. */
+  allowedTypes?: ReadonlyArray<AccountType>;
+  /** R5e: replaces the default explainer line. */
+  body?: string;
 }) {
   const active = useTransactionsStore(useShallow(selectActiveAccounts));
   const options = useMemo(
-    () => active.filter(account => account.id !== excludeAccountId),
-    [active, excludeAccountId],
+    () =>
+      active.filter(
+        account => account.id !== excludeAccountId && (!allowedTypes || allowedTypes.includes(account.type)),
+      ),
+    [active, excludeAccountId, allowedTypes],
   );
 
   return (
@@ -40,7 +50,7 @@ export function TransferAccountPickerSheet({
         {direction === 'to' ? 'Moved to which account?' : 'Moved from which account?'}
       </Text>
       <Text style={styles.body}>
-        It stops counting as {direction === 'to' ? 'an expense' : 'income'} and moves both balances.
+        {body ?? `It stops counting as ${direction === 'to' ? 'an expense' : 'income'} and moves both balances.`}
       </Text>
       {options.length === 0 ? (
         <Text style={styles.body}>Add another account first.</Text>
@@ -50,7 +60,7 @@ export function TransferAccountPickerSheet({
             key={account.id}
             onPress={() => onSelect(account.id)}
             accessibilityRole="button"
-            accessibilityLabel={`${direction === 'to' ? 'To' : 'From'} ${account.name}`}
+            accessibilityLabel={`${direction === 'to' ? 'To' : 'From'} ${accountDisplayLabel(account)}`}
             style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
             <Icon name="swap-horizontal" size={20} color={colors.secondary} />
             <Text style={styles.optionLabel} numberOfLines={1}>

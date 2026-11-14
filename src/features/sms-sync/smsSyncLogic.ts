@@ -25,6 +25,9 @@ import { legacyKeyString } from './legacy/normalizeAccountKeyV1';
 import { normalizeMerchant } from '../../domain/merchants/normalizeMerchant';
 import { categoryFitsType, UNCATEGORISED_ID } from '../../domain/categories/category.rules';
 import type { CreateTransactionInput } from '../../data/repositories/transaction.repository';
+import type { MeaningCandidate } from '../../domain/meaning/meaning.types';
+import { meaningKindOf, meaningSideOf } from '../../domain/meaning/meaning.rules';
+import type { MoneyHint } from './parser/readSms';
 
 /** Parser version stamped on every SMS-derived transaction (R5: reader v2). */
 export const SMS_PARSER_VERSION = `sms-reader-v${PARSER_VERSION}`;
@@ -59,8 +62,10 @@ export function isRuleDisagreementRow(t: Pick<Transaction, 'parserVersion'>): bo
 
 /**
  * R5g: why a new item is held from auto-approve besides R3a/R3b pairs and
- * R5d's card payment — an N1 disagreement, or a template money_kind that
- * R5e will convert (transfer / ATM / wallet top-up / EMI / refund).
+ * R5d's card payment — an N1 disagreement, or a money meaning waiting for
+ * the user (R5e 'meaning' hold: transfer / ATM / wallet top-up). R5e
+ * released EMI and refunds (M5 / M7) — the reasons stay in the type so the
+ * heldByMoneyKind counts keep their shape (always 0 now).
  */
 export type RuleHoldReason =
   | 'rule_disagreement'
@@ -72,7 +77,12 @@ export type RuleHoldReason =
   /** Item 21: a chaining outcome (duplicate / refund link / twin / incomplete). */
   | 'chain';
 
-const MONEY_KIND_HOLDS: ReadonlySet<string> = new Set(['transfer', 'atm', 'wallet_load', 'emi', 'refund']);
+const MONEY_KIND_HOLDS: ReadonlySet<string> = new Set(['transfer', 'atm', 'wallet_load']);
+
+/** R5e-FIX M2: the hold reasons a meaning conversion settles ('chain' / N1 never). */
+export function isMeaningHold(reason: RuleHoldReason | undefined): boolean {
+  return reason != null && MONEY_KIND_HOLDS.has(reason);
+}
 
 export function ruleHoldReasonFor(
   parsed: Pick<ParsedSmsTransaction, 'ruleDisagreement' | 'moneyHint'>,
@@ -84,6 +94,35 @@ export function ruleHoldReasonFor(
 
 /** R5: the seeded "Salary & Wages" category (connection.ts seed). */
 export const SALARY_CATEGORY_ID = 'cat-salary';
+/** R5e: the "EMI & Loans" / "Interest" system categories (migration 10 seeds). */
+export const EMI_CATEGORY_ID = 'cat-emi';
+export const INTEREST_CATEGORY_ID = 'cat-interest';
+
+/**
+ * R5e T2: what a parsed SMS item means for money meaning — null unless its
+ * hint is M1–M4 (card payment / ATM / wallet top-up / own transfer) and the
+ * row is an expense ('out') or income ('in').
+ */
+export function meaningCandidateFor(
+  parsed: Pick<
+    ParsedSmsTransaction,
+    'moneyHint' | 'bankCanonical' | 'counterpartyLastFour' | 'counterpartyLastDigits' | 'counterpartyInstitution'
+  >,
+  row: Pick<Transaction, 'type' | 'accountId'>,
+): MeaningCandidate | null {
+  const kind = meaningKindOf(parsed.moneyHint);
+  const side = meaningSideOf(row.type);
+  if (!kind || !side) return null;
+  return {
+    kind,
+    side,
+    accountId: row.accountId,
+    bankCanonical: parsed.bankCanonical,
+    counterpartyLastFour: parsed.counterpartyLastFour ?? null,
+    counterpartyLastDigits: parsed.counterpartyLastDigits ?? null,
+    counterpartyInstitution: parsed.counterpartyInstitution ?? null,
+  };
+}
 
 /**
  * Pure, dependency-free helpers for SMS sync so the account/category fallback
@@ -161,6 +200,8 @@ export function resolveCategoryIdForSms(
   merchantName: string = '',
   rules: Readonly<Record<string, string>> = {},
   salary: boolean = false,
+  /** R5e: an EMI debit → "EMI & Loans", an interest credit → "Interest" (M5 / M6). */
+  moneyHint?: MoneyHint,
 ): string | null {
   const key = normalizeMerchant(merchantName);
   const ruleCategoryId = key !== '' ? rules[key] : undefined;
@@ -178,6 +219,19 @@ export function resolveCategoryIdForSms(
     if (salaryCategory && salaryCategory.archivedAt === null && categoryFitsType(salaryCategory.type, type)) {
       return salaryCategory.id;
     }
+  }
+
+  // R5e M5 / M6: the seeded EMI & Loans / Interest categories (a merchant
+  // rule still wins; an archived or missing seed falls back).
+  const meaningCategoryId =
+    moneyHint === 'emi' && type === 'expense'
+      ? EMI_CATEGORY_ID
+      : moneyHint === 'interest' && type === 'income'
+      ? INTEREST_CATEGORY_ID
+      : null;
+  if (meaningCategoryId) {
+    const seeded = categories.find(category => category.id === meaningCategoryId);
+    if (seeded && seeded.archivedAt === null && categoryFitsType(seeded.type, type)) return seeded.id;
   }
 
   const uncategorised = categories.find(category => category.id === UNCATEGORISED_ID);

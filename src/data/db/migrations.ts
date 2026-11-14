@@ -29,6 +29,12 @@ export const TRANSFER_CATEGORY_SEED = {
   icon: 'swap-horizontal',
 } as const;
 
+/** R5e seeds — "EMI & Loans" (expense) and "Interest" (income), bound by migration 10. */
+export const MEANING_CATEGORY_SEEDS = [
+  { id: 'cat-emi', name: 'EMI & Loans', type: 'expense', icon: 'calendar-sync-outline' },
+  { id: 'cat-interest', name: 'Interest', type: 'income', icon: 'percent-outline' },
+] as const;
+
 export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
   {
     version: 1,
@@ -186,6 +192,45 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'ALTER TABLE sms_deleted_refs ADD COLUMN ref_key TEXT',
       'CREATE INDEX IF NOT EXISTS ix_transactions_sms_content_hash ON transactions(sms_content_hash)',
       'CREATE INDEX IF NOT EXISTS ix_transactions_ref_digest ON transactions(ref_digest)',
+    ],
+  },
+  {
+    // R5e money meaning. Two new tables, no existing row is rewritten:
+    //  - money_meaning_rules: "Do this automatically next time" — public bank
+    //    id + meaning kind + counterparty key (last-4, 3-digit mask or a
+    //    wallet's public id; '' when none) → target account. The same class
+    //    of data as account_suggestion_decisions.
+    //  - money_meaning_suggestions: one per transaction — the meaning, the
+    //    resolved target / reason, the rule key (bank id + counterparty key)
+    //    and how it was closed. Ids / enums / last-4 only, never SMS text.
+    // Plus the "EMI & Loans" / "Interest" system categories (bound params,
+    // INSERT OR IGNORE — replay-safe on restore).
+    version: 10,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS money_meaning_rules (
+    id TEXT PRIMARY KEY,
+    bank_canonical TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    counterparty_key TEXT NOT NULL DEFAULT '',
+    target_account_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (bank_canonical, kind, counterparty_key)
+  )`,
+      `CREATE TABLE IF NOT EXISTS money_meaning_suggestions (
+    transaction_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    target_account_id TEXT,
+    reason TEXT NOT NULL,
+    bank_canonical TEXT NOT NULL DEFAULT '',
+    counterparty_key TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    resolution TEXT
+  )`,
+      ...MEANING_CATEGORY_SEEDS.map(seed => ({
+        sql: 'INSERT OR IGNORE INTO categories (id, name, parent_id, type, icon, is_system) VALUES (?, ?, NULL, ?, ?, 1)',
+        params: [seed.id, seed.name, seed.type, seed.icon],
+      })),
     ],
   },
 ];
