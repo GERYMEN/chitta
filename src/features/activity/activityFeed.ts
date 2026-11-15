@@ -716,8 +716,7 @@ export function describeSmsRun(
   const parts = [`${counts.created} new`];
   if (counts.notUnderstood > 0)
     parts.push(`${counts.notUnderstood} not understood`);
-  if (counts.autoApproved > 0)
-    parts.push(`${counts.autoApproved} auto-approved`);
+  // R5h: runs never approve; an older audit's autoApproved count is not shown.
   // R5g: two readers disagreed — those items wait in Pending for a check.
   if ((counts.heldForRuleDisagreement ?? 0) > 0)
     parts.push(`${counts.heldForRuleDisagreement} to check`);

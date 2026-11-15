@@ -130,7 +130,7 @@ const suggestionOf = (id: string) => state().meaningSuggestions.find(s => s.tran
 const auditRows = (eventType: string) => db.auditInserts().filter(a => a.row.event_type === eventType);
 
 describe('R5e T2 — EMI / interest / template refund: category + released from the hold', () => {
-  it('auto mode: EMI → "EMI & Loans", interest → "Interest", refund released — all auto-approved, no suggestion', async () => {
+  it('auto mode: EMI → "EMI & Loans", interest → "Interest", refund released — all pending (R5h), no suggestion', async () => {
     setup({ accounts: [BANK], mode: 'auto' });
     inbox(['1', BANK_SENDER, BODY.emi], ['2', BANK_SENDER, BODY.interest], ['3', 'AD-HDFCBK-S', BODY.refund]);
     const result = await syncSms(RESCAN);
@@ -143,7 +143,7 @@ describe('R5e T2 — EMI / interest / template refund: category + released from 
     expect(interest.categoryId).toBe('cat-interest');
     expect(interest.type).toBe('income');
     expect(refund.type).toBe('income');
-    for (const t of [emi, interest, refund]) expect(t.status).toBe('approved');
+    for (const t of [emi, interest, refund]) expect(t.status).toBe('pending');
     expect(result.heldByMoneyKind).toEqual({ transfer: 0, atm: 0, wallet_load: 0, emi: 0, refund: 0 });
     expect(state().meaningSuggestions).toEqual([]);
   });
@@ -232,12 +232,12 @@ describe('R5e T2 — a stored meaning rule converts at insert (R3a one-row trans
     expect((await syncSms(RESCAN)).created).toBe(0);
   });
 
-  it('auto mode: a converted item at or above the threshold is auto-approved (no hold)', async () => {
+  it('auto mode: a converted item at or above the threshold stays pending (R5h; no hold reported)', async () => {
     setup({ accounts: [BANK, CARD], mode: 'auto', rules: [rule] });
     inbox(['1', BANK_SENDER, BODY.cardPayment]);
     const result = await syncSms(RESCAN);
-    expect(state().transactions[0]).toMatchObject({ type: 'transfer', status: 'approved' });
-    expect(result.autoApproved).toBe(1);
+    expect(state().transactions[0]).toMatchObject({ type: 'transfer', status: 'pending' });
+    expect(result.autoApproved).toBe(0);
     expect(result.heldForCardPayment).toBe(0);
   });
 

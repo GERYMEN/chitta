@@ -122,7 +122,7 @@ describe('R5g sync', () => {
     expect(activeRules()?.source).toBe('stored');
   });
 
-  it('agreeing template → rule row, stamped, auto-approved; disagreement → reader values, held + tagged', async () => {
+  it('agreeing template → rule row, stamped, pending (R5h); disagreement → reader values, held + tagged', async () => {
     mockInbox = [
       { id: '1', address: HDFC, body: 'Rs.500.00 credited to HDFC Bank A/c XX1234 on 05-11-26 from VPA qa.friend@okqa (UPI 000000000201)', date: T0 },
       { id: '2', address: HDFC, body: 'QA CHECK Rs.250.00 debited from HDFC Bank A/c XX1234 to QA STORE on 03-11-26.', date: T0 + 1000 },
@@ -134,7 +134,7 @@ describe('R5g sync', () => {
     expect(result.heldForRuleDisagreement).toBe(1);
     const agree = rows().find(t => t.amountMinor === 50000)!;
     expect(agree.parserVersion).toBe('sms-reader-v2+rules-v5:T-HDFC-0002');
-    expect(agree.status).toBe('approved');
+    expect(agree.status).toBe('pending');
     const held = rows().find(t => t.amountMinor === 25000)!;
     expect(held.type).toBe('expense'); // the READER's direction
     expect(held.status).toBe('pending');

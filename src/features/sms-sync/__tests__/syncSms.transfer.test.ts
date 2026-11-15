@@ -91,10 +91,10 @@ beforeEach(() => {
 afterEach(() => mockGetDatabase.mockReset());
 
 describe('R3a T4: sync never auto-approves a new item that forms a transfer pair', () => {
-  it('the 500 debit + 500 credit stay pending; the unrelated 250 debit is auto-approved', async () => {
+  it('the 500 debit + 500 credit stay pending as held; R5h: the unrelated 250 debit stays pending too', async () => {
     const result = await syncSms();
     expect(result.created).toBe(3);
-    expect(result.autoApproved).toBe(1);
+    expect(result.autoApproved).toBe(0);
     expect(result.heldForTransfer).toBe(2);
 
     const byAmount = new Map(
@@ -102,7 +102,7 @@ describe('R3a T4: sync never auto-approves a new item that forms a transfer pair
     );
     expect(byAmount.get('expense:50000')).toBe('pending');
     expect(byAmount.get('income:50000')).toBe('pending');
-    expect(byAmount.get('expense:25000')).toBe('approved');
+    expect(byAmount.get('expense:25000')).toBe('pending');
   });
 
   it('dedup is unchanged: a re-sync after confirming the pair creates nothing (the twin keeps its hash)', async () => {
@@ -246,7 +246,7 @@ describe('R3b T4: syncSms holds a new duplicate pair (end to end)', () => {
     expect(result.created).toBe(3);
     expect(result.heldForDuplicate).toBe(2);
     expect(result.heldForTransfer).toBe(0);
-    expect(result.autoApproved).toBe(1);
+    expect(result.autoApproved).toBe(0);
 
     const s = useTransactionsStore.getState();
     const fifties = s.transactions.filter(t => t.amountMinor === 5000);

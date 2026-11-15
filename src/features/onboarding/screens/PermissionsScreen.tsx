@@ -50,7 +50,7 @@ const PRIVACY_POINTS = [
   },
   {
     title: 'You Always Have The Final Say',
-    body: 'Detected expenses stay in review queues and never enter your permanent ledger without your clear verification — unless you opt in to auto-approve.',
+    body: 'Detected expenses stay in review queues and never enter your permanent ledger until you approve them. Automatic mode only adds a one-tap approve.',
   },
   {
     title: 'Revoke Permissions Anytime',

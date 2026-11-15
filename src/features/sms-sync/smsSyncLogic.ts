@@ -625,6 +625,10 @@ export interface PostSyncApproval {
 }
 
 /**
+ * R5h: a sync never approves — the caller reads `heldFor*` only to report
+ * why an item the Pending one-tap approve would take is waiting, and ignores
+ * `approve`. (Pure rule kept: it mirrors what the Pending button accepts.)
+ *
  * R3a T4: run AFTER all new pending items of a sync are inserted. Any new item
  * that forms a possible transfer pair (with another new item or an existing
  * pending/approved row) is NOT auto-approved — it stays pending so the user

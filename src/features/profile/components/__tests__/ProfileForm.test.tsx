@@ -75,7 +75,7 @@ describe('ProfileForm approval toggle', () => {
       autoApproveThreshold: 95,
     });
     expect(JSON.stringify(autoHigh.toJSON())).toContain(
-      "SMS matches currently score up to 90%, so thresholds above 90% won't auto-approve anything yet.",
+      "SMS matches currently score up to 90%, so thresholds above 90% won't get a one-tap Auto-approve for anything yet.",
     );
     expect(note(autoHigh)).toHaveLength(1);
     const autoAt90 = await renderForm({ ...base, approvalMode: 'auto' });

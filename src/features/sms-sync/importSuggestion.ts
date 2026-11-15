@@ -3,19 +3,14 @@ import { CreateAccountInput } from '../../data/repositories/account.repository';
 import { CreateTransactionInput } from '../../data/repositories/transaction.repository';
 import { Category } from '../../domain/categories/category.types';
 import { UNCATEGORISED_ID } from '../../domain/categories/category.rules';
-import { Transaction } from '../../domain/transactions/transaction.types';
 import { ACCOUNT_KEY_NORMALIZER_VERSION, AccountKey } from './normalizeAccountKey';
 import { ParsedSmsTransaction } from './smsParser';
 import {
-  autoApproveAfterSync,
   buildSmsDedupeIndex,
   buildSmsPendingRow,
   checkSmsCandidate,
   rememberSmsCandidate,
   resolveCategoryIdForSms,
-  RuleHoldReason,
-  ruleHoldReasonFor,
-  isMeaningHold,
 } from './smsSyncLogic';
 import { SmsTombstoneRow } from '../../data/repositories/smsDeletedRefs.repository';
 import { SuggestionGroup } from './suggestionGroups';
@@ -81,18 +76,16 @@ export interface SuggestionImportOutcome {
   transactionIds: string[];
   /** Rows inserted (after dedup). */
   created: number;
-  /** Of those, approved by the opt-in auto rule (same rule as Sync SMS). */
+  /** R5h: always 0 — an import never approves (kept so callers and audits keep their shape). */
   autoApproved: number;
   uncategorised: number;
 }
 
 /** Snackbar copy after Add/Link. Counts only. */
 export function importSnackbarMessage(outcome: SuggestionImportOutcome, linked: boolean): string {
-  const pending = outcome.created - outcome.autoApproved;
-  if (outcome.created === 0) return linked ? 'Account linked — nothing new to add' : 'Account added — nothing new to add';
-  let text = `${pending} transaction${pending === 1 ? '' : 's'} added to Pending`;
-  if (outcome.autoApproved > 0) text += `, ${outcome.autoApproved} auto-approved`;
-  return text;
+  const pending = outcome.created;
+  if (pending === 0) return linked ? 'Account linked — nothing new to add' : 'Account added — nothing new to add';
+  return `${pending} transaction${pending === 1 ? '' : 's'} added to Pending`;
 }
 
 async function runImport(
@@ -126,74 +119,24 @@ async function runImport(
   });
 
   // R5e T2: the same money meaning step as Sync SMS (rule → transfer, else
-  // a suggestion). Converted rows are released from the meaning holds below.
+  // a suggestion).
   const factsById = new Map<string, ParsedSmsTransaction>();
   const itemByRef = new Map(items.map(item => [item.sourceReferenceHash, item]));
   for (const t of result.transactions) {
     const item = t.sourceReferenceHash != null ? itemByRef.get(t.sourceReferenceHash) : undefined;
     if (item) factsById.set(t.id, item);
   }
-  const meaning = await applyMoneyMeanings(result.transactions, factsById);
+  await applyMoneyMeanings(result.transactions, factsById);
 
-  // Opt-in auto mode: exactly the Sync SMS rule and path (system actor).
-  // R3a/R3b: items that form a possible transfer or duplicate pair stay pending.
-  const latest = useTransactionsStore.getState();
-  const { approvalMode, autoApproveThreshold } = latest;
-  // R5d T0e: card-bill payments are held like transfer / duplicate pairs.
-  const cardPaymentRefs = new Set(
-    items.filter(item => item.moneyHint === 'card_payment').map(item => item.sourceReferenceHash),
-  );
-  const cardPaymentIds = new Set(
-    result.transactions
-      .filter(t => t.sourceReferenceHash != null && cardPaymentRefs.has(t.sourceReferenceHash))
-      .map(t => t.id),
-  );
-  // R5g: N1 disagreements and template money kinds stay pending too.
-  const holdByRef = new Map<string, RuleHoldReason>();
-  for (const item of items) {
-    const reason = ruleHoldReasonFor(item);
-    if (reason) holdByRef.set(item.sourceReferenceHash, reason);
-  }
-  const ruleHolds = new Map<string, RuleHoldReason>();
-  for (const t of result.transactions) {
-    const reason = t.sourceReferenceHash != null ? holdByRef.get(t.sourceReferenceHash) : undefined;
-    if (reason) ruleHolds.set(t.id, reason);
-  }
-  // R5e-FIX M2: only the meaning holds are released — never 'chain' / N1.
-  for (const id of meaning.converted) {
-    cardPaymentIds.delete(id);
-    if (isMeaningHold(ruleHolds.get(id))) ruleHolds.delete(id);
-  }
-  const liveById = new Map(latest.transactions.map(t => [t.id, t]));
-  const { approve: toApprove } = autoApproveAfterSync(
-    result.transactions.map(t => liveById.get(t.id) ?? t),
-    latest.transactions,
-    latest.accounts,
-    latest.transferDismissals,
-    approvalMode,
-    autoApproveThreshold,
-    latest.duplicateDismissals,
-    cardPaymentIds,
-    ruleHolds,
-  );
-  let autoApproved = 0;
-  for (const transaction of toApprove) {
-    await useTransactionsStore.getState().approve(transaction.id, {
-      confidence: transaction.confidenceScore ?? 0,
-      threshold: autoApproveThreshold,
-    });
-    const after: Transaction | undefined = useTransactionsStore
-      .getState()
-      .transactions.find(t => t.id === transaction.id);
-    if (after?.status === 'approved') autoApproved++;
-  }
-
+  // R5h: a linked / added group's items stay pending in every approval mode
+  // (the meaning step above may pre-fill a transfer, never approve it). Only
+  // the Pending one-tap approve approves.
   await useNewAccountsStore.getState().refresh();
   return {
     accountId: result.accountId,
     transactionIds: result.transactions.map(t => t.id),
     created: result.transactions.length,
-    autoApproved,
+    autoApproved: 0,
     uncategorised,
   };
 }
@@ -296,7 +239,7 @@ export function showImportSnackbar(
   linked: boolean,
   onUndo?: () => void,
 ): void {
-  const hasPending = outcome.created - outcome.autoApproved > 0;
+  const hasPending = outcome.created > 0;
   showSnackbar({
     message: importSnackbarMessage(outcome, linked),
     ...(onUndo

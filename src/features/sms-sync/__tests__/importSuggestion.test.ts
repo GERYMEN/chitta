@@ -274,38 +274,27 @@ describe('addSuggestedAccount (R2b T2 insert-on-add)', () => {
     expect(useTransactionsStore.getState().transactions.every(t => t.status === 'pending')).toBe(true);
   });
 
-  it('auto mode: the Sync SMS rule approves only items ≥ threshold (system actor)', async () => {
+  it('R5h auto mode: a group Add leaves every item pending (no auto_approved audit)', async () => {
     useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: 90 });
     const outcome = await addSuggestedAccount(runId, KEY, ACCOUNT_INPUT);
 
     expect(outcome!.created).toBe(3);
-    expect(outcome!.autoApproved).toBe(2);
-    const autos = db.auditInserts().filter(a => a.row.event_type === 'auto_approved');
-    expect(autos).toHaveLength(2);
-    for (const { row } of autos) {
-      expect(row.actor).toBe('system');
-      expect(JSON.parse(String(row.metadata_json))).toEqual({
-        kind: 'auto_approved',
-        confidence: 90,
-        threshold: 90,
-        transactionType: 'expense',
-      });
-    }
-    const statuses = useTransactionsStore
+    expect(outcome!.autoApproved).toBe(0);
+    expect(db.auditInserts().filter(a => a.row.event_type === 'auto_approved')).toHaveLength(0);
+    const rows = useTransactionsStore
       .getState()
-      .transactions.filter(t => t.accountId === outcome!.accountId)
-      .map(t => [t.merchantName, t.status]);
-    expect(statuses).toEqual(
-      expect.arrayContaining([
-        ['QA-Shop', 'approved'],
-        ['QA-Cafe', 'approved'],
-        ['QA-Payer', 'pending'],
-      ]),
-    );
-    expect(importSnackbarMessage(outcome!, false)).toBe(
-      '1 transaction added to Pending, 2 auto-approved',
-    );
+      .transactions.filter(t => t.accountId === outcome!.accountId);
+    expect(rows).toHaveLength(3);
+    expect(rows.every(t => t.status === 'pending')).toBe(true);
+    expect(importSnackbarMessage(outcome!, false)).toBe('3 transactions added to Pending');
     expectNoSmsTextInAudit();
+  });
+
+  it('R5h manual mode: a group Link leaves every item pending too', async () => {
+    useTransactionsStore.setState({ approvalMode: 'manual', autoApproveThreshold: 90 });
+    const outcome = await linkSuggestion(runId, KEY, 'acc-cash');
+    expect(outcome!.created).toBe(3);
+    expect(useTransactionsStore.getState().transactions.every(t => t.status === 'pending')).toBe(true);
   });
 
   it('stale run id → null, nothing written', async () => {
@@ -475,11 +464,15 @@ describe('R5-fix C4 — deleted items are not re-imported from a card', () => {
 });
 
 describe('R5-fix C11 — Link Undo is exact', () => {
-  it('auto mode: Undo also removes the rows auto-approved by the link (audited), card restored with every item', async () => {
+  it('auto mode: Undo removes the pending rows the link inserted (audited), plus any the user approved meanwhile, card restored with every item', async () => {
     useTransactionsStore.setState({ approvalMode: 'auto', autoApproveThreshold: 90 });
     const group = useSuggestionSession.getState().groups.find(g => g.key === KEY)!;
     const outcome = (await linkSuggestion(runId, KEY, 'acc-cash'))!;
-    expect(outcome.autoApproved).toBe(2);
+    expect(outcome.autoApproved).toBe(0);
+    // The user approves two of the linked rows before undoing.
+    const linked = useTransactionsStore.getState().transactions.filter(t => t.accountId === 'acc-cash');
+    await useTransactionsStore.getState().approve(linked[0].id);
+    await useTransactionsStore.getState().approve(linked[1].id);
     const removed = await undoLinkSuggestion(runId, group, outcome);
     expect(removed).toBe(3);
     expect(useTransactionsStore.getState().transactions).toHaveLength(0);

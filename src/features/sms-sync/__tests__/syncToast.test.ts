@@ -1,15 +1,15 @@
 import { formatSyncToast } from '../syncToast';
 
 describe('formatSyncToast (R4b copy, counts only)', () => {
-  it('omits the auto-approved part when zero', () => {
+  it('has no auto-approved part (R5h: a sync never approves)', () => {
     expect(formatSyncToast({ scanned: 200, created: 3, autoApproved: 0 })).toBe(
       'Scanned 200 SMS · 3 new',
     );
   });
 
-  it('includes the auto-approved count when non-zero', () => {
+  it('ignores a stale non-zero autoApproved count', () => {
     expect(formatSyncToast({ scanned: 200, created: 3, autoApproved: 2 })).toBe(
-      'Scanned 200 SMS · 3 new · 2 auto-approved',
+      'Scanned 200 SMS · 3 new',
     );
   });
 

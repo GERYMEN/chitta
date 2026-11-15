@@ -283,33 +283,18 @@ function emptyResult(declined: boolean): SmsSyncResult {
  * (R4b: no 200-message cap), reads each message with the R5 reader v2
  * (classes; not-understood messages recorded by id/date/reason only), dedupes against existing
  * `sourceReferenceHash` values, and creates `pending` transactions. Nothing is
- * auto-approved by default (same Detect -> Review -> Approve -> Record principle
- * as manual entry).
- *
- * R4b window: first sync [start, now]; later syncs from
- * max(start, sms_last_synced_at − 1 day) — dedup by hash prevents doubles.
- * Pages of SMS_PAGE_SIZE, newest first, parsed + inserted per page with a
- * yield in between; raw messages of a page are dropped once parsed (bodies
- * live in memory only during parsing). Cancel (checked between pages) keeps
- * what was inserted and does NOT move `sms_last_synced_at`: pages run newest
- * → oldest, so the cursor only advances once the whole window is processed.
- *
- * Opt-in auto-approve: when the user has chosen approval mode 'auto', each
- * transaction CREATED BY THIS SYNC whose confidence is >= the user's threshold
- * (clamped to 70..100) is approved through the same `store.approve` path a
- * manual approve uses (canTransition pending -> approved). Existing pending
- * items are never retroactively approved, and manual entries never go through
- * this path. R3a: auto-approval runs after ALL new rows are inserted, and a
- * new row that forms a possible transfer pair is never auto-approved (it stays
- * pending for "It's a transfer" / "Not a transfer"). Dedup by
- * sourceReferenceHash is unchanged — a confirmed pair's credit twin keeps its
- * hash, so re-sync never recreates it.
+ * approved: R5h (owner, 2026-11-15) — every sync (Sync now, first sync,
+ * re-scan, auto-read of a new SMS, a linked "New accounts found" group) leaves
+ * its items 'pending', in every approval mode, including rows a stored meaning
+ * rule turned into a transfer. Only a user tap approves: the Pending screen's
+ * one-tap approve (Automatic mode adds "Auto-approve" for items at or above
+ * the threshold). Dedup by sourceReferenceHash is unchanged — a confirmed
+ * pair's credit twin keeps its hash, so re-sync never recreates it.
  *
  * Audit (R1): `store.addTransaction` writes one 'detected' event (actor
  * 'system', confidence only — never SMS text/sender/preview) in the same
- * db.transaction as each inserted pending row, and an auto-approval writes
- * one 'auto_approved' event (actor 'system', confidence + threshold) in the
- * same db.transaction as the status change.
+ * db.transaction as each inserted pending row. A sync writes no approval
+ * event (the Pending one-tap approve audits as the user).
  */
 export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult> {
   const granted = await checkSmsPermission();
@@ -528,8 +513,8 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   }
   const created = createdRows.length;
 
-  // R3a T4: auto-approve only AFTER every new pending item is in, so a new
-  // item that pairs as a possible transfer stays pending for the user.
+  // R3a T4: the hold rules run only AFTER every new pending item is in, so a
+  // new item that pairs as a possible transfer is reported as held.
   const beforeChains = useTransactionsStore.getState();
   if (chainChildren.length > 0) {
     const outcomes = resolveChains(chainChildren, beforeChains.transactions, beforeChains.accounts, runFacts);
@@ -553,7 +538,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const latest = useTransactionsStore.getState();
   const liveById = new Map(latest.transactions.map(t => [t.id, t]));
   const createdNow = createdRows.map(row => liveById.get(row.id) ?? row);
-  const { approve: toApprove, heldForTransfer, heldForDuplicate, heldForCardPayment, heldForRule } =
+  // R5h: a sync NEVER approves. The same hold rules still run, but only to
+  // report why an item the one-tap Pending approve would take waits instead.
+  const { heldForTransfer, heldForDuplicate, heldForCardPayment, heldForRule } =
     autoApproveAfterSync(
       createdNow,
       latest.transactions,
@@ -566,17 +553,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       ruleHolds,
     );
   const ruleHoldCounts = countRuleHolds(heldForRule);
-  let autoApproved = 0;
-  for (const transaction of toApprove) {
-    await useTransactionsStore.getState().approve(transaction.id, {
-      confidence: transaction.confidenceScore ?? 0,
-      threshold: autoApproveThreshold,
-    });
-    const after = useTransactionsStore
-      .getState()
-      .transactions.find(t => t.id === transaction.id);
-    if (after?.status === 'approved') autoApproved++;
-  }
+  // R5h: every created item stays pending; the count stays in the result and
+  // the audit shape (always 0) so older readers keep parsing.
+  const autoApproved = 0;
 
   // R4b: the cursor moves only when a normal sync processed its whole window.
   if (completed && !isGapScan) {

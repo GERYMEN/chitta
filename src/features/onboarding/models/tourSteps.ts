@@ -46,7 +46,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'approval',
     headline: 'You decide what becomes a record.',
     subtext:
-      'High-confidence detections can be approved in one tap. Anything uncertain opens a review sheet so you can edit or reject it first.',
+      'Every detection waits in Pending. High-confidence ones can be approved in one tap. Anything uncertain opens a review sheet so you can edit or reject it first.',
     ctaLabel: 'Next Step',
   },
   {

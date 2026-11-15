@@ -291,7 +291,7 @@ describe('T0e — card-bill payments are held from auto-approve', () => {
     const result = await syncSms(RESCAN);
     expect(result.created).toBe(2);
     expect(result.heldForCardPayment).toBe(1);
-    expect(result.autoApproved).toBe(1);
+    expect(result.autoApproved).toBe(0);
     const payment = useTransactionsStore.getState().transactions.find(t => t.amountMinor === 1000000)!;
     expect(payment.status).toBe('pending');
     expect(payment.accountId).toBe('acc-hdfc');

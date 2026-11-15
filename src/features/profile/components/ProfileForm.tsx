@@ -94,8 +94,9 @@ export function ProfileForm({
         )}
       />
       <Text style={styles.helpText}>
-        On: SMS transactions at or above your confidence threshold are approved
-        automatically. Off: you approve every transaction yourself.
+        Synced items always wait in Pending. On: Pending adds a one-tap
+        Auto-approve for items at or above your threshold. Off: you approve
+        every item yourself.
       </Text>
 
       {/* Always rendered so toggling never changes the sheet height. When
@@ -133,7 +134,7 @@ export function ProfileForm({
         <View testID="threshold-copy-block" style={styles.thresholdCopy}>
           <Text style={styles.helpText}>
             {autoOn
-              ? `SMS transactions with confidence ≥ ${threshold}% are approved automatically. Lower ones wait in Pending.`
+              ? `Items with confidence ≥ ${threshold}% can be approved in one tap from Pending. Nothing is approved until you tap.`
               : 'Turn on Auto-approve to use the threshold'}
           </Text>
           {showThresholdNote ? (
