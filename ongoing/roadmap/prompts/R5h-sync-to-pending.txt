@@ -1,0 +1,81 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules"),
+ongoing/roadmap/STATE.md (latest decision lines), R5e-money-meaning.md
+(meaning rules, "status per approval mode"), R3a-transfers.md,
+R3b-refund-duplicate.md, R5g-rules-engine.md (holds), R5-sms-reading-v2.md
+(auto-read receiver), and the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute privacy rules).
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5h-sync-to-pending (created from phase/R5e-money-meaning).
+Stay on it. Do not switch branches, do not commit.
+
+PHASE R5h — every SMS sync lands in Pending. CODE + TESTS + GATES ONLY.
+NO DEVICE WORK (no adb).
+
+OWNER DECISION (2026-11-15): items created by ANY SMS sync — auto-read of a
+new SMS (receiver), "Sync now", the first/initial sync, re-scan
+("Re-read messages with the new reader") and importing/linking a "New
+accounts found" group — are NEVER approved silently. They stay status
+'pending' and appear on the Pending screen for the user to confirm. This
+includes rows a stored MEANING RULE converts to a transfer: the conversion
+may still pre-fill the transfer (account_id / transfer_account_id /
+cat-transfer, R5e), but the row stays pending until the user approves it,
+in every approval mode.
+- Approval mode "Automatic" (with its confidence threshold) keeps only the
+  one-tap Pending action ("Approve all" / auto-approve eligible button),
+  which the user taps. Nothing is approved without a user tap.
+- Manual entries (Add Record) are unchanged (they are the user's own
+  action and go straight to Transactions, as today).
+- Never change approved rows. No migration needed unless you prove one is
+  (then stop and report). No new permission, no dependency, no network.
+
+TASKS (failing test with synthetic input first, confirm it fails, then fix):
+T1 Find EVERY place where sync/import/receiver/re-scan code sets a new or
+   converted row to 'approved' or calls the approve path without a user
+   action (autoApproveAfterSync callers in syncSms.ts and
+   importSuggestion.ts, meaning-rule conversion status in
+   transactionsStore/moneyMeaning, auto-read receiver handling, transfer
+   twins of a pending row, anything else you find). List them in the
+   report.
+T2 Make all of them leave the row pending. Prefer removing the silent
+   auto-approve at sync time over adding flags; keep held-reason counts
+   (heldForTransfer / Duplicate / CardPayment / Rule) and the sms_sync /
+   sms_rescan audit shapes valid (an autoApproved count of 0 is fine; do
+   not break existing audit parsing or the Activity feed copy — update copy
+   that would now be wrong, e.g. "N auto-approved").
+T3 Twins: when a pending meaning/rule transfer gets a twin, the twin stays
+   hidden exactly as R3a/R5e says; approving the transfer from Pending
+   works and Undo stays exact.
+T4 UI copy: Settings approval-mode help text and any Pending/Home/Snackbar
+   text that promises silent auto-approval must say instead that synced
+   items wait in Pending and "Automatic" adds a one-tap approve for items
+   above the threshold. Keep ≥48 dp targets and a11y labels.
+T5 Tests proving, in BOTH approval modes: a sync (fake inbox), the
+   receiver path, a re-scan and a group link each create only pending
+   rows; a stored meaning rule produces a pending transfer; Pending "Approve
+   all" in Automatic mode approves the eligible ones on tap; income/expense
+   totals do not change until the user approves. Update existing tests that
+   asserted silent auto-approval (say which and why in the report).
+
+PRIVACY (absolute, unchanged): no raw SMS bodies or sender numbers stored
+or logged; audits ids/enums only. Fixtures SYNTHETIC only (QA names,
+XX1234/XX9999, refs 000000000xxx, qa.x@okqa). Never write the reference
+app's old brand names; the repo calls it "chitta-ref-app".
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: ongoing/roadmap/R5h-sync-to-pending.md (silent-approve sites
+found + how each changed, tests, copy changes, decisions, and a DEVICE PLAN
+for later — counts only, inline over USB with a 30 s idle wait and live
+per-test status: after a Sync now the Pending count rises by the "M new"
+count and the Transactions money total is SAME; Settings copy check; QA
+rows only for any approve/undo; never approve the owner's real rows).
+Leak-scan the report and the diff with the pattern given in the dispatch
+message (shell only — never write it into a repo file). Do not commit.
+REPLY ONLY: gates yes/no with test counts; T1 site list; T2–T5 done / not
+done; tests changed and why; decisions; anything surprising.
