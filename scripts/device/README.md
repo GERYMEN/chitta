@@ -130,8 +130,23 @@ banner and fixed labels. QA data only — **QA Pay Later 9999** account and
 | R10 | Crash check since the start | 0 FATAL/ANR |
 
 During the run the script prints `>>>` lines telling you exactly what to add
-or tap; you have ~3 minutes for each. Switch apps any time to stop it safely,
-then resume with `--skip-install`.
+or tap; you have ~3 minutes for each (the banner steps now wait ~4 min). Switch
+apps any time to stop it safely, then resume with `--skip-install`.
+
+### Known limits (from the 2026-11-18 run — see `ongoing/roadmap/R5b-device.md`)
+
+Every feature passed on the owner's phone; these are harness false negatives,
+not app bugs. Four were fixed in the same commit; three are still open:
+
+- **Off-screen rows (R3, R9).** A screen dump only sees what is on screen, so an
+  account scrolled below the fold (CREDIT CARDS & PAY LATER) reads as absent.
+  Keep that group in view; a scroll-then-check is deferred (a blind swipe during
+  your own taps could disrupt you).
+- **Force-tap during your windows (R3, R7, R9).** The re-check loops tap the
+  Accounts/Bills tab every 3 s and can pull you out of a form mid-entry. Finish
+  the form, then leave the list open.
+- **R9 confirms removal by absence**, which an off-screen account also satisfies
+  — treat R9 pass as weak until re-checked.
 
 ## Writing a script for a new phase
 

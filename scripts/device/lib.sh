@@ -76,7 +76,7 @@ wait_idle() {   # Tracker or launcher in front, unlocked, for IDLE_NEED seconds
 launch() {
   case "$(front)" in
     tracker) ;;
-    launcher) "${A[@]}" shell am start -n "$APP_ID/.MainActivity" >/dev/null 2>&1; sleep 3 ;;
+    launcher) "${A[@]}" shell am start -n "$APP_ID/.MainActivity" >/dev/null 2>&1; sleep 6 ;;
     *) say "✖ will not launch over another app"; summary; exit 3 ;;
   esac
   guard
@@ -112,7 +112,7 @@ tab_badge() {
 fatal_count() {  # FATAL/ANR lines for Tracker since $1 (phone time)
   "${A[@]}" logcat -d -v brief -T "$1" AndroidRuntime:E ActivityManager:E '*:S' 2>/dev/null | grep -E "FATAL|ANR" | grep -c "$APP_ID" || true
 }
-phone_time() { "${A[@]}" shell date '+%m-%d %H:%M:%S.000' | tr -d '\r'; }
+phone_time() { "${A[@]}" shell "date '+%m-%d %H:%M:%S.000'" | tr -d '\r'; }
 
 # ---- test bookkeeping -------------------------------------------------------
 begin() { CUR="$1"; say "▶ $1 — $2"; }

@@ -18,9 +18,9 @@ for a in "$@"; do case "$a" in --skip-install) INSTALL=0 ;; *) echo "unknown: $a
 # "N bill(s) due — …". Matching the count word is enough.
 BANNER='[0-9]+ bills? due[^"]*'
 
-wait_banner() {   # $1 = want (present|absent), up to ~3 min; owner acts meanwhile
+wait_banner() {   # $1 = want (present|absent), up to ~4 min; owner acts meanwhile
   local want="$1" t=0 seen
-  while [ $t -lt 180 ]; do
+  while [ $t -lt 240 ]; do
     [ "$(front)" = tracker ] || { sleep 3; t=$((t+3)); continue; }
     tap 'Home(, tab.*)?' 0.5 >/dev/null 2>&1 || true
     if has "$BANNER"; then seen=present; else seen=absent; fi
@@ -45,7 +45,9 @@ launch && pass
 
 begin R2 "Bills & dues is reachable from Accounts"
 if tap 'Accounts(, tab.*)?' 2; then
-  has 'Bills & dues' && pass "entry shown" || fail "no Bills entry on Accounts"
+  # On-device the label dumps XML-escaped ("Bills &amp; dues") and the row's
+  # content-desc is "Bills and dues" — match either, never the bare ampersand.
+  has 'Bills (and|&amp;) dues' && pass "entry shown" || fail "no Bills entry on Accounts"
 else fail "Accounts tab not found"; fi
 
 begin R3 "owner: Accounts → Add Account → 'QA Pay Later 9999', type Pay Later, set a Credit Limit, Save"
