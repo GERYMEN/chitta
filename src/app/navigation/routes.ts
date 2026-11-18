@@ -24,6 +24,9 @@ export const Routes = {
   Backup: 'Backup',
   Restore: 'Restore',
   NotUnderstood: 'NotUnderstood',
+  Bills: 'Bills',
+  AddBill: 'AddBill',
+  EditBill: 'EditBill',
 } as const;
 
 /**
@@ -78,4 +81,10 @@ export type RootStackParamList = {
   Restore: { fromOnboarding?: boolean } | undefined;
   /** R5: Pending header link / Settings row. */
   NotUnderstood: undefined;
+  /** R5b: Bills & dues (Home banner + Accounts / Settings entry). */
+  Bills: undefined;
+  /** R5b: add a manual bill. */
+  AddBill: undefined;
+  /** R5b: edit a manual bill (id only). */
+  EditBill: { billId: string };
 };

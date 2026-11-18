@@ -1,0 +1,124 @@
+GROUND FACTS: read ongoing/roadmap/ROADMAP.md ("Working rules"),
+ongoing/roadmap/STATE.md (latest decision lines), "ongoing/roadmap/propsal
+new version with gap.md" (G2 + R5b row), R5h-sync-to-pending.md (every SMS
+sync lands in Pending), R5e-money-meaning.md (card bill payment = transfer,
+meaning rules), R3a-transfers.md, R5d-sms-identity-aliases.md (content
+hash, salt, tombstones), R5g-rules-engine.md (bill_due / statement routes,
+holds), R5-sms-reading-v2.md (nonTransaction bill_due/statement),
+R4e-backup-pie.md (backup must cover every table), and the decisions log of
+ongoing/realtime-persistence/STATE.md (absolute privacy rules).
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5b-bills-dues (created from phase/R5h-sync-to-pending).
+Stay on it. Do not switch branches, do not commit.
+
+PHASE R5b — Bills & dues (owner 2026-11-15: widened scope, proposal D1).
+CODE + TESTS + GATES + DEVICE SCRIPT ONLY. NO DEVICE WORK (no adb run) —
+the owner tests by script.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Pay later = new account type 'pay_later' (Accounts already groups
+    "CREDIT CARDS & PAY LATER"). Everywhere credit_card is treated as a
+    liability/card (R5e card bill payment meaning, R3a transfer math,
+    balance sign, icons, account form) pay_later behaves the same. Grep
+    every 'credit_card' use and list them in the report.
+D-b Credit limit: optional credit_limit_minor on credit_card and pay_later
+    accounts (manual entry in the account form; integer paise). Account
+    card/detail shows used and available. If the reader already exposes an
+    "available limit" figure, show it as "Limit per last SMS" only — never
+    overwrite the user's number.
+D-c Bills live in a new table (new numbered migration, never edit old
+    ones): id, account_id (nullable), kind ('card_statement' | 'pay_later'
+    | 'biller' | 'scheduled_debit' | 'manual'), payee label (user text or
+    known issuer display name only — never raw SMS text, never a sender
+    number), amount_due_minor, min_due_minor (nullable), statement_date
+    (nullable), due_date, status ('open' | 'paid' | 'dismissed'),
+    paid_minor, paid_transaction_id (nullable), source ('sms' | 'manual'),
+    source_hash (R5d content hash with the existing salt, for dedupe;
+    nullable for manual), created_at, updated_at. Backup/restore (R4e)
+    includes it; restore of an old backup without the table still works.
+D-d SMS bill_due / statement / future-debit ("will be debited on",
+    auto-debit / NACH / mandate) notices become OPEN BILLS, never
+    transactions, and never touch balances. Same SMS read twice (sync,
+    re-scan, auto-read) = one bill (source_hash). A newer statement for the
+    same account + statement period updates that bill instead of adding one.
+    Map to an account through the existing identity/alias keys (R5d); no
+    match = account_id null, label from issuer. If the reader/rules do not
+    yet produce future-debit notices, add generic patterns to the rules
+    data via scripts/rules (build + validate_v2, synthetic samples +
+    negatives) — do not hand-edit generated rules.json.
+D-e Mark paid: a payment transaction (card bill payment transfer to that
+    card/pay-later account, or an expense whose merchant/payee matches a
+    biller bill) with amount >= min due (or >= amount due when no min) dated
+    from statement_date (or due_date - 30 days) to due_date + 7 days becomes
+    a "Bill paid?" suggestion in the Review screen; the user taps Confirm
+    (bill paid, linked) or Not this. Never auto-mark. Pending rows (R5h) are
+    not matched until approved. Partial payments add to paid_minor; bill is
+    paid when paid_minor >= amount_due_minor or the user marks it paid.
+    Manual "Mark as paid" (with or without linking a transaction) on the
+    bill. Undo restores exact prior state. Deleting/undoing the linked
+    transaction reopens the bill.
+D-f Overdue = open and due_date before today (useNow, R4). Due soon = open
+    and due within 7 days.
+D-g Home due banner (in-app only, NO notification permission): shows when
+    any bill is overdue or due soon: "N bills due — ₹X, next <date>" (amount
+    masked by the same Home privacy rule if one applies), overdue styled
+    red; tap opens Bills screen. Hidden when nothing qualifies.
+D-h Bills screen (from Home banner + Accounts/Settings entry): sections
+    Overdue / Due soon / Later / Paid & dismissed (recent); each row: payee,
+    account, due date, amount due, min due, paid so far; actions Mark paid,
+    Link payment, Edit (manual bills), Dismiss (with Undo). Add bill
+    (manual, incl. one-off or monthly repeat: when a monthly manual bill is
+    paid, create the next month's open bill). Account detail for
+    credit_card / pay_later shows its open bill.
+D-i Audit: bill_created / bill_updated / bill_paid / bill_reopened /
+    bill_dismissed — ids, enums and amounts only, shown in Activity with the
+    existing masked-amount rule.
+
+TASKS (failing test with synthetic input first, confirm it fails, then fix):
+T0 Migration + repository + store for bills; account type pay_later +
+   credit_limit_minor; backup/restore coverage + old-backup test.
+T1 SMS path (D-d) in sync, re-scan, auto-read receiver; dedupe; statement
+   update; account mapping; rules data for future debits if needed.
+T2 Match + Review suggestion + manual mark paid + undo + reopen (D-e).
+T3 Overdue / due soon logic (D-f) + Home banner (D-g).
+T4 Bills screen + manual bills + monthly repeat + account detail (D-h);
+   ≥48 dp targets, a11y labels/roles (radio role/state on any choice list).
+T5 Credit limit UI (D-b) + pay_later in account form and all credit_card
+   paths (D-a).
+T6 Audit + Activity copy (D-i).
+T7 Device script: scripts/device/r5b.sh using scripts/device/lib.sh (read
+   lib.sh, r5h.sh and README.md first; same style: compact PASS/FAIL, counts
+   only, Tracker-in-front check before every tap/dump, locked screen = stop,
+   30 s idle wait, live per-test status lines telling the owner what to do,
+   fresh dump before every tap, QA data only — QA Pay Later 9999 account,
+   QA-Bill-01.. manual bills — cleanup at the end; never touch the owner's
+   real bills/accounts/rows; no screenshots; no db access). Cover: install
+   -r keeps data, add QA pay-later account with limit, add manual QA bill
+   due tomorrow -> Home banner shows, mark paid -> banner gone, Undo ->
+   back, overdue styling via a QA bill dated yesterday, Bills screen counts,
+   cleanup, 0 FATAL/ANR in logcat for com.tracker. Update README.md.
+   bash -n the script. Do not run it.
+
+PRIVACY (absolute, unchanged): no raw SMS bodies or sender numbers stored
+or logged; audits ids/enums/amounts only. Fixtures SYNTHETIC only (QA
+names, XX1234/XX9999, refs 000000000xxx, qa.x@okqa). Never write the
+reference app's old brand names; the repo calls it "chitta-ref-app".
+No new permission, no dependency, no network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: ongoing/roadmap/R5b-bills-dues.md (what was built per task,
+migration number + columns, credit_card sites list, tests added/changed,
+decisions, known limits, how to run scripts/device/r5b.sh). Leak-scan the
+report, the diff and new files for 10-digit phone numbers, real-looking
+UPI ids, account numbers not XX1234/XX9999 style, and personal names
+(shell only). Do not commit.
+REPLY ONLY: gates yes/no with test counts; T0–T7 done / not done; migration
+number; tests changed and why; decisions beyond D-a..D-i; anything
+surprising.

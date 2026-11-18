@@ -119,6 +119,27 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       ref_key: 'ffeeddccbbaa99887766554433221100',
     },
   ],
+  // R5b: a card statement bill (synthetic payee + salted content hash).
+  bills: [
+    {
+      id: 'qa-bill-1',
+      account_id: 'acc-qa-1',
+      kind: 'card_statement',
+      payee: 'QA Bank',
+      amount_due_minor: 1200000,
+      min_due_minor: 60000,
+      statement_date: T0,
+      due_date: T1,
+      status: 'open',
+      paid_minor: 0,
+      paid_transaction_id: null,
+      source: 'sms',
+      source_hash: 'aabbccddeeff00112233445566778899',
+      repeat: 'none',
+      created_at: T1,
+      updated_at: T1,
+    },
+  ],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

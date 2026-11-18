@@ -54,6 +54,7 @@ const TYPE_LABEL: Record<AccountType, string> = {
   bank: 'Bank Account',
   cash: 'Cash',
   credit_card: 'Credit Card',
+  pay_later: 'Pay Later',
   upi: 'UPI',
   other: 'Other',
 };

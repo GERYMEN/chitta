@@ -18,6 +18,8 @@ import { InsightsScreen } from '../../features/insights/screens/InsightsScreen';
 import { BackupScreen } from '../../features/backup/screens/BackupScreen';
 import { RestoreScreen } from '../../features/backup/screens/RestoreScreen';
 import { NotUnderstoodScreen } from '../../features/sms-sync/screens/NotUnderstoodScreen';
+import { BillsScreen } from '../../features/bills/screens/BillsScreen';
+import { AddBillScreen } from '../../features/bills/screens/AddBillScreen';
 import { RootStackParamList } from './routes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -91,6 +93,9 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
         component={NotUnderstoodScreen}
         options={{ presentation: 'card' }}
       />
+      <Stack.Screen name="Bills" component={BillsScreen} options={{ presentation: 'card' }} />
+      <Stack.Screen name="AddBill" component={AddBillScreen} options={{ presentation: 'card' }} />
+      <Stack.Screen name="EditBill" component={AddBillScreen} options={{ presentation: 'card' }} />
     </Stack.Navigator>
   );
 }

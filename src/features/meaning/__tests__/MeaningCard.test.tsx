@@ -31,7 +31,7 @@ jest.mock('@react-navigation/native', () => ({
 const T = '2026-11-05T10:00:00.000Z';
 const acc = (id: string, name: string, type: AccountType, lastFour: string | null): Account => ({
   id, name, type, lastFour, openingBalanceMinor: 0, currency: 'INR', isActive: true,
-  balanceAnchorMinor: null, balanceAnchorAt: null, deletedAt: null, createdAt: T, updatedAt: T,
+  balanceAnchorMinor: null, balanceAnchorAt: null, deletedAt: null, creditLimitMinor: null, createdAt: T, updatedAt: T,
 });
 const BANK = acc('bank', 'QA Axis Bank', 'bank', '1234');
 const CARD = acc('card', 'QA Axis Credit Card', 'credit_card', '9999');

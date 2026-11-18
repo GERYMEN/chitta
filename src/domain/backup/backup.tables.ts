@@ -54,6 +54,8 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       balance_anchor_minor: 1,
       balance_anchor_at: 1,
       deleted_at: 1,
+      // R5b: the user's manual credit limit (never from an SMS).
+      credit_limit_minor: 11,
     },
   },
   {
@@ -191,6 +193,31 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       created_at: 10,
       resolved_at: 10,
       resolution: 10,
+    },
+  },
+  {
+    // R5b: bills & dues. References accounts and (optionally) a transaction,
+    // so it restores after both. `payee` is user text / a known issuer display
+    // name only; `source_hash` is the salted content hash (no SMS content).
+    name: 'bills',
+    sinceVersion: 11,
+    columns: {
+      id: 11,
+      account_id: 11,
+      kind: 11,
+      payee: 11,
+      amount_due_minor: 11,
+      min_due_minor: 11,
+      statement_date: 11,
+      due_date: 11,
+      status: 11,
+      paid_minor: 11,
+      paid_transaction_id: 11,
+      source: 11,
+      source_hash: 11,
+      repeat: 11,
+      created_at: 11,
+      updated_at: 11,
     },
   },
 ];

@@ -9,7 +9,7 @@ import { Account, AccountType } from '../../../domain/accounts/account.types';
  */
 export const accountFormSchema = z.object({
   name: z.string().trim().min(1, 'Account name is required'),
-  type: z.enum(['bank', 'cash', 'credit_card', 'upi', 'other']),
+  type: z.enum(['bank', 'cash', 'credit_card', 'pay_later', 'upi', 'other']),
   lastFour: z.string().optional(),
   openingBalance: z
     .string()
@@ -20,6 +20,15 @@ export const accountFormSchema = z.object({
       const parsed = Number(value);
       return Number.isFinite(parsed) && parsed >= 0;
     }, 'Balance must be zero or more'),
+  // R5b D-b: optional credit limit (₹) for credit_card / pay_later accounts.
+  creditLimit: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      value => value == null || value === '' || /^\d+(\.\d{1,2})?$/.test(value),
+      'Enter a valid amount',
+    ),
 });
 
 export type AccountFormValues = z.infer<typeof accountFormSchema>;
@@ -29,11 +38,23 @@ export interface AccountFormInitialValues {
   type?: AccountType;
   lastFour?: string;
   openingBalance?: string;
+  creditLimit?: string;
 }
 
 /** Rupee input string (e.g. "5000.00") → integer paise. Only called on submit. */
 export function openingBalanceInputToMinor(value: string): number {
   return Math.round(parseFloat(value) * 100);
+}
+
+/** R5b D-b: optional credit-limit rupee string → integer paise, or null when blank. */
+export function creditLimitInputToMinor(value: string | undefined): number | null {
+  if (value == null || value.trim() === '') return null;
+  return Math.round(parseFloat(value) * 100);
+}
+
+/** R5b D-a/D-b: account types that carry a credit limit and card-style bills. */
+export function accountTypeHasCreditLimit(type: AccountType): boolean {
+  return type === 'credit_card' || type === 'pay_later';
 }
 
 export interface DuplicateAccountCandidate {

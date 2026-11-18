@@ -64,6 +64,9 @@ import { bankCanonicalForText } from './normalizeAccountKey';
 import type { Account } from '../../domain/accounts/account.types';
 import type { MeaningSuggestion } from '../../domain/meaning/meaning.types';
 import { applyMoneyMeanings, buildExistingRowIndex, suggestionForExistingRow } from './moneyMeaning';
+import { billInputFromSms } from './billIngest';
+import { billRepository } from '../../data/repositories/bill.repository';
+import { useBillsStore } from '../bills/state/billsStore';
 
 /**
  * R5g item 21: run each chained child's rule against live + pending SMS rows
@@ -389,6 +392,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const existingIndex = buildExistingRowIndex(store.transactions);
   const knownMeaning = new Set(store.meaningSuggestions.map(s => s.transactionId));
   const historySuggestions: MeaningSuggestion[] = [];
+  // R5b: open bills gathered this run (ingested after the scan; deduped by
+  // source hash, same-period statement updated).
+  const billInputs: import('../../data/repositories/bill.repository').SmsBillInput[] = [];
   let cursor = firstCursor(window);
 
   while (!cancel.cancelled) {
@@ -424,6 +430,15 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       if (openUnparsed.has(key) && read.label !== 'not_financial') {
         resolvedUnparsed.push({ smsId: message.id, smsDate: message.date });
       }
+      // R5b (D-d): a bill / statement / future-debit notice becomes an open
+      // bill — never a transaction, never a balance change.
+      const billInput = billInputFromSms(
+        read,
+        message,
+        salt,
+        useTransactionsStore.getState().accounts,
+      );
+      if (billInput) billInputs.push(billInput);
       // R5g item 7: a reparse SMS carries up to 3 records (own `#n` hash each).
       for (const candidate of [read.transaction, ...(read.extraTransactions ?? [])]) {
         if (!candidate) continue;
@@ -534,6 +549,14 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   }
   if (historySuggestions.length > 0) {
     await useTransactionsStore.getState().addMeaningSuggestions(historySuggestions);
+  }
+  // R5b (D-d): ingest bills after the scan — dedupe by source hash, update a
+  // same-period statement instead of adding one. Never touches balances.
+  if (billInputs.length > 0) {
+    for (const input of billInputs) {
+      await billRepository.ingestSmsBill(input).catch(() => undefined);
+    }
+    await useBillsStore.getState().refresh().catch(() => undefined);
   }
   const latest = useTransactionsStore.getState();
   const liveById = new Map(latest.transactions.map(t => [t.id, t]));

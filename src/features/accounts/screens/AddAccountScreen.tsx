@@ -10,7 +10,13 @@ import { activeAccounts } from '../../../domain/accounts/account.rules';
 import { CreateAccountInput } from '../../../data/repositories/account.repository';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { AccountForm } from '../components/AccountForm';
-import { AccountFormValues, findDuplicateAccount, openingBalanceInputToMinor } from '../components/accountForm.schema';
+import {
+  AccountFormValues,
+  findDuplicateAccount,
+  openingBalanceInputToMinor,
+  creditLimitInputToMinor,
+  accountTypeHasCreditLimit,
+} from '../components/accountForm.schema';
 import { addSuggestedAccount, showImportSnackbar } from '../../sms-sync/importSuggestion';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -60,6 +66,9 @@ export function AddAccountScreen() {
       openingBalanceMinor: openingBalanceInputToMinor(values.openingBalance),
       currency: 'INR',
       isActive: true,
+      creditLimitMinor: accountTypeHasCreditLimit(values.type)
+        ? creditLimitInputToMinor(values.creditLimit)
+        : null,
     };
 
     setSubmitting(true);

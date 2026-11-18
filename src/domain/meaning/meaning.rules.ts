@@ -78,11 +78,12 @@ export type BankOfAccount = (account: Pick<Account, 'name'>) => string;
 /** Account types a target may have — also filters the "Choose account" picker. */
 export function targetAccountTypes(kind: MeaningKind, side: MeaningSide): ReadonlyArray<AccountType> {
   if (kind === 'atm') return ['cash'];
-  if (side === 'out' && kind === 'card_payment') return ['credit_card'];
+  // R5b D-a: a card bill payment can target a credit_card OR a pay_later line.
+  if (side === 'out' && kind === 'card_payment') return ['credit_card', 'pay_later'];
   if (side === 'out' && kind === 'wallet_load') return ['other'];
   // The bank side of a card's "payment received" / a wallet's own top-up alert.
   if (kind === 'card_payment' || kind === 'wallet_load') return ['bank', 'upi', 'other', 'cash'];
-  return ['bank', 'cash', 'credit_card', 'upi', 'other'];
+  return ['bank', 'cash', 'credit_card', 'pay_later', 'upi', 'other'];
 }
 
 function pick(kind: MeaningKind, hits: ReadonlyArray<Pick<Account, 'id'>>): MeaningTarget {

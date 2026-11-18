@@ -177,7 +177,9 @@ describe('item 8: sms_type', () => {
   it('statement / notice / balance → SmsNonTransaction; ignore → failed', () => {
     const statement = ruleRead('AD-HDFCBK-S', sample('S-HDFC-0001')).read!;
     expect(statement.label).toBe('statement');
-    expect(statement.nonTransaction).toEqual({ label: 'statement', amountMinor: 1200000, minDueMinor: 60000, lastFour: '9999' });
+    expect(statement.nonTransaction).toMatchObject({ label: 'statement', amountMinor: 1200000, minDueMinor: 60000, lastFour: '9999' });
+    // R5b: the statement's due date comes from the template's "Due by" field.
+    expect(statement.nonTransaction!.dueDate).toMatch(/^2026-11-20/);
     expect(ruleRead('AD-HDFCBK-S', sample('N-HDFC-0001')).read!.label).toBe('mandate_future');
     const balance = ruleRead('AD-AXISBK-S', sample('B-AXIS-0001')).read!;
     expect(balance.label).toBe('balance_info');

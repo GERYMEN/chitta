@@ -115,6 +115,11 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   transfer_marked: 'swap-horizontal',
   transfer_unmarked: 'undo-variant',
   meaning_rule_removed: 'playlist-remove',
+  bill_created: 'file-document-outline',
+  bill_updated: 'file-document-edit-outline',
+  bill_paid: 'file-document-check-outline',
+  bill_reopened: 'file-document-refresh-outline',
+  bill_dismissed: 'file-document-remove-outline',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -692,6 +697,33 @@ export function describeActivity(
       impact = described.impact;
       break;
     }
+    case 'bill_created': {
+      const amount =
+        event.metadata?.kind === 'bill_created' ? amountLabel(event.metadata.amountMinor, show) : MASKED_AMOUNT;
+      const fromSms = event.metadata?.kind === 'bill_created' && event.metadata.source === 'sms';
+      sentence = fromSms ? `A bill for ${amount} was found` : `You added a bill for ${amount}`;
+      impact = { text: 'Bill added · not a transaction', tone: 'neutral' };
+      break;
+    }
+    case 'bill_updated':
+      sentence = 'A bill was updated';
+      impact = { text: 'Bill details changed', tone: 'neutral' };
+      break;
+    case 'bill_paid': {
+      const amount =
+        event.metadata?.kind === 'bill_paid' ? amountLabel(event.metadata.paidMinor, show) : MASKED_AMOUNT;
+      sentence = `You marked a bill paid${amount !== MASKED_AMOUNT ? ` · ${amount}` : ''}`;
+      impact = { text: 'Bill paid', tone: 'neutral' };
+      break;
+    }
+    case 'bill_reopened':
+      sentence = 'A bill was reopened';
+      impact = { text: 'Bill is open again', tone: 'pending' };
+      break;
+    case 'bill_dismissed':
+      sentence = 'You dismissed a bill';
+      impact = { text: 'Bill dismissed', tone: 'neutral' };
+      break;
     default:
       sentence = 'Something changed';
   }

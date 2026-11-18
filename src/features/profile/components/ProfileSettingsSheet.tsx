@@ -32,6 +32,8 @@ export interface ProfileSettingsSheetProps {
   onOpenActivity: () => void;
   /** Opens category management (R2). */
   onOpenCategories: () => void;
+  /** R5b: open Bills & dues. */
+  onOpenBills?: () => void;
   /**
    * R4b: start moved earlier and confirmed — scan only the gap, then call
    * `onCompleted` (saves the new start) if the scan finished.
@@ -59,6 +61,7 @@ export function ProfileSettingsSheet({
   onClose,
   onOpenActivity,
   onOpenCategories,
+  onOpenBills,
   onScanGap,
   onReplayTour,
   onOpenBackup,
@@ -212,6 +215,23 @@ export function ProfileSettingsSheet({
         </View>
         <Icon name="chevron-right" size={22} color={colors.outline} />
       </Pressable>
+      {onOpenBills ? (
+        <Pressable
+          onPress={onOpenBills}
+          accessibilityRole="button"
+          accessibilityLabel="Bills and dues"
+          testID="settings-bills-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="file-document-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Bills & dues</Text>
+            <Text style={styles.activityCaption}>Card statements, bills and reminders</Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
       {onReplayTour ? (
         <Pressable
           onPress={onReplayTour}

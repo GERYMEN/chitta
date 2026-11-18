@@ -236,12 +236,11 @@ describeSql('backup repository (real SQLite)', () => {
     );
   });
 
-  it('N-1 → N specifically (R5e): a v9 backup has no meaning tables; they restore empty and the EMI / Interest seeds are replayed', async () => {
+  it('N-1 → N specifically (R5b): a v10 backup has no bills table; it restores empty, other tables intact', async () => {
     const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(9);
+    expect(version).toBe(10);
     const tables = rowsAt(version);
-    expect(tables.money_meaning_rules).toBeUndefined();
-    expect(tables.money_meaning_suggestions).toBeUndefined();
+    expect(tables.bills).toBeUndefined();
     const payload = parseBackupJson(
       JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
       CURRENT_SCHEMA_VERSION,
@@ -249,10 +248,9 @@ describeSql('backup repository (real SQLite)', () => {
     const target = freshDb();
     await restoreInto(target, payload);
     expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
-    expect(target.rows('money_meaning_rules')).toEqual([]);
-    expect(target.rows('money_meaning_suggestions')).toEqual([]);
-    const ids = target.rows('categories').map(row => row.id);
-    expect(ids).toEqual(expect.arrayContaining(['cat-emi', 'cat-interest']));
+    expect(target.rows('bills')).toEqual([]);
+    // Pre-R5b meaning tables still round-trip (they existed at v10).
+    expect(target.rows('money_meaning_rules')).toEqual(FULL_BACKUP_ROWS.money_meaning_rules);
   });
 
   it('R5e: a v10 backup carries the meaning rules + suggestions exactly', async () => {

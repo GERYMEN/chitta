@@ -30,6 +30,7 @@ import { formatSyncToast } from '../../sms-sync/syncToast';
 import { greetingFor } from '../../profile/utils/greeting';
 import { ProfileSettingsSheet } from '../../profile/components/ProfileSettingsSheet';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
+import { DueBillsBanner } from '../../bills/components/DueBillsBanner';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
 import {
   periodTotals,
@@ -312,6 +313,8 @@ export function HomeScreen() {
 
       <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
 
+      <DueBillsBanner onPress={() => navigation.navigate('Bills')} />
+
       <ReviewCard onPress={() => navigation.navigate('Review')} />
 
       <View style={styles.section}>
@@ -397,6 +400,10 @@ export function HomeScreen() {
         onOpenCategories={() => {
           setSettingsOpen(false);
           navigation.navigate('Categories');
+        }}
+        onOpenBills={() => {
+          setSettingsOpen(false);
+          navigation.navigate('Bills');
         }}
         onScanGap={(window, onCompleted) => {
           setSettingsOpen(false);

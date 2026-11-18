@@ -114,6 +114,8 @@ import {
   undoMeaningConversion,
 } from '../../../domain/meaning/meaning.rules';
 import { generateId } from '../../../shared/utils/id';
+import { billRepository } from '../../../data/repositories/bill.repository';
+import { useBillsStore } from '../../bills/state/billsStore';
 
 /** R3a: Add Record → Transfer / Edit transfer form values (paise, ISO date). */
 export interface TransferInput {
@@ -826,6 +828,11 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
       current.accountId,
       smsTombstoneFor(current),
     );
+    // R5b (D-e): deleting a transaction linked to a bill reopens that bill.
+    await billRepository
+      .reopenByPaidTransaction(id, current.amountMinor)
+      .catch(() => undefined);
+    await useBillsStore.getState().refresh().catch(() => undefined);
     await get().refresh();
   },
 

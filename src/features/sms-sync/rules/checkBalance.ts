@@ -18,6 +18,7 @@ export interface CheckBalanceContact {
 const RULE_TYPES: Record<AccountType, ReadonlyArray<RuleAccountType>> = {
   bank: ['bank', 'debit_card'],
   credit_card: ['credit_card'],
+  pay_later: ['pay_later'],
   other: ['wallet', 'prepaid', 'pay_later'],
   upi: ['bank'],
   cash: [],

@@ -16,12 +16,14 @@ import {
   accountFormSchema,
   AccountFormInitialValues,
   AccountFormValues,
+  accountTypeHasCreditLimit,
 } from './accountForm.schema';
 
 const TYPE_OPTIONS: Array<{ value: AccountType; label: string }> = [
   { value: 'bank', label: 'Bank Account' },
   { value: 'cash', label: 'Cash' },
   { value: 'credit_card', label: 'Credit Card' },
+  { value: 'pay_later', label: 'Pay Later' },
   { value: 'upi', label: 'UPI' },
   { value: 'other', label: 'Other' },
 ];
@@ -40,6 +42,7 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
   const {
     control,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<AccountFormValues>({
     resolver: zodResolver(accountFormSchema),
@@ -48,8 +51,10 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
       type: initialValues?.type ?? 'bank',
       lastFour: initialValues?.lastFour ?? '',
       openingBalance: initialValues?.openingBalance ?? '0',
+      creditLimit: initialValues?.creditLimit ?? '',
     },
   });
+  const selectedType = watch('type');
 
   return (
     <ScrollView
@@ -79,9 +84,14 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
         control={control}
         name="type"
         render={({ field }) => (
-          <View style={styles.wrapRow}>
+          <View style={styles.wrapRow} accessibilityRole="radiogroup">
             {TYPE_OPTIONS.map(option => (
-              <Pressable key={option.value} onPress={() => field.onChange(option.value)}>
+              <Pressable
+                key={option.value}
+                onPress={() => field.onChange(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: field.value === option.value }}
+                accessibilityLabel={option.label}>
                 <Chip label={option.label} tone={field.value === option.value ? 'active' : 'neutral'} />
               </Pressable>
             ))}
@@ -126,6 +136,32 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
         )}
       />
       <FieldError error={errors.openingBalance?.message} />
+
+      {accountTypeHasCreditLimit(selectedType) ? (
+        <>
+          <FieldLabel>Credit Limit (₹, optional)</FieldLabel>
+          <Controller
+            control={control}
+            name="creditLimit"
+            render={({ field }) => (
+              <TextInput
+                style={styles.input}
+                value={field.value ?? ''}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="e.g. 200000"
+                placeholderTextColor={colors.outline}
+                keyboardType="decimal-pad"
+                testID="account-credit-limit-input"
+              />
+            )}
+          />
+          <FieldError error={errors.creditLimit?.message} />
+          <Text style={styles.hint}>
+            We show used and available credit. Your number is never changed by an SMS.
+          </Text>
+        </>
+      ) : null}
 
       <Button
         label={submitting ? 'Saving…' : 'Save Account'}
@@ -181,6 +217,10 @@ const styles = StyleSheet.create({
   errorText: {
     ...typography.bodyMd,
     color: colors.error,
+  },
+  hint: {
+    ...typography.bodyMd,
+    color: colors.outline,
   },
   submit: {
     marginTop: spacing.md,

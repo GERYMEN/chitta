@@ -16,7 +16,7 @@ import {
 const T = '2026-11-05T10:00:00.000Z';
 const acc = (id: string, name: string, type: AccountType, lastFour: string | null): Account => ({
   id, name, type, lastFour, openingBalanceMinor: 0, currency: 'INR', isActive: true,
-  balanceAnchorMinor: null, balanceAnchorAt: null, deletedAt: null, createdAt: T, updatedAt: T,
+  balanceAnchorMinor: null, balanceAnchorAt: null, deletedAt: null, creditLimitMinor: null, createdAt: T, updatedAt: T,
 });
 const BANK = acc('bank', 'QA Axis Bank', 'bank', '1234');
 const CARD = acc('card', 'QA Axis Credit Card', 'credit_card', '9999');
@@ -55,7 +55,7 @@ describe('R5e T3 — meaning card model', () => {
     expect(m.primaryLabel).toBe('Confirm transfer to QA Axis Credit Card ••••9999');
     expect(m.primaryA11y).toContain('QA Axis Credit Card');
     expect(m.secondaryLabel).toBe("It's an expense");
-    expect(m.pickerTypes).toEqual(['credit_card']);
+    expect(m.pickerTypes).toEqual(['credit_card', 'pay_later']);
   });
 
   it('ambiguous → "Choose account"', () => {

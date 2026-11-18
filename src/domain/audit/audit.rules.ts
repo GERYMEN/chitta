@@ -165,6 +165,27 @@ export function sanitizeAuditMetadata(
         meaning: meaningOrDefault(metadata.meaning),
         bankCanonical: /^[a-z]{1,20}$/.test(String(metadata.bankCanonical)) ? String(metadata.bankCanonical) : 'unknown',
       };
+    case 'bill_created':
+      return {
+        kind: 'bill_created',
+        billId: String(metadata.billId),
+        billKind: BILL_KINDS.has(String(metadata.billKind)) ? metadata.billKind : 'manual',
+        source: metadata.source === 'sms' ? 'sms' : 'manual',
+        amountMinor: Number(metadata.amountMinor) || 0,
+      };
+    case 'bill_updated':
+      return { kind: 'bill_updated', billId: String(metadata.billId), fields: metadata.fields.map(String) };
+    case 'bill_paid':
+      return {
+        kind: 'bill_paid',
+        billId: String(metadata.billId),
+        paidMinor: Number(metadata.paidMinor) || 0,
+        linked: metadata.linked === true,
+      };
+    case 'bill_reopened':
+      return { kind: 'bill_reopened', billId: String(metadata.billId) };
+    case 'bill_dismissed':
+      return { kind: 'bill_dismissed', billId: String(metadata.billId) };
     default:
       return null;
   }
@@ -227,7 +248,22 @@ function meaningOrDefault(value: unknown): MeaningKind {
     : 'transfer';
 }
 
-const ACCOUNT_KINDS: ReadonlySet<string> = new Set(['bank', 'cash', 'credit_card', 'upi', 'other']);
+const ACCOUNT_KINDS: ReadonlySet<string> = new Set([
+  'bank',
+  'cash',
+  'credit_card',
+  'pay_later',
+  'upi',
+  'other',
+]);
+
+const BILL_KINDS: ReadonlySet<string> = new Set([
+  'card_statement',
+  'pay_later',
+  'biller',
+  'scheduled_debit',
+  'manual',
+]);
 
 const TRANSACTION_TYPES: ReadonlySet<string> = new Set(['income', 'expense', 'transfer']);
 
@@ -298,6 +334,7 @@ const EDITABLE_ACCOUNT_FIELDS = [
   'openingBalanceMinor',
   'balanceAnchorMinor',
   'balanceAnchorAt',
+  'creditLimitMinor',
 ] as const;
 
 export function changedAccountFields(

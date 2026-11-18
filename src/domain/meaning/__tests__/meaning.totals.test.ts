@@ -28,6 +28,7 @@ function account(id: string, type: AccountType, opening: number): Account {
     balanceAnchorMinor: null,
     balanceAnchorAt: null,
     deletedAt: null,
+    creditLimitMinor: null,
     createdAt: T,
     updatedAt: T,
   };

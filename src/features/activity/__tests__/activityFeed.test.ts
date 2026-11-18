@@ -313,6 +313,57 @@ describe('R2 T0 amount privacy', () => {
   });
 });
 
+describe('R5b bill events (D-i)', () => {
+  const billEvent = (partial: Partial<AuditFeedEvent>) =>
+    event({ transactionId: null, ...partial });
+
+  it('bill_created from an SMS and manually', () => {
+    const sms = describeActivity(
+      billEvent({
+        eventType: 'bill_created',
+        actor: 'system',
+        metadata: { kind: 'bill_created', billId: 'b1', billKind: 'card_statement', source: 'sms', amountMinor: 1200000 },
+      }),
+    );
+    expect(sms.sentence).toBe('A bill for ₹12,000.00 was found');
+    const manual = describeActivity(
+      billEvent({
+        eventType: 'bill_created',
+        metadata: { kind: 'bill_created', billId: 'b2', billKind: 'manual', source: 'manual', amountMinor: 50000 },
+      }),
+    );
+    expect(manual.sentence).toBe('You added a bill for ₹500.00');
+  });
+
+  it('bill_paid / reopened / dismissed', () => {
+    expect(
+      describeActivity(
+        billEvent({ eventType: 'bill_paid', metadata: { kind: 'bill_paid', billId: 'b1', paidMinor: 100000, linked: true } }),
+      ).sentence,
+    ).toContain('marked a bill paid');
+    expect(describeActivity(billEvent({ eventType: 'bill_reopened', metadata: { kind: 'bill_reopened', billId: 'b1' } })).sentence).toBe(
+      'A bill was reopened',
+    );
+    expect(describeActivity(billEvent({ eventType: 'bill_dismissed', metadata: { kind: 'bill_dismissed', billId: 'b1' } })).sentence).toBe(
+      'You dismissed a bill',
+    );
+  });
+
+  it('masks the amount when showAmounts is false (D-i)', () => {
+    const item = describeRaw(
+      billEvent({
+        eventType: 'bill_created',
+        actor: 'system',
+        metadata: { kind: 'bill_created', billId: 'b1', billKind: 'card_statement', source: 'sms', amountMinor: 1200000 },
+      }),
+      {},
+      { showAmounts: false },
+    );
+    expect(item.sentence).not.toMatch(/12,000|12000/);
+    expect(item.sentence).toContain(MASKED_AMOUNT);
+  });
+});
+
 describe('R2 rule and category events', () => {
   const FOOD = { name: 'Food & Dining', archivedAt: null };
 

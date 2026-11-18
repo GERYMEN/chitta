@@ -2,6 +2,8 @@ import {
   accountFormSchema,
   findDuplicateAccount,
   openingBalanceInputToMinor,
+  creditLimitInputToMinor,
+  accountTypeHasCreditLimit,
 } from '../accountForm.schema';
 import { Account } from '../../../../domain/accounts/account.types';
 
@@ -16,6 +18,7 @@ const account = (overrides: Partial<Account> = {}): Account => ({
   balanceAnchorMinor: null,
   balanceAnchorAt: null,
   deletedAt: null,
+  creditLimitMinor: null,
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
   ...overrides,
@@ -67,6 +70,30 @@ describe('opening balance conversion helper', () => {
     expect(openingBalanceInputToMinor('0')).toBe(0);
     expect(openingBalanceInputToMinor('1500.50')).toBe(150050);
     expect(openingBalanceInputToMinor('0.01')).toBe(1);
+  });
+});
+
+describe('R5b credit limit (D-a / D-b)', () => {
+  it('accepts pay_later as a type', () => {
+    expect(accountFormSchema.safeParse({ ...base, type: 'pay_later' }).success).toBe(true);
+  });
+
+  it('creditLimitInputToMinor: rupee string → paise, blank → null', () => {
+    expect(creditLimitInputToMinor('200000')).toBe(20000000);
+    expect(creditLimitInputToMinor('1500.50')).toBe(150050);
+    expect(creditLimitInputToMinor('')).toBeNull();
+    expect(creditLimitInputToMinor(undefined)).toBeNull();
+  });
+
+  it('a bad credit limit fails validation', () => {
+    expect(accountFormSchema.safeParse({ ...base, type: 'credit_card', creditLimit: 'abc' }).success).toBe(false);
+    expect(accountFormSchema.safeParse({ ...base, type: 'credit_card', creditLimit: '50000' }).success).toBe(true);
+  });
+
+  it('accountTypeHasCreditLimit covers credit_card and pay_later only', () => {
+    expect(accountTypeHasCreditLimit('credit_card')).toBe(true);
+    expect(accountTypeHasCreditLimit('pay_later')).toBe(true);
+    expect(accountTypeHasCreditLimit('bank')).toBe(false);
   });
 });
 

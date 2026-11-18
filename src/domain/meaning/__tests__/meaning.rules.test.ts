@@ -31,6 +31,7 @@ function account(id: string, name: string, type: AccountType, lastFour: string |
     balanceAnchorMinor: null,
     balanceAnchorAt: null,
     deletedAt,
+    creditLimitMinor: null,
     createdAt: T,
     updatedAt: T,
   };
@@ -157,11 +158,11 @@ describe('R5e T1 — resolveMeaningTarget', () => {
   });
 
   it('picker types per kind and side', () => {
-    expect(targetAccountTypes('card_payment', 'out')).toEqual(['credit_card']);
+    expect(targetAccountTypes('card_payment', 'out')).toEqual(['credit_card', 'pay_later']);
     expect(targetAccountTypes('atm', 'out')).toEqual(['cash']);
     expect(targetAccountTypes('wallet_load', 'out')).toEqual(['other']);
     expect(targetAccountTypes('card_payment', 'in')).not.toContain('credit_card');
-    expect(targetAccountTypes('transfer', 'out')).toHaveLength(5);
+    expect(targetAccountTypes('transfer', 'out')).toHaveLength(6);
   });
 });
 

@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { ReviewSections } from '../components/ReviewSections';
+import { BillPaidSuggestions } from '../../bills/components/BillPaidSuggestions';
 
 /**
  * R3b: opened from the Home "N to review" card — possible transfers and
@@ -20,6 +21,7 @@ export function ReviewScreen() {
         <HeaderSpacer />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
+        <BillPaidSuggestions />
         <ReviewSections emptyText="Nothing to review — all caught up." />
       </ScrollView>
     </SafeAreaView>

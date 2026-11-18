@@ -192,6 +192,12 @@ export interface SmsNonTransaction {
   amountMinor: number | null;
   minDueMinor: number | null;
   lastFour: string | null;
+  /** R5b: the bill's due date (ISO), when the SMS / template gives one. */
+  dueDate?: string | null;
+  /** R5b: a card statement's statement date (ISO), when given. */
+  statementDate?: string | null;
+  /** R5b/R6: an "available limit" figure the SMS reported (display only). */
+  availableLimitMinor?: number | null;
 }
 
 /** Best guess for "Add as transaction" on a message that was not understood. */
@@ -497,16 +503,54 @@ function firstAmount(amounts: AmountHit[], role: AmountHit['role']): number | nu
   return amounts.find(a => a.role === role)?.minor ?? null;
 }
 
+const MONTHS_LC = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * R5b: a bill's due date, from "due by / due date / due on / payable by /
+ * auto-debit on / will be debited on <date>". Supports dd-mm-yyyy,
+ * dd/mm/yyyy, dd-Mon-yy and dd Mon yyyy. Returns an ISO date (noon local to
+ * avoid timezone day-shift) or null. Reader side; the rules engine resolves
+ * its own dates.
+ */
+function extractDueDate(body: string): string | null {
+  const m = body.match(
+    /\b(?:due\s+(?:by|date|on)|payable\s+by|auto[-\s]?debit(?:ed)?\s+on|will\s+be\s+debited\s+on|debit\s+on)\b[:\s]*([0-3]?\d)[-/\s]([0-3]?\d|[a-z]{3,9})[-/\s](\d{2,4})/i,
+  );
+  if (!m) return null;
+  const day = parseInt(m[1], 10);
+  let month: number;
+  if (/^\d+$/.test(m[2])) {
+    month = parseInt(m[2], 10) - 1;
+  } else {
+    month = MONTHS_LC.indexOf(m[2].slice(0, 3).toLowerCase());
+  }
+  let year = parseInt(m[3], 10);
+  if (year < 100) year += 2000;
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+  const d = new Date(year, month, day, 12, 0, 0, 0);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 function nonTransaction(
   label: SmsNonTransaction['label'],
   amounts: AmountHit[],
   lastFour: string | null,
+  body: string,
 ): SmsNonTransaction {
   const amountMinor =
     label === 'balance_info'
       ? firstAmount(amounts, 'balance')
       : firstAmount(amounts, 'due') ?? firstAmount(amounts, 'txn');
-  return { label, amountMinor, minDueMinor: firstAmount(amounts, 'min_due'), lastFour };
+  const isBill = label === 'bill_due' || label === 'statement' || label === 'mandate_future';
+  return {
+    label,
+    amountMinor,
+    minDueMinor: firstAmount(amounts, 'min_due'),
+    lastFour,
+    dueDate: isBill ? extractDueDate(body) : null,
+    statementDate: null,
+    availableLimitMinor: firstAmount(amounts, 'limit'),
+  };
 }
 
 // ---- entry ---------------------------------------------------------------------
@@ -554,7 +598,7 @@ export function readSmsWithReader(msg: SmsInput, options: SmsReadOptions = {}): 
   const knownSender = sender.kind === 'known';
   const accountMention = ACCOUNT_MENTION_RE.test(body);
   const nt = (label: SmsNonTransaction['label']) =>
-    result(label, { institution, nonTransaction: nonTransaction(label, amounts, lastFour) });
+    result(label, { institution, nonTransaction: nonTransaction(label, amounts, lastFour, body) });
 
   // b) Classifier — targeted classes instead of blanket reject words.
   // U1: with a STRONG bound transaction verb, OTP / collect / failed / promo

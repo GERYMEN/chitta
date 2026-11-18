@@ -15,7 +15,7 @@ import type {
   SmsLabel,
   SmsNonTransaction,
 } from '../parser/readSms';
-import { resolveRuleDate } from './ruleDates';
+import { resolveRuleDate, parseWithFormat } from './ruleDates';
 import type { RuleAccountType, RuleChainingRule, RuleMoneyKind, RuleRefType } from './rules.types';
 import type { RuleEngineResult, RuleRecord } from './rulesEngine';
 
@@ -371,6 +371,25 @@ export function readFromRules(engine: RuleEngineResult, ctx: RuleReadContext): R
     label === 'balance_info'
       ? amountOf(f.account_balance) ?? amountOf(f.available_limit) ?? amountOf(f.amount)
       : amountOf(f.amount) ?? amountOf(f.outstanding_balance);
+  // R5b: a bill's due date comes from the template's `date` field (e.g. the
+  // "due by" group); a card statement's statement date is the SMS time.
+  // A due date is usually in the FUTURE, outside resolveRuleDate's
+  // [−45d, +1d] window, so parse it directly with the template's formats.
+  const isBill = label === 'bill_due' || label === 'statement' || label === 'mandate_future';
+  const dateText = str(f.date);
+  let dueMs: number | null = null;
+  if (isBill && dateText) {
+    for (const fmt of firstDef.data_fields.date?.formats ?? []) {
+      const parsed = parseWithFormat(dateText, fmt.format, ctx.msg.date);
+      if (parsed) {
+        // A date-only due date is midnight IST; shift to noon IST so the day
+        // never moves when the phone / test clock is in another timezone.
+        dueMs = parsed.hasTime ? parsed.ms : parsed.ms + 12 * 60 * 60 * 1000;
+        break;
+      }
+    }
+  }
+  const dueDate = dueMs != null ? new Date(dueMs).toISOString() : null;
   return {
     ...base,
     label,
@@ -380,6 +399,9 @@ export function readFromRules(engine: RuleEngineResult, ctx: RuleReadContext): R
       amountMinor,
       minDueMinor: amountOf(f.min_due_amount),
       lastFour: pan.lastFour,
+      dueDate,
+      statementDate: label === 'statement' ? new Date(ctx.msg.date).toISOString() : null,
+      availableLimitMinor: amountOf(f.available_limit),
     },
   };
 }

@@ -77,6 +77,7 @@ const ACCOUNT: Account = {
   balanceAnchorMinor: null,
   balanceAnchorAt: null,
   deletedAt: null,
+  creditLimitMinor: null,
   createdAt: at(0),
   updatedAt: at(0),
 } as Account;

@@ -34,6 +34,10 @@ import { TourTarget } from '../../tour/components/TourTarget';
 import { useLinkedNumbersStore } from '../state/linkedNumbersStore';
 import { LinkedNumber, linkedNumbersFor } from '../../sms-sync/suggestionGroups';
 import { checkBalanceContacts } from '../../sms-sync/rules/checkBalance';
+import { useBillsStore } from '../../bills/state/billsStore';
+import { Bill } from '../../../domain/bills/bill.types';
+import { creditUsage, remainingMinor, billUrgency } from '../../../domain/bills/bill.rules';
+import { useNow } from '../../../shared/hooks/useNow';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accounts'>,
@@ -44,6 +48,7 @@ const ACCOUNT_ICON: Record<AccountType, string> = {
   bank: 'bank-outline',
   cash: 'cash',
   credit_card: 'credit-card-outline',
+  pay_later: 'credit-card-clock-outline',
   upi: 'qrcode',
   other: 'wallet-outline',
 };
@@ -52,9 +57,15 @@ const GROUP_LABEL: Record<AccountType, string> = {
   bank: 'BANK ACCOUNTS',
   cash: 'CASH',
   credit_card: 'CREDIT CARDS & PAY LATER',
+  pay_later: 'CREDIT CARDS & PAY LATER',
   upi: 'UPI SOURCES',
   other: 'OTHER',
 };
+
+// R5b D-a: credit cards and pay-later lines share one group.
+function groupKeyOf(type: AccountType): AccountType {
+  return type === 'pay_later' ? 'credit_card' : type;
+}
 
 export function AccountsScreen() {
   const navigation = useNavigation<Nav>();
@@ -71,9 +82,14 @@ export function AccountsScreen() {
   // Re-read whenever accounts or transactions change (a link / undo / import).
   const linkedRows = useLinkedNumbersStore(state => state.rows);
   const refreshLinked = useLinkedNumbersStore(state => state.refresh);
+  // R5b: open bills per account (card / pay-later detail) + Bills entry count.
+  const bills = useBillsStore(state => state.bills);
+  const refreshBills = useBillsStore(state => state.refresh);
+  const now = useNow(transactions.length);
   useEffect(() => {
     refreshLinked().catch(() => undefined);
-  }, [refreshLinked, accounts.length, transactions.length]);
+    refreshBills().catch(() => undefined);
+  }, [refreshLinked, refreshBills, accounts.length, transactions.length]);
 
   function confirmUnlink(account: Account, number: LinkedNumber) {
     showDialog({
@@ -130,9 +146,9 @@ export function AccountsScreen() {
     .filter(a => !isLiabilityAccount(a.type))
     .reduce((sum, a) => sum + calculateBalance(a, transactions, a.id), 0);
 
-  const groups = Array.from(new Set(accounts.map(a => a.type))).map(type => ({
+  const groups = Array.from(new Set(accounts.map(a => groupKeyOf(a.type)))).map(type => ({
     type,
-    accounts: accounts.filter(a => a.type === type),
+    accounts: accounts.filter(a => groupKeyOf(a.type) === type),
   }));
 
   return (
@@ -178,6 +194,20 @@ export function AccountsScreen() {
           </Text>
         </View>
 
+        <Pressable
+          onPress={() => navigation.navigate('Bills')}
+          style={styles.billsEntry}
+          accessibilityRole="button"
+          accessibilityLabel="Bills and dues"
+          testID="accounts-bills-entry">
+          <Icon name="file-document-outline" size={20} color={colors.primary} />
+          <Text style={styles.billsEntryLabel}>Bills & dues</Text>
+          <Text style={styles.billsEntryCount}>
+            {bills.filter(b => b.status === 'open').length} open
+          </Text>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+
         <View style={styles.privacyBanner}>
           <Icon name="shield-lock-outline" size={20} color={colors.primary} />
           <View style={styles.privacyTextWrap}>
@@ -216,6 +246,9 @@ export function AccountsScreen() {
                   account={account}
                   transactions={transactions}
                   linked={linkedNumbersFor(linkedRows, account.id)}
+                  openBill={bills.find(b => b.accountId === account.id && b.status === 'open') ?? null}
+                  now={now}
+                  onOpenBills={() => navigation.navigate('Bills')}
                   onUnlink={number => confirmUnlink(account, number)}
                   onRemove={() => confirmRemove(account)}
                 />
@@ -273,6 +306,9 @@ function AccountCard({
   account,
   transactions,
   linked,
+  openBill,
+  now,
+  onOpenBills,
   onUnlink,
   onRemove,
 }: {
@@ -280,11 +316,17 @@ function AccountCard({
   transactions: Parameters<typeof calculateBalance>[1];
   /** R5d T3c: numbers linked to this account (bank · kind · ••last4). */
   linked: LinkedNumber[];
+  /** R5b D-h: this account's open bill (card / pay-later detail). */
+  openBill: Bill | null;
+  now: Date;
+  onOpenBills: () => void;
   onUnlink: (number: LinkedNumber) => void;
   onRemove: () => void;
 }) {
   const balanceMinor = calculateBalance(account, transactions, account.id);
   const liability = isLiabilityAccount(account.type);
+  // R5b D-b: used / available credit for credit_card / pay_later accounts.
+  const usage = liability ? creditUsage(account.creditLimitMinor, balanceMinor) : null;
 
   return (
     <Card style={styles.accountCard}>
@@ -314,6 +356,39 @@ function AccountCard({
       >
         {formatRupeesFromMinor(Math.abs(balanceMinor), { showPaise: true })}
       </Text>
+
+      {usage ? (
+        <View style={styles.creditRow} testID={`credit-usage-${account.id}`}>
+          <Text style={styles.balanceRowLabel}>
+            {`Used ${formatRupeesFromMinor(usage.usedMinor)} · Available ${formatRupeesFromMinor(
+              usage.availableMinor,
+            )} of ${formatRupeesFromMinor(usage.limitMinor)}`}
+          </Text>
+        </View>
+      ) : null}
+
+      {liability && openBill ? (
+        <Pressable
+          onPress={onOpenBills}
+          style={styles.openBillRow}
+          accessibilityRole="button"
+          accessibilityLabel="View bill"
+          testID={`account-bill-${account.id}`}>
+          <Icon
+            name="file-document-outline"
+            size={16}
+            color={billUrgency(openBill, now) === 'overdue' ? colors.error : colors.outline}
+          />
+          <Text
+            style={[
+              styles.openBillLabel,
+              billUrgency(openBill, now) === 'overdue' && styles.liabilityValue,
+            ]}>
+            {`Bill due ${formatRupeesFromMinor(remainingMinor(openBill))}`}
+            {openBill.dueDate ? ` · ${new Date(openBill.dueDate).toLocaleDateString('en-IN')}` : ''}
+          </Text>
+        </Pressable>
+      ) : null}
 
       {linked.length > 0 ? (
         <View style={styles.linkedSection} testID={`linked-numbers-${account.id}`}>
@@ -549,5 +624,36 @@ const styles = StyleSheet.create({
   },
   liabilityValue: {
     color: '#DC2626',
+  },
+  billsEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    minHeight: 48,
+  },
+  billsEntryLabel: {
+    ...typography.labelLg,
+    color: colors.onSurface,
+    flex: 1,
+  },
+  billsEntryCount: {
+    ...typography.bodyMd,
+    color: colors.outline,
+  },
+  creditRow: {
+    marginTop: spacing.xs,
+  },
+  openBillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 48,
+  },
+  openBillLabel: {
+    ...typography.bodyMd,
+    color: colors.onSurface,
   },
 });

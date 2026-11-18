@@ -78,8 +78,9 @@ describe('runMigrations versioning', () => {
 
     // 4 from migration 1 + audit_events.account_id from migration 4 +
     // categories.archived_at / color from migration 5 + 3 transactions
-    // columns from migration 6 + 4 identity columns from migration 9 (R5d).
-    expect(alterCounts.size).toBe(14);
+    // columns from migration 6 + 4 identity columns from migration 9 (R5d) +
+    // accounts.credit_limit_minor from migration 11 (R5b).
+    expect(alterCounts.size).toBe(15);
     for (const count of alterCounts.values()) {
       expect(count).toBe(1);
     }
@@ -308,7 +309,21 @@ describe('runMigrations versioning', () => {
     for (const st of seeds) {
       expect(st.sql).toBe('INSERT OR IGNORE INTO categories (id, name, parent_id, type, icon, is_system) VALUES (?, ?, NULL, ?, ?, 1)');
     }
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(10);
+    expect(NUMBERED_MIGRATIONS.some((m: { version: number }) => m.version === 10)).toBe(true);
+  });
+
+  it('R5b: migration 11 adds accounts.credit_limit_minor + the bills table, rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m11 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 11);
+    expect(m11).toBeDefined();
+    const joined = m11.statements
+      .map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql))
+      .join('\n');
+    expect(joined).toMatch(/ALTER TABLE accounts ADD COLUMN credit_limit_minor INTEGER/);
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS bills/);
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(11);
   });
 
   it('R5e: runs migration 10 exactly once and records it', async () => {

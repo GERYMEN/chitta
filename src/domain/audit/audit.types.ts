@@ -4,6 +4,7 @@ import type { TransferPairPrevious } from '../transfers/transfer.rules';
 import type { DuplicateRowSnapshot } from '../duplicates/duplicate.rules';
 import type { MeaningConversionPrevious } from '../meaning/meaning.rules';
 import type { MeaningKind } from '../meaning/meaning.types';
+import type { BillKind, BillSource } from '../bills/bill.types';
 
 /**
  * Every money-changing action writes exactly one audit event (R1).
@@ -59,7 +60,16 @@ export type AuditEventType =
    */
   | 'transfer_marked'
   | 'transfer_unmarked'
-  | 'meaning_rule_removed';
+  | 'meaning_rule_removed'
+  /**
+   * R5b (D-i): a bill created / updated / paid / reopened / dismissed. Ids,
+   * enums and amounts only — never SMS text or a sender number.
+   */
+  | 'bill_created'
+  | 'bill_updated'
+  | 'bill_paid'
+  | 'bill_reopened'
+  | 'bill_dismissed';
 
 export type AuditActor = 'system' | 'user';
 
@@ -206,7 +216,18 @@ export type AuditMetadata =
       twin_only?: boolean;
     }
   /** R5e: Settings → Automatic money rules → Remove (enum + public bank id only). */
-  | { kind: 'meaning_rule_removed'; meaning: MeaningKind; bankCanonical: string };
+  | { kind: 'meaning_rule_removed'; meaning: MeaningKind; bankCanonical: string }
+  /**
+   * R5b (D-i): bill events — ids, the bill kind, the source enum and amounts
+   * only. `source` says whether the bill came from an SMS or manual entry;
+   * `amountMinor` is the amount due; `paidMinor` the payment just recorded.
+   * Never a payee string, SMS text or a sender number.
+   */
+  | { kind: 'bill_created'; billId: string; billKind: BillKind; source: BillSource; amountMinor: number }
+  | { kind: 'bill_updated'; billId: string; fields: string[] }
+  | { kind: 'bill_paid'; billId: string; paidMinor: number; linked: boolean }
+  | { kind: 'bill_reopened'; billId: string }
+  | { kind: 'bill_dismissed'; billId: string };
 
 /** R5: counts of one reader run. */
 export interface SmsRunCounts {

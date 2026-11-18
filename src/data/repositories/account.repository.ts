@@ -23,9 +23,15 @@ async function writeAudit(
 
 export type CreateAccountInput = Omit<
   Account,
-  'id' | 'createdAt' | 'updatedAt' | 'balanceAnchorMinor' | 'balanceAnchorAt' | 'deletedAt'
+  | 'id'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'balanceAnchorMinor'
+  | 'balanceAnchorAt'
+  | 'deletedAt'
+  | 'creditLimitMinor'
 > &
-  Partial<Pick<Account, 'balanceAnchorMinor' | 'balanceAnchorAt' | 'deletedAt'>>;
+  Partial<Pick<Account, 'balanceAnchorMinor' | 'balanceAnchorAt' | 'deletedAt' | 'creditLimitMinor'>>;
 
 export type AccountPatch = Partial<Omit<Account, 'id' | 'createdAt' | 'updatedAt'>>;
 
@@ -40,6 +46,7 @@ const COLUMNS = [
   'balance_anchor_minor',
   'balance_anchor_at',
   'deleted_at',
+  'credit_limit_minor',
   'created_at',
   'updated_at',
 ] as const;
@@ -79,6 +86,7 @@ export function buildAccount(input: CreateAccountInput): Account {
     balanceAnchorMinor: input.balanceAnchorMinor ?? null,
     balanceAnchorAt: input.balanceAnchorAt ?? null,
     deletedAt: input.deletedAt ?? null,
+    creditLimitMinor: input.creditLimitMinor ?? null,
     createdAt: now,
     updatedAt: now,
   };

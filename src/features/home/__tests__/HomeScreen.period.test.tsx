@@ -74,6 +74,7 @@ const account = (id: string, name: string): Account => ({
   balanceAnchorMinor: null,
   balanceAnchorAt: null,
   deletedAt: null,
+  creditLimitMinor: null,
   createdAt: local(2026, 1, 1),
   updatedAt: local(2026, 1, 1),
 });

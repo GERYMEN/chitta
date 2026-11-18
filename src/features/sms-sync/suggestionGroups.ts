@@ -76,6 +76,7 @@ const UNKNOWN_BANK = 'Unknown Bank';
 const KIND_SUFFIX: Record<AccountType, string> = {
   bank: 'Bank',
   credit_card: 'Credit Card',
+  pay_later: 'Pay Later',
   upi: 'UPI',
   cash: 'Cash',
   other: '',
@@ -240,6 +241,7 @@ export function debitCardLinkTarget(
 const KIND_LABEL: Record<AccountType, string> = {
   bank: 'Bank',
   credit_card: 'Credit Card',
+  pay_later: 'Pay Later',
   upi: 'UPI',
   cash: 'Cash',
   other: 'Other',

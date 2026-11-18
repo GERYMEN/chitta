@@ -23,6 +23,7 @@ export function rowToAccount(row: SqlRow): Account {
     balanceAnchorMinor: asNullableNumber(row.balance_anchor_minor),
     balanceAnchorAt: asNullableDateIso(row.balance_anchor_at),
     deletedAt: asNullableDateIso(row.deleted_at),
+    creditLimitMinor: asNullableNumber(row.credit_limit_minor),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -40,6 +41,7 @@ export function accountToRow(account: Account): SqlWriteRow {
     balance_anchor_minor: account.balanceAnchorMinor,
     balance_anchor_at: dateIsoToEpochMs(account.balanceAnchorAt),
     deleted_at: dateIsoToEpochMs(account.deletedAt),
+    credit_limit_minor: account.creditLimitMinor,
     created_at: account.createdAt,
     updated_at: account.updatedAt,
   };

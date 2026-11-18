@@ -233,6 +233,43 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       })),
     ],
   },
+  {
+    // R5b bills & dues. One new table + one new account column, no existing
+    // row is rewritten (credit_limit_minor starts NULL):
+    //  - bills: a card statement / pay-later / biller / scheduled-debit /
+    //    manual bill. Bills NEVER touch balances and are NEVER transactions.
+    //    `payee` is user text or a known issuer display name only (never raw
+    //    SMS text, never a sender number); `source_hash` is the R5d salted
+    //    content hash (no SMS content). `due_date` is nullable (an SMS bill
+    //    with no parseable due date still becomes an open bill). `repeat`
+    //    ('none' | 'monthly') drives D-h monthly manual bills.
+    //  - accounts.credit_limit_minor: the user's manual credit limit for a
+    //    credit_card / pay_later account (paise). Never set from an SMS.
+    version: 11,
+    statements: [
+      'ALTER TABLE accounts ADD COLUMN credit_limit_minor INTEGER',
+      `CREATE TABLE IF NOT EXISTS bills (
+    id TEXT PRIMARY KEY,
+    account_id TEXT,
+    kind TEXT NOT NULL,
+    payee TEXT NOT NULL,
+    amount_due_minor INTEGER NOT NULL,
+    min_due_minor INTEGER,
+    statement_date TEXT,
+    due_date TEXT,
+    status TEXT NOT NULL,
+    paid_minor INTEGER NOT NULL DEFAULT 0,
+    paid_transaction_id TEXT,
+    source TEXT NOT NULL,
+    source_hash TEXT,
+    repeat TEXT NOT NULL DEFAULT 'none',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_bills_status_due ON bills(status, due_date)',
+      'CREATE INDEX IF NOT EXISTS ix_bills_source_hash ON bills(source_hash)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {
