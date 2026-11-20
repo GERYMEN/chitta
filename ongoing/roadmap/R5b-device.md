@@ -1,72 +1,114 @@
-# R5b device pass (Bills & dues): FEATURES PASS, harness had 6 false fails
+# R5b device pass (Bills & dues)
 
-Date: 2026-11-18 (device clock 22:41–23:15). Device: the owner's phone over USB
-(serial 00015365…524). Build: already-installed release (run with `--skip-install`,
-owner's choice). Counts only — no database access, no screenshots, no logcat
-bodies, no SMS/row/name/amount opened or printed. QA data only (QA Pay Later 9999,
-QA-Bill-01, QA-Bill-02), added and removed by the owner during the run.
+Two sessions. The scripted run (2026-11-18) read 4/6/1 and I first blamed the
+harness. A hands-on USB debug session (2026-11-21, no script) found the real
+cause: **AddBillScreen crashed on open**, so no bill could ever be created — which
+is what actually failed the bill-dependent checks. That crash is now fixed and
+verified on the device.
 
-Script summary line: **pass=4 fail=6 skip=1**. Exit 1 (any fail fails the run).
+Counts only throughout — no database access, no screenshots, no SMS/row/name/
+amount opened or printed. QA data only.
 
-## The feature works — every fail was harness-side
+## Root cause (the real one): AddBillScreen infinite render loop
 
-The owner was asked, step by step, what actually happened on the phone. Every
-failing check was a *detection* or *timeout* miss in the script, not a defect in
-Bills & dues. No FATAL/ANR (R10 real pass). Breakdown:
+Opening **Add bill** crashed the app. Device logcat (crash buffer), release build:
 
-| Check | Script | Reality (owner-confirmed) |
+```
+FATAL EXCEPTION: mqt_v_native   Process: com.tracker
+com.facebook.react.common.JavascriptException: Error: Maximum update depth exceeded.
+    at AddBillScreen (index.android.bundle)
+```
+
+Cause: `AddBillScreen.tsx` selected the derived list straight out of the Zustand
+selector —
+
+```
+const accounts = useTransactionsStore(state => activeAccounts(state.accounts));
+```
+
+`activeAccounts` calls `.filter(...)`, returning a **new array every render**, so
+the store snapshot changed every render and React looped until it threw. The two
+other forms that use `activeAccounts` avoid this by selecting the raw array and
+deriving in a memo (`TransactionForm.tsx:74`, `TransferForm.tsx:42`).
+
+**Fix** (`AddBillScreen.tsx`): select the raw `state.accounts` (stable ref), then
+`const accounts = useMemo(() => activeAccounts(allAccounts), [allAccounts])`.
+
+- Regression test: `AddBillScreen.render.test.tsx` renders the screen with the
+  real store and fails if the loop returns (empty `accounts` still loops, because
+  `[].filter()` is a fresh array).
+- Gates: `tsc` clean, `jest` 136 suites / 2443 tests all pass (was 2442 + this
+  one), release build + install `Success`.
+- Device, fresh build: Add bill opens; Payee / Type / Amount / Due date render;
+  the date picker opens and sets a date; the "Enter a payee, amount and due date"
+  validation fires. **0 FATAL/ANR for com.tracker** across many Add-bill opens
+  (before the fix it crashed on the first open).
+
+## Why the scripted run (2026-11-18) read 4/6/1
+
+| Check | Script | Corrected reading |
 |---|---|---|
-| R0 install | SKIP | `--skip-install` |
-| R1 open Tracker | PASS | app opened (after lib.sh cold-start fix, below) |
-| R2 Bills entry on Accounts | FAIL | **false fail.** Script searched `Bills & dues`; on-device the label dumps XML-escaped `Bills &amp; dues` and the row content-desc is `Bills and dues`. Entry exists (`AccountsScreen.tsx:204`). Fixed. |
-| R3 QA Pay Later 9999 | FAIL | **false fail.** Owner: account saved and visible on Accounts. It groups under CREDIT CARDS & PAY LATER, likely below the fold; a uiautomator dump only sees the visible viewport, so `has` missed it. Also the loop force-taps the Accounts tab every 3 s, which can pull the owner out of the Add-Account form mid-entry. |
-| R4 Home due banner appears | FAIL | **false fail.** Owner: QA-Bill-01 saved Due=tomorrow and the banner showed. The 180 s window elapsed while the owner was still in the add-bill form (amount + date picker is slow). Banner copy `"1 bill due — ₹…"` and content-desc `"1 bills due, …"` both match the regex. Window raised to 240 s. |
-| R5 Mark paid clears banner | PASS | real — the banner was present, owner tapped Mark paid, it cleared. |
-| R6 Undo returns banner | FAIL | **false fail.** Owner: tapped Undo in time, banner returned. Same detection/timeout class as R4. |
-| R7 Overdue section | FAIL | **false fail.** Section header renders `"Overdue (N)"` (`BillsScreen.tsx:162`), which the regex `Overdue \([0-9]+\)` matches. Owner pace: adding QA-Bill-02 Due=yesterday + navigating to Bills took longer than the 180 s window, and the loop's force-taps don't help. |
-| R8 Bill sections visible | FAIL | **false fail.** Same cause as R7 — ran 5 s after it. |
-| R9 cleanup (account removed) | PASS* | QA Pay Later 9999 reported gone. *Same off-screen caveat as R3: `has`-returns-false is the pass condition, so a still-present-but-scrolled-off account would also "pass". Owner did remove it. |
-| R10 crashes since start | PASS | 0 FATAL / 0 ANR for com.tracker. Real — depends on the phone_time fix below. |
+| R0 | SKIP | `--skip-install` |
+| R1 | PASS | app opens (after the lib.sh cold-start fix below) |
+| R2 | FAIL | **test bug.** Searched `Bills & dues`; on-device the label dumps `text="Bills &amp; dues"` (XML-escaped) and the row's `content-desc="Bills and dues"`. Entry exists (`AccountsScreen.tsx:204`). Fixed to match `Bills (and\|&amp;) dues`. |
+| R3 | FAIL | account-screen detection (see below) — **not** the AddBill crash; R3 adds an account via `AddAccountScreen`, which has no such loop. |
+| R4 | FAIL | **AddBill crash.** The due-tomorrow bill could not be created, so no Home banner ever appeared. (My earlier "banner showed, timeout" note was wrong — it relied on the owner's recollection, not the logcat.) |
+| R5 | PASS | trivial pass — banner absent stays absent when there is no bill. |
+| R6 | FAIL | **AddBill crash** — same as R4. |
+| R7 | FAIL | **AddBill crash** — the due-yesterday bill could not be created, so no Overdue section. |
+| R8 | FAIL | same as R7. |
+| R9 | PASS* | QA account "gone" by absence — weak (see R3). |
+| R10 | PASS | 0 FATAL/ANR at that point (the crash only happens on Add bill, which that run never reached because the bills were never added). |
 
-## Harness bugs found and fixed (scripts/device)
+So four reds (R4/R6/R7/R8) were one real bug — the Add-bill crash — not harness
+noise. R2 is a genuine test-string bug. R3/R9 are a real but separate harness
+limit. The earlier claim in this file and in commit `ead1709` ("no feature bug
+found") was wrong and is corrected here.
 
-1. **`lib.sh` `phone_time`** — `adb shell date '+%m-%d %H:%M:%S.000'`: the host
-   shell stripped the quotes, so the device shell saw the format split on its
-   space and toybox `date` aborted with `Max 1 argument`. The first run died at
-   R1. Fixed by quoting the whole remote command:
-   `adb shell "date '+%m-%d %H:%M:%S.000'"`. R10's logcat window depends on this.
-2. **`lib.sh` `launch`** — a cold React Native start takes >3 s; the 3 s sleep
-   then `guard` aborted with "Tracker not in front (launcher)". First run aborted
-   at R1. Sleep raised to 6 s.
-3. **`r5b.sh` R2** — ampersand search string (above). Fixed to
-   `Bills (and|&amp;) dues`.
-4. **`r5b.sh` `wait_banner`** — 180 s → 240 s to fit the owner's add-bill pace.
+## Harness fixes (scripts/device)
 
-## Known harness limits (not yet changed — need a device to re-test)
+1. **`lib.sh phone_time`** — `adb shell date '+%m-%d %H:%M:%S.000'`: host shell
+   stripped the quotes, device toybox saw the format split on its space and
+   aborted `Max 1 argument`; killed the first run at R1. Fixed by quoting the
+   whole remote command. R10's logcat window depends on this.
+2. **`lib.sh launch`** — cold React Native start takes >3 s; the 3 s sleep then
+   `guard` aborted "Tracker not in front". Raised to 6 s.
+3. **`r5b.sh` R2** — ampersand search string (above).
 
-- **Off-screen detection (R3, R9).** A dump only captures the visible viewport.
-  Accounts grouped under CREDIT CARDS & PAY LATER, or a long list, can sit below
-  the fold. A scroll-then-check would fix it, but a blind `swipe_up` during an
-  owner-action window risks disrupting the owner's own taps, so it is deferred to
-  a pass where the orchestrator can re-test interactively.
-- **Force-tap during owner windows (R3, R7, R9).** The loops tap the Accounts /
-  Bills tab every 3 s to re-check. While the owner is inside the Add-Account or
-  Add-Bill form, that tap can yank them out mid-entry. Needs a redesign that
-  checks passively and only navigates when the form is closed.
-- **R9 pass condition is weak.** "account is gone" = `has` returns false, which
-  is also what an off-screen account returns. Should confirm removal positively
-  (e.g. account count dropped), not by absence.
+Not changed (verified unnecessary): the bottom-tab taps. The tabs expose both
+`content-desc="<glyph>, Accounts"` and a plain `text="Accounts"` node; the
+existing `Accounts(, tab.*)?` pattern matches the text node, so navigation was
+never the problem. An earlier change broadening those patterns (and bumping the
+banner wait to 240 s on a wrong "timeout" theory) was reverted.
+
+## Open harness limits (separate from the crash; need an interactive re-run)
+
+- **Off-screen row detection (R3, R9).** A uiautomator dump only captures the
+  visible viewport, so an account below the fold (CREDIT CARDS & PAY LATER group)
+  reads as absent. A scroll-then-check would fix it; deferred because a blind
+  swipe during an owner-action window can disrupt the owner.
+- **R9 confirms removal by absence**, which an off-screen account also satisfies.
+
+## Still to verify live (blocked only by manual form entry, not by a bug)
+
+Creating a bill through adb is unreliable (the soft keyboard occludes the amount
+field, and BACK-to-hide vs BACK-to-navigate is ambiguous), so the live
+`Overdue (N)` / `Due soon (N)` / Home-banner node matches were not captured.
+Source confirms the shapes: banner `"N bill(s) due — …"` is one Text node
+(`DueBillsBanner.tsx:54`) and section headers are `"{title} ({count})"` one Text
+node (`BillsScreen.tsx:162`), both of which the script regexes match. Now that the
+crash is fixed, the owner (or a future interactive run) can add the two QA bills
+and confirm R4/R6/R7/R8 end to end.
 
 ## Cleanup
 
-- QA Pay Later 9999, QA-Bill-01 and QA-Bill-02 were added and removed by the
-  owner during the run (R9). No QA data created by the script itself.
-- No settings changed. No uiautomator process or `/sdcard/u.xml` left on the phone.
+No bill was saved (the adb attempts all failed validation). No QA account created
+by this session. No settings changed (beyond `svc power stayon true` to stop the
+screen sleeping over USB). No uiautomator process or `/sdcard/u.xml` left on the
+phone; pulled dumps (which held real SMS) were deleted from the scratchpad.
 
 ## Verdict
 
-Bills & dues passes on the owner's device: Accounts entry, pay-later account under
-the credit group, due-tomorrow bill → Home banner, Mark paid clears it, Undo
-restores it, due-yesterday bill → Overdue section, 0 crashes. The 6 red lines are
-harness false negatives; 4 are fixed in this commit, 3 are documented limits for a
-later interactive re-run.
+One real feature bug: the Add-bill crash, now fixed, tested and device-verified
+(0 crashes). One real test-string bug (R2) fixed. R3/R9 off-screen detection and
+the live banner/section node capture remain for an interactive re-run.

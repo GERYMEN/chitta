@@ -33,7 +33,12 @@ export function AddBillScreen() {
   const bills = useBillsStore(state => state.bills);
   const addBill = useBillsStore(state => state.addBill);
   const editBill = useBillsStore(state => state.editBill);
-  const accounts = useTransactionsStore(state => activeAccounts(state.accounts));
+  // Select the raw (stable) accounts array, then derive the active list in a
+  // memo. Filtering inside the selector returns a new array every render, which
+  // makes Zustand's snapshot change every time -> "Maximum update depth
+  // exceeded" and the screen crashes on open (see TransactionForm/TransferForm).
+  const allAccounts = useTransactionsStore(state => state.accounts);
+  const accounts = useMemo(() => activeAccounts(allAccounts), [allAccounts]);
   const existing = billId ? bills.find(b => b.id === billId) ?? null : null;
 
   const [payee, setPayee] = useState(existing?.payee ?? '');

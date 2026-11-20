@@ -11,10 +11,13 @@ Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
 GIT: branch phase/R5b-bills-dues (created from phase/R5h-sync-to-pending).
 Stay on it. Do not switch branches, do not commit.
 
-STATUS 2026-11-18: SHIPPED. Code committed a89f37d on phase/R5b-bills-dues;
-device pass done over USB (owner-assisted) — see R5b-device.md. Features all
-PASS; the 6 red script lines were harness false negatives (4 fixed, 3 open
-limits noted). This prompt is kept as the build-phase record.
+STATUS 2026-11-21: SHIPPED + 1 device bug fixed. Code committed a89f37d on
+phase/R5b-bills-dues. USB debug found AddBillScreen crashed on open (Zustand
+selector returned a new array each render -> "Maximum update depth exceeded");
+fixed (raw accounts + useMemo) with a regression test, gates green, verified on
+device. See R5b-device.md. (An earlier note calling the script's red lines
+"harness false negatives" was wrong — R4/R6/R7/R8 failed because of this crash.)
+This prompt is kept as the build-phase record.
 
 PHASE R5b — Bills & dues (owner 2026-11-15: widened scope, proposal D1).
 CODE + TESTS + GATES + DEVICE SCRIPT ONLY. NO DEVICE WORK (no adb run) —

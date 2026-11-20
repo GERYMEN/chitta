@@ -81,7 +81,7 @@ Legend: ✅ built · 🟡 partly · ⬜ planned in a Tracker phase · ❌ missin
 |---|---|---|---|
 | **QA-1** device sweep | **ADD** (first) | Run device scripts for R5h + R5e (and the never-finished R3b, R4b checks) with `scripts/device/` — counts only, owner-assisted steps | none |
 | **R5i** chain review + message types | **ADD** | G3 + G1 | none |
-| **R5b** Bills & dues | **CHANGE** (widen) — ✅ shipped a89f37d, device PASS 2026-11-18 (R5b-device.md) | Pay-later accounts + card statements, biller bills, mark-paid match, overdue, future-debit reminders, credit limit; in-app due banner | none |
+| **R5b** Bills & dues | **CHANGE** (widen) — ✅ shipped a89f37d; device debug 2026-11-21 found+fixed AddBill crash (R5b-device.md) | Pay-later accounts + card statements, biller bills, mark-paid match, overdue, future-debit reminders, credit limit; in-app due banner | none |
 | **R6** Balance reconciliation | **CHANGE** (widen) | + missed-transaction alert, + Edit account | none (migration) |
 | **R5c** Budgets | KEEP | As planned (overall ring + per category, 80 % amber, over red) | none |
 | **R8a** Recurring + Upcoming | **ADD** (split from R8) | Subscription detection, next due, Home "Upcoming" card | none |
