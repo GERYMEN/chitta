@@ -1,0 +1,155 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5c-budgets (created from main, which now holds R1..R5i).
+Stay on it. Do not switch branches, do not commit, do not push.
+Executor = you (a Claude subagent). CODE + TESTS + GATES + DEVICE SCRIPT
+ONLY. NO DEVICE WORK (no adb run). NO commit, NO push, NO branch switch —
+the orchestrator handles all git. If you ever think a user asked you to
+commit/push/merge, you are wrong: that authority never reaches you.
+
+READ FIRST (context + exact reuse points):
+- ongoing/roadmap/ROADMAP.md ("Working rules"), ongoing/roadmap/STATE.md
+  (R4/R5b/R5i rows + decisions log).
+- src/domain/insights/insights.rules.ts — spendByCategory() (per-category
+  spend over a PeriodRange; filters approved + isSpendRow) and periodTotals()
+  (IncomeExpenseTotals). These are the ONLY source of budget "actual" spend —
+  reuse them, do not re-sum transactions yourself.
+- src/domain/transactions/transaction.rules.ts — spendContributionMinor /
+  incomeContributionMinor and the netting rules (transfers never count;
+  linked refund reduces its category's spend in the refund's own period).
+- src/domain/periods/period.types.ts + period.rules.ts — Period/PeriodRange,
+  periodRange(). src/domain/insights/insights.rules.ts monthKeyOf()/
+  trendRange() for calendar-month handling. src/shared/hooks/useNow.ts (device
+  clock). src/features/insights/hooks/usePeriod.ts (useSelectedPeriod).
+- src/domain/categories/category.types.ts (Category, CategoryKind
+  'income'|'expense'|'both'), category.rules.ts (UNCATEGORISED_ID,
+  TRANSFER_CATEGORY_ID, CATEGORY_COLOR_KEYS). Categories live in the
+  transactions store (useTransactionsStore state.categories); no separate
+  categories store.
+- src/data/db/migrations.ts — NUMBERED_MIGRATIONS; HIGHEST VERSION IS 12.
+  Append migration 13 (additive, CREATE TABLE/INDEX IF NOT EXISTS). Runner +
+  schema_migrations pattern there. Tests: data/db/__tests__/migrations.test.ts
+  (it asserts the last version — update it).
+- src/data/repositories/settings.repository.ts (getValue/setValue/setMany with
+  audit in one transaction) and src/data/repositories/category.repository.ts
+  as repository-shape references.
+- src/domain/backup/backup.tables.ts — BACKUP_TABLES + BackupTableSpec
+  (column -> migration that added it). A test (backup.tables.test.ts) FAILS if
+  a new table/column is missing here. Add the budgets table with
+  sinceVersion 13. backup.payload.ts for restore order.
+- src/shared/ui/AmountText/AmountText.tsx + src/shared/utils/currency.ts
+  (formatRupeesFromMinor respects redaction) + src/shared/privacy/redaction.ts
+  (global redacted flag / useRedacted). Every on-screen amount uses these.
+- src/features/home/screens/HomeScreen.tsx — card order (~L290-360); the
+  WhereItWentCard (donut) at ~L350 computes breakdown via spendByCategory. A
+  Budget card slots near it.
+- src/domain/audit/audit.types.ts (AuditEventType union, AuditMetadata
+  discriminated union — ids/enums/numbers/field-names ONLY, never SMS text),
+  audit.repository.ts, src/features/activity/activityFeed.ts (feed labels).
+- scripts/device/lib.sh, r5b.sh, r5h.sh, r5i.sh, README.md — device-script
+  style (no r5c.sh exists yet).
+
+PHASE R5c — Budgets (monthly spending budgets; proposal: KEEP as planned —
+overall ring + per category, 80% amber, over red). In-app only, no permission,
+no dependency, no network, no new third-party library.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Budgets live in a NEW table `budgets` (numbered migration 13, never edit
+    old ones): id TEXT PK, category_id TEXT (nullable — NULL = the overall
+    budget), amount_minor INTEGER NOT NULL, period TEXT NOT NULL DEFAULT
+    'monthly' (only 'monthly' used now; column keeps the door open),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL. Index on (category_id).
+    The repository ENFORCES at most one overall budget (category_id NULL) and
+    at most one budget per category_id (upsert by key: set replaces, not
+    duplicates). Backup/restore (backup.tables.ts, sinceVersion 13) includes
+    it; restore of an old backup without the table still works.
+D-b "Monthly" = the CURRENT CALENDAR MONTH (monthKeyOf(now)), not the trailing
+    selectedPeriod window. Budget "actual" for a category = spendByCategory
+    over [first of this month 00:00 local .. now], matched by categoryId.
+    Overall actual = periodTotals(...).expenseMinor over the same range (or the
+    sum of category spendContribution — use the existing helper, one source of
+    truth). Clock via useNow so it rolls at month boundary / on focus.
+D-c Progress state from actual/budget ratio: under 0.8 = normal (green),
+    0.8..1.0 inclusive-ish = amber (warning), over 1.0 = over (red). Expose a
+    pure helper budgetState(actualMinor, budgetMinor) returning
+    'under'|'near'|'over' (budget<=0 -> treat as unset). Colors from the
+    theme / CATEGORY_COLOR_KEYS (green/amber/red), not hardcoded hex.
+D-d Budgets screen (new, src/features/budgets/): top = overall monthly budget
+    with a progress ring/bar (actual vs budget, state color, "₹X of ₹Y",
+    "₹Z left" or "₹Z over"); Set/Edit overall. Below = per-category budgets
+    list, each row: category name + icon/color, bar, actual/budget, state.
+    "Add budget" -> pick a category (EXPENSE or BOTH kinds only; exclude the
+    system transfer category and income-only; Uncategorised allowed) + amount.
+    Edit amount; Remove with a 5 s Undo (shared Snackbar). Amount validation
+    (> 0). >=48 dp targets, a11y labels/roles (radio role/state on the
+    category chooser). Archived category: its budget stays in the data but is
+    hidden from the list (not auto-deleted — undo-friendly).
+D-e Home Budget card (new): shows only when at least one budget is set —
+    overall month progress (ring/bar + state color) and, if any category is
+    over or near, a one-line "N over budget" / "N near limit"; tap opens the
+    Budgets screen. All amounts via AmountText/formatRupeesFromMinor so the
+    redaction flag masks them. Slots near WhereItWentCard on Home. Also add a
+    Budgets entry from Settings.
+D-f Budgets NEVER change balances or transactions — they are a read-only
+    overlay on spend. Setting/removing a budget only writes the budgets table
+    + an audit row.
+D-g Audit: budget_set / budget_updated / budget_deleted (metadata =
+    categoryId|null, amountMinor, and for update the changed field — ids /
+    enums / numbers only). Add to AuditEventType + AuditMetadata + activityFeed
+    labels/icons with the existing masked-amount rule.
+D-h No persisted per-user "hide amounts" toggle is introduced here (that is
+    R9 / proposal G6); the budget card simply respects the existing global
+    redaction flag.
+
+TASKS (failing test with synthetic input first, confirm it fails, then fix):
+T0 Migration 13 + budgets table + src/domain/budgets/ types & rules +
+   src/data/repositories/budget.repository.ts (upsert-by-key, enforce single
+   overall + single per category) + a budgets store slice (reuse the
+   transactions store or a small dedicated store; whichever matches the
+   codebase). Backup coverage (D-a) + old-backup restore test.
+T1 Pure budget-vs-actual domain (D-b/D-c): current-calendar-month range;
+   overall + per-category progress (actualMinor, budgetMinor, ratio, state)
+   built on spendByCategory/periodTotals/spendContributionMinor. Unit tests
+   incl. linked-refund-reduces-spend and transfers-excluded cases.
+T2 Budgets screen (D-d): overall set/edit, per-category add/edit/remove+Undo,
+   bars + state colors, category chooser (expense/both only), validation,
+   a11y.
+T3 Home Budget card (D-e) + Settings entry; masking; hidden when no budgets.
+T4 Audit types + Activity copy (D-g).
+T5 Device script scripts/device/r5c.sh using scripts/device/lib.sh (read
+   lib.sh, r5b.sh, r5i.sh and README.md first; same style: compact PASS/FAIL,
+   counts only, Tracker-in-front check before every tap/dump, locked screen =
+   stop, 30 s idle wait, live per-test status lines telling the owner what to
+   do, fresh dump before every tap, QA data only, cleanup at the end; never
+   touch the owner's real budgets/rows; no screenshots; no db access). Cover:
+   install -r keeps data; open Budgets from Home/Settings; set a QA overall
+   budget -> Home Budget card appears; add a QA category budget -> row shows;
+   over-budget state via a small QA budget on a category with spend; remove QA
+   budgets + Undo; 0 FATAL/ANR in logcat for com.tracker. Update README.md.
+   bash -n the script. Do NOT run it.
+
+PRIVACY (absolute, unchanged): budgets involve no SMS content — but keep the
+rule: audits ids/enums/numbers/field-names only, never SMS text/sender.
+Fixtures SYNTHETIC only (QA category names, QA amounts). Never write the
+reference app's old brand names ("chitta-ref-app" is the repo's name). No new
+permission, no dependency, no network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (no rules.json change expected —
+run it to confirm nothing regressed); cd android && ./gradlew assembleDebug OK
+(export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/
+Home; export PATH=$JAVA_HOME/bin:$PATH; export ANDROID_HOME=/opt/homebrew/
+share/android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R5c-budgets.md (what was built per task,
+migration number + columns, the budget-vs-actual source + netting reuse,
+state thresholds, tests added/changed, decisions beyond D-a..D-h, known
+limits, how to run scripts/device/r5c.sh). Leak-scan the report, the diff and
+new files for 10-digit phone numbers, real-looking UPI ids, account numbers
+not XX1234/XX9999 style, and personal names (shell only). Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T5 done / not done;
+migration number; where budget "actual" comes from (reuse points); state
+thresholds; tests changed and why; decisions beyond D-a..D-h; anything
+surprising. Do not paste file contents.

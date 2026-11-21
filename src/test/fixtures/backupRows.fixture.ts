@@ -153,6 +153,25 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       updated_at: T1,
     },
   ],
+  // R5c: an overall budget + one per-category budget (ids / enum / amount only).
+  budgets: [
+    {
+      id: 'qa-budget-overall',
+      category_id: null,
+      amount_minor: 5000000,
+      period: 'monthly',
+      created_at: T1,
+      updated_at: T1,
+    },
+    {
+      id: 'qa-budget-food',
+      category_id: 'cat-food',
+      amount_minor: 1500000,
+      period: 'monthly',
+      created_at: T1,
+      updated_at: T1,
+    },
+  ],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

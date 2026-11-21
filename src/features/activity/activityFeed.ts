@@ -123,6 +123,9 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   chain_suggested: 'link-variant',
   chain_accepted: 'link-variant',
   chain_dismissed: 'link-variant-off',
+  budget_set: 'gauge',
+  budget_updated: 'gauge',
+  budget_deleted: 'gauge-empty',
 };
 
 /** R5i (G3): the relation a chain suggestion proposes (for Activity sentences). */
@@ -756,6 +759,31 @@ export function describeActivity(
       sentence = `You dismissed a rule link for ${what}`;
       impact = { text: 'Kept as separate items', tone: 'neutral' };
       break;
+    case 'budget_set':
+    case 'budget_updated':
+    case 'budget_deleted': {
+      // R5c (D-g): the budgeted scope — "overall" or a category name. The
+      // amount follows the masked-amount rule; the audit never stores a name.
+      const md =
+        event.metadata?.kind === 'budget_set' ||
+        event.metadata?.kind === 'budget_updated' ||
+        event.metadata?.kind === 'budget_deleted'
+          ? event.metadata
+          : null;
+      const scope = md && md.categoryId === null ? 'overall' : `the ${categoryName}`;
+      const amount = md ? amountLabel(md.amountMinor, show) : MASKED_AMOUNT;
+      if (event.eventType === 'budget_deleted') {
+        sentence = `You removed ${scope} budget`;
+        impact = { text: 'No longer tracked', tone: 'neutral' };
+      } else if (event.eventType === 'budget_updated') {
+        sentence = `You changed ${scope} budget to ${amount}`;
+        impact = { text: 'Monthly spending cap', tone: 'neutral' };
+      } else {
+        sentence = `You set ${scope} budget to ${amount}`;
+        impact = { text: 'Monthly spending cap', tone: 'neutral' };
+      }
+      break;
+    }
     default:
       sentence = 'Something changed';
   }

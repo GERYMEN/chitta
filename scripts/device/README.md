@@ -184,6 +184,50 @@ then resume with `--skip-install`.
 - R5 uses `am force-stop` (not clear-data) to prove persistence; your rows are
   untouched.
 
+## R5c — Budgets
+
+```
+scripts/device/r5c.sh [--skip-install]
+```
+
+Owner-assisted: the script never sets, edits or removes a budget by itself. It
+asks **you** to add a QA overall budget and a QA category budget, and to tap
+**Remove / Undo**; the script only checks the Home Budget card, the Budgets
+screen labels and the fixed state copy ("On track" / "Near limit" / "Over
+budget"). Budgets are a read-only overlay — nothing here changes a balance or a
+transaction. QA data only (a QA overall cap and a QA category budget set small
+on purpose) — remove both at the end.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | No Budget card on Home yet | card absent (clean start) |
+| R3 | **You** open Settings | a "Budgets" entry is listed |
+| R4 | **You** set a QA overall budget and Save | the Budgets screen shows "Overall monthly budget" |
+| R5 | Back to Home | the Home Budget card appears |
+| R6 | **You** add a QA category budget (small, on a category with spend) | the row reads "Over budget" (or near / on-track) |
+| R7 | Back to Home | the card reflects the over/near count |
+| R8 | **You** Remove the QA category budget, then tap **Undo**, then Remove again | the "Budget removed" Undo snackbar shows |
+| R9 | **You** remove the QA budgets | the Budget card is gone |
+| R10 | Crash check since the start | 0 FATAL/ANR |
+
+During the run the script prints `>>>` lines telling you what to set or tap;
+you have ~3 minutes for each. Switch apps any time to stop it safely, then
+resume with `--skip-install`. If you already keep real budgets on this phone,
+R2/R9 are skipped (the script never touches your own budgets — add and remove
+only the QA ones).
+
+### Known limits
+
+- The Budgets screen has no deep link, so **you** navigate to it (Settings →
+  Budgets, or the Home Budget card once a budget is set).
+- "Over budget" in R6 needs a category that already has spend **this calendar
+  month**; on a quiet month set the QA budget below an existing category's
+  monthly spend, or accept the near / on-track pass.
+- The "Budget removed" snackbar is brief (5 s); if the script misses it, R8 is
+  a SKIP — confirm by eye that Undo brings the row back.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

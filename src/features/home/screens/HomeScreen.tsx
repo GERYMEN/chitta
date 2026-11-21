@@ -31,6 +31,7 @@ import { greetingFor } from '../../profile/utils/greeting';
 import { ProfileSettingsSheet } from '../../profile/components/ProfileSettingsSheet';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 import { DueBillsBanner } from '../../bills/components/DueBillsBanner';
+import { BudgetCard } from '../../budgets/components/BudgetCard';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
 import {
   periodTotals,
@@ -347,6 +348,8 @@ export function HomeScreen() {
         ))}
       </View>
 
+      <BudgetCard onPress={() => navigation.navigate('Budgets')} />
+
       <WhereItWentCard
         rows={breakdown}
         categories={categories}
@@ -404,6 +407,10 @@ export function HomeScreen() {
         onOpenBills={() => {
           setSettingsOpen(false);
           navigation.navigate('Bills');
+        }}
+        onOpenBudgets={() => {
+          setSettingsOpen(false);
+          navigation.navigate('Budgets');
         }}
         onScanGap={(window, onCompleted) => {
           setSettingsOpen(false);

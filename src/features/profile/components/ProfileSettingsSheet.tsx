@@ -34,6 +34,8 @@ export interface ProfileSettingsSheetProps {
   onOpenCategories: () => void;
   /** R5b: open Bills & dues. */
   onOpenBills?: () => void;
+  /** R5c: open Budgets. */
+  onOpenBudgets?: () => void;
   /**
    * R4b: start moved earlier and confirmed — scan only the gap, then call
    * `onCompleted` (saves the new start) if the scan finished.
@@ -62,6 +64,7 @@ export function ProfileSettingsSheet({
   onOpenActivity,
   onOpenCategories,
   onOpenBills,
+  onOpenBudgets,
   onScanGap,
   onReplayTour,
   onOpenBackup,
@@ -228,6 +231,23 @@ export function ProfileSettingsSheet({
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Bills & dues</Text>
             <Text style={styles.activityCaption}>Card statements, bills and reminders</Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      {onOpenBudgets ? (
+        <Pressable
+          onPress={onOpenBudgets}
+          accessibilityRole="button"
+          accessibilityLabel="Budgets"
+          testID="settings-budgets-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="gauge" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Budgets</Text>
+            <Text style={styles.activityCaption}>Monthly spending caps, overall and by category</Text>
           </View>
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>

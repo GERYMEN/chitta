@@ -78,7 +78,15 @@ export type AuditEventType =
    */
   | 'chain_suggested'
   | 'chain_accepted'
-  | 'chain_dismissed';
+  | 'chain_dismissed'
+  /**
+   * R5c (D-g): a budget set / its amount updated / removed. categoryId (null =
+   * the overall budget), the amount and, for an update, the changed field —
+   * ids / enums / numbers only. Never a category name, SMS text or a sender.
+   */
+  | 'budget_set'
+  | 'budget_updated'
+  | 'budget_deleted';
 
 export type AuditActor = 'system' | 'user';
 
@@ -244,7 +252,15 @@ export type AuditMetadata =
    */
   | { kind: 'chain_suggested'; childId: string; parentId: string | null; chainKind: ChainSuggestionKind }
   | { kind: 'chain_accepted'; childId: string; parentId: string | null; chainKind: ChainSuggestionKind }
-  | { kind: 'chain_dismissed'; childId: string; chainKind: ChainSuggestionKind };
+  | { kind: 'chain_dismissed'; childId: string; chainKind: ChainSuggestionKind }
+  /**
+   * R5c (D-g): budget events — the budgeted category id (null = overall), the
+   * amount in paise and, for an update, the changed field name only. Never a
+   * category name, SMS text or a sender number.
+   */
+  | { kind: 'budget_set'; categoryId: string | null; amountMinor: number }
+  | { kind: 'budget_updated'; categoryId: string | null; amountMinor: number; fields: string[] }
+  | { kind: 'budget_deleted'; categoryId: string | null; amountMinor: number };
 
 /** R5: counts of one reader run. */
 export interface SmsRunCounts {

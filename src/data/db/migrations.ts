@@ -301,6 +301,32 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'CREATE INDEX IF NOT EXISTS ix_chain_suggestions_status_child ON chain_suggestions(status, child_id)',
     ],
   },
+  {
+    // R5c budgets. One new table, no existing row is rewritten. A budget is a
+    // monthly spending cap and a READ-ONLY overlay on spend — it NEVER touches
+    // balances or transactions. IDS + AN ENUM PERIOD + AN AMOUNT ONLY:
+    //  - category_id: NULL = the single overall budget; otherwise the category
+    //    it caps. The repository enforces at most one overall budget and at
+    //    most one budget per category (upsert by key: a set replaces, never
+    //    duplicates — SQLite treats NULLs as distinct in a UNIQUE index, so the
+    //    singleness is enforced in TS, not by the index);
+    //  - amount_minor: the cap in paise;
+    //  - period: only 'monthly' is used now; the column keeps the door open.
+    // Backed up (R4e); a restore of an older backup without the table still
+    // works (the table is created by this migration on the current phone).
+    version: 13,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS budgets (
+    id TEXT PRIMARY KEY,
+    category_id TEXT,
+    amount_minor INTEGER NOT NULL,
+    period TEXT NOT NULL DEFAULT 'monthly',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_budgets_category ON budgets(category_id)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

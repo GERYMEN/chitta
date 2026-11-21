@@ -239,6 +239,23 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       updated_at: 12,
     },
   },
+  {
+    // R5c: budgets (monthly spending caps). A READ-ONLY overlay on spend —
+    // ids, an enum period and an amount only. `category_id` is NULL for the
+    // overall budget, else the category it caps (references `categories`, so it
+    // restores after it). A restore of an older backup without this table still
+    // works (the table is created by migration 13 on the phone).
+    name: 'budgets',
+    sinceVersion: 13,
+    columns: {
+      id: 13,
+      category_id: 13,
+      amount_minor: 13,
+      period: 13,
+      created_at: 13,
+      updated_at: 13,
+    },
+  },
 ];
 
 /**

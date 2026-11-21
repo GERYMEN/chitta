@@ -27,6 +27,8 @@ export const Routes = {
   Bills: 'Bills',
   AddBill: 'AddBill',
   EditBill: 'EditBill',
+  Budgets: 'Budgets',
+  SetBudget: 'SetBudget',
 } as const;
 
 /**
@@ -87,4 +89,13 @@ export type RootStackParamList = {
   AddBill: undefined;
   /** R5b: edit a manual bill (id only). */
   EditBill: { billId: string };
+  /** R5c: Budgets (Home card + Settings entry). */
+  Budgets: undefined;
+  /**
+   * R5c: set/edit the overall budget, or add/edit a per-category budget.
+   * `scope: 'overall'` edits the single overall budget; `scope: 'category'`
+   * with a categoryId edits that category's amount, without one adds a budget
+   * (category then amount). Ids only — never a name.
+   */
+  SetBudget: { scope: 'overall' } | { scope: 'category'; categoryId?: string };
 };

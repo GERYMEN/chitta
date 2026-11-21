@@ -325,7 +325,7 @@ describe('runMigrations versioning', () => {
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
   });
 
-  it('R5i: migration 12 adds the chain_suggestions table (ids/enums only), rewrites nothing, and is the last migration', () => {
+  it('R5i: migration 12 adds the chain_suggestions table (ids/enums only), rewrites nothing', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m12 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 12);
     expect(m12).toBeDefined();
@@ -337,7 +337,35 @@ describe('runMigrations versioning', () => {
     // No existing row is rewritten, and no SMS body / sender column is stored.
     expect(joined).not.toMatch(/\bUPDATE\b|\bALTER\b|\bDELETE\b|\bDROP\b/);
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(12);
+  });
+
+  it('R5c: migration 13 adds the budgets table (ids/enum/amount only), rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m13 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 13);
+    expect(m13).toBeDefined();
+    const joined = m13.statements
+      .map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql))
+      .join('\n');
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS budgets/);
+    expect(joined).toMatch(/category_id TEXT/);
+    expect(joined).toMatch(/amount_minor INTEGER NOT NULL/);
+    expect(joined).toMatch(/period TEXT NOT NULL DEFAULT 'monthly'/);
+    expect(joined).toMatch(/ix_budgets_category/);
+    // No existing row is rewritten, and no SMS body / sender / payee column.
+    expect(joined).not.toMatch(/\bUPDATE\b|\bALTER\b|\bDELETE\b|\bDROP\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b|\bpayee\b|\bmerchant\b/i);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(13);
+  });
+
+  it('R5c: runs migration 13 exactly once and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+    const { runMigrations } = require('../connection');
+    await runMigrations();
+    await runMigrations();
+    expect(executed.filter(sql => /CREATE TABLE IF NOT EXISTS budgets/.test(sql))).toHaveLength(1);
+    expect(appliedVersions.has(13)).toBe(true);
   });
 
   it('R5e: runs migration 10 exactly once and records it', async () => {

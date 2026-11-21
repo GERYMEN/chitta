@@ -236,9 +236,8 @@ describeSql('backup repository (real SQLite)', () => {
     );
   });
 
-  it('N-1 → N specifically (R5i): a v11 backup has no chain_suggestions table; it restores empty, other tables intact', async () => {
-    const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(11);
+  it('R5i: a v11 backup has no chain_suggestions table; it restores empty, other tables intact', async () => {
+    const version = 11;
     const tables = rowsAt(version);
     expect(tables.chain_suggestions).toBeUndefined();
     const payload = parseBackupJson(
@@ -252,6 +251,36 @@ describeSql('backup repository (real SQLite)', () => {
     expect(target.rows('chain_suggestions')).toEqual([]);
     // Pre-R5i tables (bills, v11) still round-trip.
     expect(target.rows('bills')).toEqual(FULL_BACKUP_ROWS.bills);
+  });
+
+  it('N-1 → N specifically (R5c): a v12 backup has no budgets table; it restores empty, other tables intact', async () => {
+    const version = CURRENT_SCHEMA_VERSION - 1;
+    expect(version).toBe(12);
+    const tables = rowsAt(version);
+    expect(tables.budgets).toBeUndefined();
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
+    // D-a: an old backup without the table still restores; the table is empty.
+    expect(target.rows('budgets')).toEqual([]);
+    // Pre-R5c tables (chain_suggestions, v12) still round-trip.
+    expect(target.rows('chain_suggestions')).toEqual(FULL_BACKUP_ROWS.chain_suggestions);
+  });
+
+  it('R5c: a current backup carries the budgets rows exactly', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    expect(tables.budgets.length).toBeGreaterThan(0);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('budgets')).toEqual(FULL_BACKUP_ROWS.budgets);
   });
 
   it('R5i: a current backup carries the chain_suggestions rows exactly', async () => {
