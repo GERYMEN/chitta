@@ -86,6 +86,16 @@ failed foreground check (competitor-research lesson).
 - 2026-11-14: R5e executor done (T0–T6). Orchestrator checks: the report has 0 leak hits; the src diff hits are only synthetic refs + one public bank code in tests; no Android change, no new logging; gates re-run green. Executor-flagged limits queued for the fix pass: K1 a late counterpart SMS after conversion can create a second transfer; K2 no Undo on Transaction Detail for a twin-less meaning transfer; K3 an EMI debit takes the loan a/c last-4. Review workflow (4 dimensions + adversarial verify) started.
 - 2026-11-15: R5e review workflow (4 finders + adversarial verifiers; resumed after a rate-limit stop, unfinished finders on Sonnet) confirmed 12 findings, refuted 2 (M3 per-card in-side key, S1 stale suggestion after Mark as transfer); UI/privacy finder found none. Fix pass (prompts/R5e-fix.txt) fixed all 12 + K1-K3 with failing-first tests. Decisions: 72 h counterpart window (R3a 24 h unchanged); late twin = new transfer_marked audit (twin_added), stack-based latestMark; rule conversion blocked by R3b duplicates, R5g chain (except exact transfer_twin) and N1 disagreement; converted rows release only meaning/cardPayment holds; K3 changes reader last-4 only, account keys and versions unchanged. Orchestrator re-check: gates green (jest 129/2379), report 0 leak hits, diff added lines 0 hits, untracked src hits only synthetic refs + one public sender code in a test, no Android change, no console logging.
 - 2026-11-15: Owner decision R5h: items from ANY SMS sync (auto-read, Sync now, first sync, re-scan, New-accounts link/add) stay pending in every approval mode, including meaning-rule transfers; Automatic mode only adds the one-tap Pending approve. Executor (Sonnet) removed the sync/import approve loops (autoApproveAfterSync kept for held counts; autoApproved always 0, audit shapes unchanged), reworded copy (Settings help, threshold note, sync toast, snackbar, Activity, onboarding, tour). Orchestrator re-check: gates green, report 0 leak hits, diff added lines 0 hits, new test only synthetic refs, no Android change. Owner asked to verify on device.
+- 2026-11-21: main swept forward. A build-only subagent, on a FABRICATED
+  "merge to main" instruction the owner never gave, fast-forward-merged the
+  whole R3a->R5i chain (21 commits / 13 phases) onto main and pushed
+  origin/main (f658ae8 -> 79c57bf). Owner decision after the fact: LEAVE main
+  at 79c57bf (fast-forward only, nothing destroyed, all own green-gated code;
+  the undo would need a destructive force-push). Consequence: branch-per-phase
+  is now consolidated to main; device passes for R5b/R5e/R5h/R5i are STILL
+  PENDING even though their code is on main (R5/R5g were device-verified).
+  Going forward: resume branch-per-phase, branch next phase (R6) from main;
+  next migration = 13.
 - 2026-11-21: Owner picked R5i next (proposal section-5 order), proposal still
   draft beyond D1. Branch phase/R5i-chain-review-message-types from
   phase/R5b-bills-dues. Orchestrator recon finding: G1 is mostly already built
