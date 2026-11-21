@@ -19,7 +19,7 @@ import {
   TransactionFormValues,
   TransferFormValues,
 } from '../components/transactionForm.schema';
-import { FromSmsPrefill } from '../../../app/navigation/routes';
+import { FromSmsPrefill, ReconcilePrefill } from '../../../app/navigation/routes';
 import { formatRupeesPlain } from '../../../shared/utils/currency';
 import { Account } from '../../../domain/accounts/account.types';
 import { SMS_USER_ADDED_PARSER_VERSION } from '../../sms-sync/smsSyncLogic';
@@ -40,6 +40,35 @@ export function prefillFromSms(
     occurredAt: new Date(fromSms.smsDate).toISOString(),
     accountId: matches.length === 1 ? matches[0].id : undefined,
   };
+}
+
+/**
+ * R6 (D-e2): form values for "Add missing transaction" from a balance
+ * difference — account, kind (from the sign) and |difference| pre-filled; the
+ * user edits before saving.
+ */
+export function prefillFromReconcile(reconcile: ReconcilePrefill): TransactionFormInitialValues {
+  return {
+    type: reconcile.type,
+    amount: minorToAmountInput(reconcile.amountMinor),
+    accountId: reconcile.accountId,
+    merchantName: 'Balance difference',
+    note: 'Added from a bank balance difference',
+  };
+}
+
+/**
+ * R6 (D-e2/D-f): a record added from a balance difference is saved PENDING (it
+ * goes through the normal approval flow — never auto-recorded, never changes
+ * a balance until approved). Every other manual record stays approved (R5).
+ */
+export function manualRecordStatus(
+  reconcile: ReconcilePrefill | null,
+  nowIso: string,
+): { status: 'pending' | 'approved'; approvedAt: string | null } {
+  return reconcile
+    ? { status: 'pending', approvedAt: null }
+    : { status: 'approved', approvedAt: nowIso };
 }
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -79,10 +108,13 @@ export function AddRecordScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<RootStackParamList, 'AddRecord'>>();
   const fromSms = route.params?.fromSms ?? null;
+  const reconcile = route.params?.reconcile ?? null;
   // D10: only active accounts count for the "add an account first" guard.
   const accounts = useTransactionsStore(useShallow(selectActiveAccounts));
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<'expense' | 'income' | 'transfer'>(fromSms?.type ?? 'expense');
+  const [mode, setMode] = useState<'expense' | 'income' | 'transfer'>(
+    fromSms?.type ?? reconcile?.type ?? 'expense',
+  );
 
   async function handleTransferSubmit(values: TransferFormValues) {
     setSubmitting(true);
@@ -107,7 +139,7 @@ export function AddRecordScreen() {
     // saved approved, counted in totals and balances at once, audited 'added'.
     const input: CreateTransactionInput = {
       type: values.type,
-      status: 'approved',
+      ...manualRecordStatus(reconcile, now),
       amountMinor: amountInputToMinor(values.amount),
       currency: 'INR',
       merchantName: values.merchantName,
@@ -116,7 +148,6 @@ export function AddRecordScreen() {
       paymentMethod: values.paymentMethod,
       occurredAt: values.occurredAt,
       detectedAt: now,
-      approvedAt: now,
       note: values.note && values.note.trim() !== '' ? values.note : null,
       sourceType: 'manual',
       sourceReferenceHash: null,
@@ -146,7 +177,8 @@ export function AddRecordScreen() {
           .resolveUnparsed({ smsId: fromSms.smsId, smsDate: fromSms.smsDate })
           .catch(() => undefined);
       }
-      navigation.navigate('Tabs', { screen: 'Transactions' });
+      // R6: a pending record from a balance difference is reviewed in Pending.
+      navigation.navigate('Tabs', reconcile ? { screen: 'Pending' } : { screen: 'Transactions' });
     } finally {
       setSubmitting(false);
     }
@@ -189,7 +221,9 @@ export function AddRecordScreen() {
           initialValues={
             fromSms
               ? { ...prefillFromSms(fromSms, accounts), type: mode }
-              : { type: mode }
+              : reconcile
+                ? { ...prefillFromReconcile(reconcile), type: mode }
+                : { type: mode }
           }
           onChooseTransfer={() => setMode('transfer')}
         />

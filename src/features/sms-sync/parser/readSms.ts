@@ -179,7 +179,7 @@ export interface ParsedSmsTransaction {
   /** R5g item 17: 'Unknown' merchant is expected for this template. */
   setNoPos?: boolean;
   recurring?: boolean;
-  /** R5g: the account balance the SMS reported (R6 input). */
+  /** R5g/R6: the account balance the SMS reported (stored as the account's snapshot). */
   balanceMinor?: number;
   /** R5g item 21: chaining rule of the template (sync looks for a parent). */
   chain?: RuleChainInfo;
@@ -835,6 +835,7 @@ function buildTransaction(
   const salary = label === 'txn_credit' && hasSalaryToken(body);
   const bankCanonical = account.bankCanonical ?? bankCanonicalFor(body, sender);
   const amountMinor = bound.amount.minor;
+  const balanceMinor = firstAmount(findAmounts(body), 'balance');
   const confidenceScore = scoreConfidence({
     sender,
     bound,
@@ -869,6 +870,9 @@ function buildTransaction(
     ...(account.moneyHint ? { moneyHint: account.moneyHint } : {}),
     ...(account.counterpartyInstitution ? { counterpartyInstitution: account.counterpartyInstitution } : {}),
     legacyKey: normalizeAccountKeyV1(msg.body ?? ''),
+    // R6: the "Avl Bal" figure the SMS reported (a number only — the text is
+    // never kept). Rule-read rows set the same field from `account_balance`.
+    ...(balanceMinor != null ? { balanceMinor } : {}),
   };
 }
 

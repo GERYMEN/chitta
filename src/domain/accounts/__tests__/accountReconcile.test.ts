@@ -1,0 +1,126 @@
+/** R6 — pure reconcile helper. Synthetic numbers only. */
+import {
+  reconcileBalance,
+  isDifferenceDismissed,
+  differenceDirection,
+  prefillForDifference,
+  formatAsOf,
+} from '../accountReconcile';
+import { calculateBalance } from '../account.rules';
+import { Account } from '../account.types';
+
+type Snap = Pick<
+  Account,
+  | 'type'
+  | 'openingBalanceMinor'
+  | 'balanceAnchorMinor'
+  | 'balanceAnchorAt'
+  | 'smsBalanceMinor'
+  | 'smsBalanceAt'
+  | 'smsBalanceDismissedAt'
+>;
+
+const SMS_AT = '2026-11-10T10:00:00.000Z';
+const base: Snap = {
+  type: 'bank',
+  openingBalanceMinor: 100000,
+  balanceAnchorMinor: null,
+  balanceAnchorAt: null,
+  smsBalanceMinor: 90000,
+  smsBalanceAt: SMS_AT,
+  smsBalanceDismissedAt: null,
+};
+const approved = (type: 'income' | 'expense', amountMinor: number, occurredAt = '2026-11-01T00:00:00.000Z') => ({
+  status: 'approved' as const,
+  type,
+  amountMinor,
+  accountId: 'acc-1',
+  occurredAt,
+});
+
+describe('reconcileBalance', () => {
+  it('returns null when there is no snapshot', () => {
+    expect(reconcileBalance({ ...base, smsBalanceMinor: null, smsBalanceAt: null }, [], 'acc-1')).toBeNull();
+    expect(reconcileBalance({ ...base, smsBalanceMinor: undefined, smsBalanceAt: undefined }, [], 'acc-1')).toBeNull();
+  });
+
+  it('positive diff: tracked is higher than the bank', () => {
+    const r = reconcileBalance(base, [], 'acc-1');
+    expect(r).toEqual({ trackedMinor: 100000, bankMinor: 90000, diffMinor: 10000, asOf: SMS_AT });
+    expect(differenceDirection(r!.diffMinor)).toBe('higher');
+  });
+
+  it('negative diff: tracked is lower than the bank', () => {
+    const r = reconcileBalance(base, [approved('expense', 20000)], 'acc-1');
+    expect(r!.trackedMinor).toBe(80000);
+    expect(r!.diffMinor).toBe(-10000);
+    expect(differenceDirection(r!.diffMinor)).toBe('lower');
+  });
+
+  it('zero diff is reconciled', () => {
+    const r = reconcileBalance(base, [approved('expense', 10000)], 'acc-1');
+    expect(r!.diffMinor).toBe(0);
+    expect(differenceDirection(0)).toBe('none');
+  });
+
+  it('uses calculateBalance (anchor included) for the tracked side', () => {
+    const anchored: Snap = { ...base, balanceAnchorMinor: 90000, balanceAnchorAt: '2026-11-11T00:00:00.000Z' };
+    const txns = [approved('expense', 5000, '2026-11-01T00:00:00.000Z'), approved('income', 700, '2026-11-12T00:00:00.000Z')];
+    const r = reconcileBalance(anchored, txns, 'acc-1');
+    expect(r!.trackedMinor).toBe(calculateBalance(anchored, txns, 'acc-1'));
+    expect(r!.trackedMinor).toBe(90700);
+  });
+
+  it('after "Use bank balance" (anchor = bank, at now) the difference is zero', () => {
+    const txns = [approved('expense', 2000)];
+    const before = reconcileBalance(base, txns, 'acc-1')!;
+    expect(before.diffMinor).not.toBe(0);
+    const anchored: Snap = { ...base, balanceAnchorMinor: before.bankMinor, balanceAnchorAt: '2026-11-15T00:00:00.000Z' };
+    expect(reconcileBalance(anchored, txns, 'acc-1')!.diffMinor).toBe(0);
+  });
+
+  it('liability accounts are not reconciled (an SMS "balance" there is not the ledger)', () => {
+    expect(reconcileBalance({ ...base, type: 'credit_card' }, [], 'acc-1')).toBeNull();
+    expect(reconcileBalance({ ...base, type: 'pay_later' }, [], 'acc-1')).toBeNull();
+  });
+});
+
+describe('isDifferenceDismissed', () => {
+  it('is dismissed only for the exact snapshot', () => {
+    expect(isDifferenceDismissed(base)).toBe(false);
+    expect(isDifferenceDismissed({ ...base, smsBalanceDismissedAt: SMS_AT })).toBe(true);
+  });
+  it('a newer snapshot re-surfaces the difference', () => {
+    expect(
+      isDifferenceDismissed({ ...base, smsBalanceAt: '2026-11-12T00:00:00.000Z', smsBalanceDismissedAt: SMS_AT }),
+    ).toBe(false);
+  });
+});
+
+describe('prefillForDifference', () => {
+  it('tracked < bank -> income of abs(diff)', () => {
+    expect(prefillForDifference(-10000)).toEqual({ type: 'income', amountMinor: 10000 });
+  });
+  it('tracked > bank -> expense of abs(diff)', () => {
+    expect(prefillForDifference(2550)).toEqual({ type: 'expense', amountMinor: 2550 });
+  });
+  it('zero -> null', () => {
+    expect(prefillForDifference(0)).toBeNull();
+  });
+});
+
+describe('formatAsOf', () => {
+  const now = new Date('2026-11-10T12:00:00.000Z');
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  it('relative buckets', () => {
+    expect(formatAsOf(ago(10_000), now)).toBe('just now');
+    expect(formatAsOf(ago(5 * 60_000), now)).toBe('5 min ago');
+    expect(formatAsOf(ago(3 * 3_600_000), now)).toBe('3 h ago');
+    expect(formatAsOf(ago(30 * 3_600_000), now)).toBe('yesterday');
+    expect(formatAsOf(ago(5 * 86_400_000), now)).toBe('5 days ago');
+  });
+  it('a future time clamps to just now; garbage is empty', () => {
+    expect(formatAsOf(new Date(now.getTime() + 5000).toISOString(), now)).toBe('just now');
+    expect(formatAsOf('nope', now)).toBe('');
+  });
+});

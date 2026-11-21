@@ -24,6 +24,9 @@ export function rowToAccount(row: SqlRow): Account {
     balanceAnchorAt: asNullableDateIso(row.balance_anchor_at),
     deletedAt: asNullableDateIso(row.deleted_at),
     creditLimitMinor: asNullableNumber(row.credit_limit_minor),
+    smsBalanceMinor: asNullableNumber(row.sms_balance_minor),
+    smsBalanceAt: asNullableDateIso(row.sms_balance_at),
+    smsBalanceDismissedAt: asNullableDateIso(row.sms_balance_dismissed_at),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -42,6 +45,9 @@ export function accountToRow(account: Account): SqlWriteRow {
     balance_anchor_at: dateIsoToEpochMs(account.balanceAnchorAt),
     deleted_at: dateIsoToEpochMs(account.deletedAt),
     credit_limit_minor: account.creditLimitMinor,
+    sms_balance_minor: account.smsBalanceMinor ?? null,
+    sms_balance_at: dateIsoToEpochMs(account.smsBalanceAt ?? null),
+    sms_balance_dismissed_at: dateIsoToEpochMs(account.smsBalanceDismissedAt ?? null),
     created_at: account.createdAt,
     updated_at: account.updatedAt,
   };

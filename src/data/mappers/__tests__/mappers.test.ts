@@ -46,6 +46,9 @@ const account: Account = {
   balanceAnchorAt: null,
   deletedAt: null,
   creditLimitMinor: null,
+  smsBalanceMinor: null,
+  smsBalanceAt: null,
+  smsBalanceDismissedAt: null,
   createdAt: '2026-09-01T00:00:00.000Z',
   updatedAt: '2026-09-01T00:00:00.000Z',
 };
@@ -127,6 +130,19 @@ describe('account mapper', () => {
     const row = accountToRow(account);
     expect(row.is_active).toBe(1);
     expect(rowToAccount(row)).toEqual(account);
+  });
+
+  it('R6: round-trips the sms balance snapshot (number + ISO time)', () => {
+    const snap: Account = {
+      ...account,
+      smsBalanceMinor: 123456,
+      smsBalanceAt: '2026-11-10T10:00:00.000Z',
+      smsBalanceDismissedAt: '2026-11-10T10:00:00.000Z',
+    };
+    const row = accountToRow(snap);
+    expect(row.sms_balance_minor).toBe(123456);
+    expect(row.sms_balance_at).toBe(Date.parse('2026-11-10T10:00:00.000Z'));
+    expect(rowToAccount(row)).toEqual(snap);
   });
 
   it('maps is_active 0 back to boolean false', () => {

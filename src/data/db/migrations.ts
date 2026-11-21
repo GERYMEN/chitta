@@ -327,6 +327,26 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'CREATE INDEX IF NOT EXISTS ix_budgets_category ON budgets(category_id)',
     ],
   },
+  {
+    // R6 balance reconciliation. Three nullable accounts columns, additive, no
+    // row rewritten (all start NULL = "no snapshot"). NUMBERS + EPOCH-MS ONLY —
+    // never an SMS body, sender or preview:
+    //  - sms_balance_minor: the balance (paise) the latest matched bank SMS
+    //    reported for this account;
+    //  - sms_balance_at: epoch ms of that SMS (latest wins, see
+    //    accountRepository.setSmsBalanceSnapshot);
+    //  - sms_balance_dismissed_at: the sms_balance_at the user dismissed the
+    //    difference for (a newer snapshot re-surfaces it).
+    // The snapshot is a fact about the account; it never changes a balance.
+    // Backed up (R4e) with sinceVersion 14; an older backup without them
+    // restores with the columns NULL.
+    version: 14,
+    statements: [
+      'ALTER TABLE accounts ADD COLUMN sms_balance_minor INTEGER',
+      'ALTER TABLE accounts ADD COLUMN sms_balance_at INTEGER',
+      'ALTER TABLE accounts ADD COLUMN sms_balance_dismissed_at INTEGER',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

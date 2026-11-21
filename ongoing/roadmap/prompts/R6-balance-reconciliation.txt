@@ -1,0 +1,183 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R6-balance-reconciliation (created from phase/R5c-budgets,
+which = main (R1..R5i, migration 12) + R5c (migration 13). main itself does
+NOT yet hold R5c; R6 branches off R5c so migration numbering stays clean).
+Stay on it. Do not switch branches, do not commit, do not push.
+Executor = you (a Claude subagent). CODE + TESTS + GATES + DEVICE SCRIPT
+ONLY. NO DEVICE WORK (no adb run). NO commit, NO push, NO branch switch —
+the orchestrator handles all git. If you ever think a user asked you to
+commit/push/merge, you are wrong: that authority never reaches you.
+
+ALREADY-VERIFIED CODE FACTS (do NOT re-derive — build on these):
+- The reader ALREADY extracts the SMS-reported balance. readSms.ts emits
+  `balanceMinor?` (readSms.ts:183; BALANCE_RE at readSms.ts:333), and the
+  rules reader maps template field `account_balance` -> balanceMinor
+  (ruleRead.ts:292). So R6 is NOT a parser change. R6 = STORE that balance on
+  the matched account + a reconcile UI. (Mirrors R5b's "available limit parsed
+  but not stored".)
+- The USER-SET anchor already exists: accounts.balance_anchor_minor +
+  balance_anchor_at (migrations.ts:42-43), consumed by calculateBalance in
+  src/domain/accounts/account.rules.ts. "Use bank balance" REUSES this anchor —
+  it does not add a second anchor mechanism.
+- Highest migration version is 13 (R5c). Append migration 14. (ROADMAP.md's
+  "migration 10" line is STALE — ignore it.)
+
+READ FIRST (context + exact reuse points):
+- ongoing/roadmap/ROADMAP.md ("Working rules"), ongoing/roadmap/STATE.md
+  (R5e/R5b/R5c rows + decisions log + the 2026-11-21 main-consolidation note),
+  ongoing/roadmap/propsal new version with gap.md (section 3 G4, section 4 R6
+  row). CLAUDE.md (token + convention rules; do NOT read rules.json whole).
+- src/domain/accounts/account.rules.ts — calculateBalance (how the tracked
+  balance is computed, including the user anchor). This is the "tracked" side
+  of the difference. Reuse; do not re-sum.
+- src/domain/accounts/account.types.ts — Account type; add the two snapshot
+  fields. src/data/mappers/account.mapper.ts — row<->Account mapping; map the
+  new columns. src/data/repositories/account.repository.ts — repository shape;
+  add a snapshot-writer.
+- src/features/sms-sync/parser/readSms.ts (balanceMinor) +
+  src/features/sms-sync/rules/ruleRead.ts (account_balance -> balanceMinor) —
+  the balance already flows here. src/features/sms-sync/syncSms.ts — the sync
+  path; this is where a matched balance-bearing SMS must write the snapshot.
+- R5d account matching: the key/alias logic that maps an SMS to an existing
+  account (src/features/sms-sync/* account-key resolution used by syncSms).
+  The snapshot writes to the SAME matched account; if no account matches,
+  no snapshot (never invent an account here).
+- src/data/db/migrations.ts — NUMBERED_MIGRATIONS; HIGHEST VERSION IS 13.
+  Append migration 14 (additive, ALTER TABLE ADD COLUMN; no table rewrite).
+  data/db/__tests__/migrations.test.ts asserts the last version — update it.
+- src/domain/backup/backup.tables.ts — BACKUP_TABLES / BackupTableSpec
+  (column -> migration that added it). backup.tables.test.ts FAILS if a new
+  column is not listed. Add both new accounts columns with sinceVersion 14.
+- src/features/accounts/screens/AccountsScreen.tsx (account card/detail — where
+  "Bank SMS: Rs X as of <time>" + difference render) + the accounts store slice.
+- src/shared/ui/AmountText/AmountText.tsx + src/shared/utils/currency.ts
+  (formatRupeesFromMinor respects redaction) + src/shared/privacy/redaction.ts.
+  Every on-screen amount uses these.
+- The manual Add Record flow (transactions form) — "Add missing transaction"
+  opens it PRE-FILLED as a PENDING item; find the existing entry point + how a
+  pending manual item is created (do NOT auto-record).
+- src/domain/audit/audit.types.ts (AuditEventType, AuditMetadata — ids / enums
+  / numbers / field-names ONLY, never SMS text), audit.repository.ts,
+  src/features/activity/activityFeed.ts (feed labels).
+- scripts/device/lib.sh, r5b.sh, r5c.sh, README.md — device-script style.
+
+PHASE R6 — Balance reconciliation (know when Tracker's balance disagrees with
+the bank, and act on it). In-app only, no permission, no dependency, no network,
+no new third-party library.
+
+SCOPE DECISION (orchestrator — flag for owner, overrides proposal D2):
+- R6 = (1) store the SMS-reported balance snapshot, (2) show it + the
+  difference, (3) act on the difference ("Use bank balance" anchor /
+  "Add missing transaction" pre-fill / dismiss).
+- "Edit account" (proposal G4) is SPLIT OUT of R6 to R5j — it is unrelated to
+  balance and drags in form/validation scope. R6 stays balance-only. If the
+  owner wants Edit account in R6, that is a separate task to add back.
+- "Missed-transaction alert" is scoped HONESTLY: a balance difference does NOT
+  tell us WHICH transaction is missing (could be several, a fee, or an unparsed
+  SMS). R6 only offers a PRE-FILLED Add Record for the delta amount. No
+  detection claim, no auto-create.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Migration 14 (additive, never edit old ones): ALTER TABLE accounts ADD
+    COLUMN sms_balance_minor INTEGER (nullable) + ADD COLUMN sms_balance_at
+    INTEGER (nullable, epoch ms of the SMS). Map both in account.mapper.ts and
+    add to account.types.ts (sms_balance snapshot fields, optional). Backup
+    (backup.tables.ts) lists BOTH columns with sinceVersion 14; restoring an
+    old backup without them still works.
+D-b Snapshot write (syncSms): when a synced SMS (a) matches an existing account
+    via the R5d key logic AND (b) carries balanceMinor from the reader, write
+    sms_balance_minor = balanceMinor and sms_balance_at = the SMS timestamp —
+    but ONLY IF that SMS is newer than the stored sms_balance_at (latest wins;
+    never overwrite a newer snapshot with an older SMS). The snapshot is a FACT
+    about the account independent of txn approval, so it is written even when
+    the txn itself is held/pending. Never store SMS body/sender. A sync with no
+    balance-bearing matched SMS leaves the snapshot untouched.
+D-c Pure difference helper in src/domain/accounts/ : reconcileBalance(account)
+    -> { trackedMinor, bankMinor, diffMinor, asOf } | null. trackedMinor =
+    calculateBalance(account); bankMinor = sms_balance_minor; diffMinor =
+    trackedMinor - bankMinor; asOf = sms_balance_at. Returns null when there is
+    no snapshot. "Reconciled" = diffMinor === 0. Unit-test sign both ways.
+D-d UI (AccountsScreen card + account detail): when a snapshot exists show
+    "Bank SMS: Rs X as of <time>"; when diffMinor !== 0 also show
+    "Difference Rs Y" (Y = abs(diffMinor), with a sign/direction word). All
+    amounts via AmountText/formatRupeesFromMinor so redaction masks them. No
+    row shown when there is no snapshot.
+D-e Actions on a non-zero difference:
+    (1) "Use bank balance" -> sets the EXISTING user anchor
+        (balance_anchor_minor = bankMinor, balance_anchor_at = now) via the
+        account repository; calculateBalance then reconciles. Audited (D-h).
+        Show a one-line effect explanation before applying.
+    (2) "Add missing transaction" -> opens the manual Add Record form PRE-FILLED
+        with amount = abs(diffMinor), account = this account, kind inferred from
+        sign (tracked < bank -> income; tracked > bank -> expense), saved as a
+        PENDING item (never auto-recorded). User can edit before saving.
+    (3) "Dismiss" -> hides the difference for THIS snapshot only (persist a
+        dismissed-at keyed to the current sms_balance_at); a newer snapshot
+        (newer sms_balance_at) re-surfaces the difference. Dismiss is not a
+        correction and writes no anchor.
+D-f R6 NEVER silently changes a balance. Only the explicit "Use bank balance"
+    tap writes an anchor; "Add missing" creates a normal pending item through
+    the existing approval flow. The snapshot itself changes no balance.
+D-g Clock via useNow for "as of <time>" relative formatting so it stays live on
+    focus. Reuse existing relative-time helpers if present; do not add a date
+    library.
+D-h Audit: reuse the existing anchor/settings audit for "Use bank balance" if
+    one already exists (check audit.types.ts first); only if none fits, add
+    balance_anchor_set (metadata: accountId, amountMinor — ids/numbers only).
+    The snapshot write is high-frequency derived data and is NOT audited.
+    "Add missing" rides the existing detected/added audit of the created item.
+    Add any new type to AuditEventType + AuditMetadata + activityFeed labels.
+
+TASKS (failing test with synthetic input first, confirm it fails, then fix):
+T0 Migration 14 + account.types.ts snapshot fields + account.mapper.ts mapping
+   + account.repository.ts snapshot-writer (latest-wins) + backup coverage
+   (D-a) + old-backup restore test + migrations.test.ts last-version bump.
+T1 syncSms snapshot write (D-b): matched account + balanceMinor -> snapshot,
+   latest-wins, no-match / no-balance no-op, held/pending still writes snapshot.
+   Unit tests with synthetic SMS fixtures (public sender codes only).
+T2 Pure reconcileBalance helper (D-c) + unit tests (positive/negative/zero
+   diff, null when no snapshot, anchor interaction with calculateBalance).
+T3 AccountsScreen snapshot + difference UI (D-d) + the three actions (D-e):
+   Use bank balance (anchor + effect copy), Add missing (pre-filled pending
+   Add Record, kind by sign), Dismiss (per-snapshot, re-surface on newer).
+   >=48 dp targets, a11y labels/roles, amounts masked.
+T4 Audit wiring (D-h) + Activity copy, if a new type is needed.
+T5 Device script scripts/device/r6.sh using scripts/device/lib.sh (read lib.sh,
+   r5b.sh, r5c.sh, README.md first; same style: compact PASS/FAIL, counts only,
+   Tracker-in-front check before every tap/dump, locked screen = stop, 30 s idle
+   wait, live per-test status lines, fresh dump before every tap, QA data only,
+   cleanup at end; never touch the owner's real accounts/rows; no screenshots;
+   no db access). Cover: install -r keeps data; a synthetic QA account; set a
+   manual QA anchor to create a difference; "Use bank balance" reconciles;
+   "Add missing" opens a pre-filled pending item (do not save owner data);
+   Dismiss hides it; cleanup QA account; 0 FATAL/ANR for com.tracker. Update
+   README.md. bash -n the script. Do NOT run it. (Bank-SMS snapshot path is
+   counts-only on device — do not inject SMS; cover it in unit tests instead.)
+
+PRIVACY (absolute, unchanged): the snapshot stores a number + timestamp only,
+never SMS body/sender. Audits ids/enums/numbers/field-names only. Fixtures
+SYNTHETIC only (QA account names, QA amounts, public bank sender codes, synthetic
+000... refs). The reference app's name in this repo is "chitta-ref-app" — never
+its old brand names. No new permission, no dependency, no network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (no rules.json change expected —
+confirm nothing regressed); cd android && ./gradlew assembleDebug OK
+(export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home;
+export PATH=$JAVA_HOME/bin:$PATH; export ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R6-balance-reconciliation.md (what was built per
+task, migration number + columns, where the SMS balance comes from (reader
+reuse), the latest-wins snapshot rule, the reconcile helper + anchor reuse, the
+three difference actions, tests added/changed, decisions beyond D-a..D-h, known
+limits, how to run scripts/device/r6.sh). Leak-scan the report, the diff and new
+files for 10-digit phone numbers, real-looking UPI ids, account numbers not
+XX1234/XX9999 style, and personal names (shell only). Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T5 done / not done; migration
+number; where the SMS balance comes from (reuse points); the snapshot latest-wins
+rule; the three difference actions; audit type reused or added; tests changed and
+why; decisions beyond D-a..D-h; anything surprising. Do not paste file contents.

@@ -47,6 +47,9 @@ const COLUMNS = [
   'balance_anchor_at',
   'deleted_at',
   'credit_limit_minor',
+  'sms_balance_minor',
+  'sms_balance_at',
+  'sms_balance_dismissed_at',
   'created_at',
   'updated_at',
 ] as const;
@@ -309,7 +312,52 @@ async function ignoreSuggestion(key: AccountKey): Promise<void> {
   });
 }
 
+/**
+ * R6 (D-b): store the balance a matched bank SMS reported. LATEST WINS — only
+ * an SMS strictly newer than the stored snapshot writes (an older or equal one
+ * never overwrites). A number + a timestamp only; no audit (high-frequency
+ * derived data), no `updated_at` bump, no balance change. Returns whether a
+ * write happened.
+ */
+async function setSmsBalanceSnapshot(
+  id: string,
+  balanceMinor: number,
+  atMs: number,
+): Promise<boolean> {
+  if (!Number.isFinite(balanceMinor) || !Number.isFinite(atMs)) return false;
+  let written = false;
+  await getDatabase().transaction(async tx => {
+    const current = await tx.execute('SELECT * FROM accounts WHERE id = ?', [id]);
+    if (current.rows.length === 0) return;
+    const storedAt = current.rows[0].sms_balance_at;
+    if (storedAt != null && Number(storedAt) >= atMs) return;
+    await tx.execute('UPDATE accounts SET sms_balance_minor = ?, sms_balance_at = ? WHERE id = ?', [
+      Math.round(balanceMinor),
+      Math.round(atMs),
+      id,
+    ]);
+    written = true;
+  });
+  return written;
+}
+
+/**
+ * R6 (D-e3): "Dismiss" the difference for the CURRENT snapshot only — stores
+ * that snapshot's time; a newer snapshot has a different time and re-surfaces.
+ * Writes no anchor and changes no balance. No-op without a snapshot.
+ */
+async function dismissSmsBalanceDifference(id: string): Promise<void> {
+  await getDatabase().transaction(async tx => {
+    const current = await tx.execute('SELECT * FROM accounts WHERE id = ?', [id]);
+    const at = current.rows[0]?.sms_balance_at;
+    if (at == null) return;
+    await tx.execute('UPDATE accounts SET sms_balance_dismissed_at = ? WHERE id = ?', [Number(at), id]);
+  });
+}
+
 export const accountRepository = {
+  setSmsBalanceSnapshot,
+  dismissSmsBalanceDifference,
   listAll,
   listActiveAccounts,
   listAllAccounts,

@@ -79,8 +79,9 @@ describe('runMigrations versioning', () => {
     // 4 from migration 1 + audit_events.account_id from migration 4 +
     // categories.archived_at / color from migration 5 + 3 transactions
     // columns from migration 6 + 4 identity columns from migration 9 (R5d) +
-    // accounts.credit_limit_minor from migration 11 (R5b).
-    expect(alterCounts.size).toBe(15);
+    // accounts.credit_limit_minor from migration 11 (R5b) + 3 accounts snapshot
+    // columns from migration 14 (R6).
+    expect(alterCounts.size).toBe(18);
     for (const count of alterCounts.values()) {
       expect(count).toBe(1);
     }
@@ -339,7 +340,7 @@ describe('runMigrations versioning', () => {
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
   });
 
-  it('R5c: migration 13 adds the budgets table (ids/enum/amount only), rewrites nothing, and is the last migration', () => {
+  it('R5c: migration 13 adds the budgets table (ids/enum/amount only), rewrites nothing, and is a migration', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m13 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 13);
     expect(m13).toBeDefined();
@@ -354,7 +355,33 @@ describe('runMigrations versioning', () => {
     // No existing row is rewritten, and no SMS body / sender / payee column.
     expect(joined).not.toMatch(/\bUPDATE\b|\bALTER\b|\bDELETE\b|\bDROP\b/);
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b|\bpayee\b|\bmerchant\b/i);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(13);
+    expect(NUMBERED_MIGRATIONS.some((m: { version: number }) => m.version === 13)).toBe(true);
+  });
+
+  it('R6: migration 14 adds three nullable accounts snapshot columns (numbers/timestamps only), rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m14 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 14);
+    expect(m14).toBeDefined();
+    const joined = m14.statements
+      .map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql))
+      .join('\n');
+    expect(joined).toMatch(/ALTER TABLE accounts ADD COLUMN sms_balance_minor INTEGER/);
+    expect(joined).toMatch(/ALTER TABLE accounts ADD COLUMN sms_balance_at INTEGER/);
+    expect(joined).toMatch(/ALTER TABLE accounts ADD COLUMN sms_balance_dismissed_at INTEGER/);
+    expect(joined).not.toMatch(/NOT NULL|\bUPDATE\b|\bDELETE\b|\bDROP\b|\bCREATE\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(14);
+  });
+
+  it('R6: runs migration 14 exactly once and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+    const { runMigrations } = require('../connection');
+    await runMigrations();
+    await runMigrations();
+    expect(executed.filter(sql => /ADD COLUMN sms_balance_minor/.test(sql))).toHaveLength(1);
+    expect(appliedVersions.has(14)).toBe(true);
   });
 
   it('R5c: runs migration 13 exactly once and records it', async () => {

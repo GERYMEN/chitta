@@ -49,8 +49,8 @@ export const FULL_BACKUP_ROWS: BackupTables = {
     { id: 'cat-qa-custom', name: 'QA Category', parent_id: null, type: 'expense', icon: 'shape-outline', is_system: 0, archived_at: T1, color: 'amber' },
   ],
   accounts: [
-    { id: 'acc-qa-1', name: 'QA Bank', type: 'bank', last_four: '9999', opening_balance_minor: 100000, currency: 'INR', is_active: 1, created_at: T0, updated_at: T0, balance_anchor_minor: 250000, balance_anchor_at: 1759300000000, deleted_at: null },
-    { id: 'acc-qa-2', name: 'QA Wallet', type: 'wallet', last_four: null, opening_balance_minor: 0, currency: 'INR', is_active: 1, created_at: T0, updated_at: T0, balance_anchor_minor: null, balance_anchor_at: null, deleted_at: 1759400000000 },
+    { id: 'acc-qa-1', name: 'QA Bank', type: 'bank', last_four: '9999', opening_balance_minor: 100000, currency: 'INR', is_active: 1, created_at: T0, updated_at: T0, balance_anchor_minor: 250000, balance_anchor_at: 1759300000000, deleted_at: null, sms_balance_minor: 120000, sms_balance_at: 1759500000000, sms_balance_dismissed_at: 1759500000000 },
+    { id: 'acc-qa-2', name: 'QA Wallet', type: 'wallet', last_four: null, opening_balance_minor: 0, currency: 'INR', is_active: 1, created_at: T0, updated_at: T0, balance_anchor_minor: null, balance_anchor_at: null, deleted_at: 1759400000000, sms_balance_minor: null, sms_balance_at: null, sms_balance_dismissed_at: null },
   ],
   transactions: [
     tx('qa-t1', { note: 'QA note' }),

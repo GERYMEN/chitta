@@ -22,6 +22,15 @@ export interface Account {
    * accounts (manual entry). null when not set. Never overwritten by any SMS.
    */
   creditLimitMinor: number | null;
+  /**
+   * R6: the balance (paise) the latest matched bank SMS reported, and when
+   * (ISO of the SMS time). A fact about the account — never changes the
+   * tracked balance. Optional so older fixtures/builders need not set them.
+   */
+  smsBalanceMinor?: number | null;
+  smsBalanceAt?: string | null;
+  /** R6: the `smsBalanceAt` the user dismissed the difference for. */
+  smsBalanceDismissedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

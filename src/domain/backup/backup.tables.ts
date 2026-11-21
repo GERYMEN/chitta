@@ -56,6 +56,10 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       deleted_at: 1,
       // R5b: the user's manual credit limit (never from an SMS).
       credit_limit_minor: 11,
+      // R6: the SMS-reported balance snapshot (number + time only).
+      sms_balance_minor: 14,
+      sms_balance_at: 14,
+      sms_balance_dismissed_at: 14,
     },
   },
   {

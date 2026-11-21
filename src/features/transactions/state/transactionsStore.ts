@@ -238,6 +238,15 @@ interface TransactionsState {
   updateAccount: (id: string, patch: AccountPatch) => Promise<void>;
   /** D10 soft delete — the account's transactions are never touched. */
   removeAccount: (id: string) => Promise<void>;
+  /**
+   * R6 (D-e1) "Use bank balance": set the EXISTING user anchor to the latest
+   * SMS-reported balance, as of now. Audited by updateAccount ('account_updated',
+   * fields balanceAnchorMinor + balanceAnchorAt — names only). false when the
+   * account has no snapshot.
+   */
+  applyBankBalance: (id: string) => Promise<boolean>;
+  /** R6 (D-e3) "Dismiss": hide the difference for the CURRENT snapshot only. */
+  dismissBalanceDifference: (id: string) => Promise<void>;
   restoreAccount: (id: string) => Promise<void>;
   /** R2b: Add/Link a suggested account + insert its waiting SMS as pending. */
   importSuggestion: (input: ImportSuggestionInput) => Promise<ImportSuggestionResult>;
@@ -935,6 +944,25 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
         : [];
     const updated = await accountRepository.update(id, patch, audit);
     set(state => ({ accounts: state.accounts.map(a => (a.id === id ? updated : a)) }));
+  },
+
+  applyBankBalance: async id => {
+    const account = get().accounts.find(a => a.id === id);
+    if (!account || account.smsBalanceMinor == null) return false;
+    await get().updateAccount(id, {
+      balanceAnchorMinor: account.smsBalanceMinor,
+      balanceAnchorAt: new Date().toISOString(),
+    });
+    return true;
+  },
+
+  dismissBalanceDifference: async id => {
+    await accountRepository.dismissSmsBalanceDifference(id);
+    set(state => ({
+      accounts: state.accounts.map(a =>
+        a.id === id && a.smsBalanceAt != null ? { ...a, smsBalanceDismissedAt: a.smsBalanceAt } : a,
+      ),
+    }));
   },
 
   removeAccount: async id => {

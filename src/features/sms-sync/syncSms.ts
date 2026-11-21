@@ -299,6 +299,48 @@ function emptyResult(declined: boolean): SmsSyncResult {
  * db.transaction as each inserted pending row. A sync writes no approval
  * event (the Pending one-tap approve audits as the user).
  */
+/**
+ * R6 (D-b): write the balance a matched SMS reported onto that account
+ * (the SAME R5d key matching the transactions use; no match = no snapshot,
+ * never an invented account). Per account only the newest SMS of the run is
+ * written, and the repository keeps the stored snapshot if it is newer
+ * (latest wins). Never audited, never changes a balance, number + time only.
+ * Credit cards / pay-later are skipped (their "balance" is not the ledger).
+ */
+export async function storeSmsBalanceSnapshots(
+  candidates: ReadonlyArray<ParsedSmsTransaction>,
+  deletedDecisionKeys: ReadonlySet<string>,
+  decisions: ReturnType<typeof toSuggestionDecisions>,
+): Promise<void> {
+  if (candidates.length === 0) return;
+  const { matched } = partitionCandidates(
+    [...candidates],
+    useTransactionsStore.getState().accounts,
+    deletedDecisionKeys,
+    decisions,
+  );
+  const newest = new Map<string, { balanceMinor: number; atMs: number }>();
+  for (const { parsed, accountId } of matched) {
+    const account = useTransactionsStore.getState().accounts.find(a => a.id === accountId);
+    if (!account || account.type === 'credit_card' || account.type === 'pay_later') continue;
+    const atMs = Date.parse(parsed.occurredAt);
+    if (parsed.balanceMinor == null || Number.isNaN(atMs)) continue;
+    const seen = newest.get(accountId);
+    if (!seen || atMs > seen.atMs) newest.set(accountId, { balanceMinor: parsed.balanceMinor, atMs });
+  }
+  for (const [accountId, snap] of newest) {
+    const wrote = await accountRepository.setSmsBalanceSnapshot(accountId, snap.balanceMinor, snap.atMs);
+    if (!wrote) continue;
+    useTransactionsStore.setState(state => ({
+      accounts: state.accounts.map(a =>
+        a.id === accountId
+          ? { ...a, smsBalanceMinor: snap.balanceMinor, smsBalanceAt: new Date(snap.atMs).toISOString() }
+          : a,
+      ),
+    }));
+  }
+}
+
 export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult> {
   const granted = await checkSmsPermission();
   if (!granted && options.requestPermission === false) {
@@ -387,6 +429,8 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const chainChildren: ChainChild[] = [];
   const runFacts = new Map<string, ParsedSmsTransaction>();
   const unmatchedAll: ParsedSmsTransaction[] = [];
+  // R6: SMS that reported an account balance (a number; text never kept).
+  const balanceCandidates: ParsedSmsTransaction[] = [];
   // R5e T5: a deduplicated candidate with a meaning suggests it for the
   // EXISTING row it matched (never changes that row).
   const existingIndex = buildExistingRowIndex(store.transactions);
@@ -442,6 +486,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       // R5g item 7: a reparse SMS carries up to 3 records (own `#n` hash each).
       for (const candidate of [read.transaction, ...(read.extraTransactions ?? [])]) {
         if (!candidate) continue;
+        // R6 (D-b): every balance-bearing SMS feeds the account snapshot —
+        // BEFORE dedup, so an already-recorded SMS still refreshes it.
+        if (candidate.balanceMinor != null) balanceCandidates.push(candidate);
         // R5d: old key / content hash (+ lazy backfill), then the reference
         // guard — two SMS with the same reference, type and amount are one
         // transaction, in this run AND against earlier runs (counted as skipped).
@@ -526,6 +573,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     }
     await yieldToUi();
   }
+  await storeSmsBalanceSnapshots(balanceCandidates, deletedDecisionKeys, decisions).catch(
+    () => undefined,
+  );
   const created = createdRows.length;
 
   // R3a T4: the hold rules run only AFTER every new pending item is in, so a

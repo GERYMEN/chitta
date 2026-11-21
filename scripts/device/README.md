@@ -228,6 +228,44 @@ only the QA ones).
 - The "Budget removed" snackbar is brief (5 s); if the script misses it, R8 is
   a SKIP — confirm by eye that Undo brings the row back.
 
+## R6 — Balance reconciliation
+
+```
+scripts/device/r6.sh [--skip-install]
+```
+
+Owner-assisted: the script never taps a balance action, and never edits,
+approves or removes your real accounts or rows. It asks **you** to add a QA
+account (`QA R6 Bank`) and to tap the actions; it only counts fixed labels
+(`Bank SMS: …` rows, `Difference …` rows, the three action labels, the Add
+Record header, the Pending badge). No amounts, names or SMS text are printed;
+no screenshots; no database access. The bank-SMS snapshot comes from the SMS
+reader on **Sync SMS** — the script does not inject SMS (that path is covered
+by unit tests), so the difference steps run only when an account already has a
+snapshot that disagrees with Tracker's balance.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Accounts opens | ledger cards still shown |
+| R3 | **You** add the QA account `QA R6 Bank` | the name is shown |
+| R4 | Baseline | counts of Bank-SMS and Difference rows recorded |
+| R5 | Count the action labels | 3 actions per Difference row (SKIP when none) |
+| R6 | **You** tap Add missing transaction, look, press Back without saving | Add Record opened; Pending badge unchanged |
+| R7 | **You** tap Use bank balance on the QA row and confirm | confirm dialog shown; the Difference row clears |
+| R8 | **You** tap Dismiss on one difference | one fewer Difference row; the Bank SMS row stays |
+| R9 | **You** remove `QA R6 Bank` | gone from the active list |
+| R10 | Crash check since the start | 0 FATAL/ANR |
+
+### Known limits
+
+- Steps R5-R8 SKIP when no account has a bank-SMS balance that disagrees.
+  Run **Sync SMS** first on a phone whose bank messages carry "Avl Bal".
+- Tap **Use bank balance** only on the QA account — it sets that account's
+  balance anchor (an audited, explicit change). Dismiss and Add missing
+  (never saved here) do not change a balance.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

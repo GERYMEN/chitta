@@ -27,6 +27,7 @@ import { removeAccountMessage } from '../components/removeAccountMessage';
 import { Account, AccountType } from '../../../domain/accounts/account.types';
 import {
   MainTabParamList,
+  ReconcilePrefill,
   RootStackParamList,
 } from '../../../app/navigation/routes';
 import { redactLast4, useRedacted } from '../../../shared/privacy/redaction';
@@ -38,6 +39,7 @@ import { useBillsStore } from '../../bills/state/billsStore';
 import { Bill } from '../../../domain/bills/bill.types';
 import { creditUsage, remainingMinor, billUrgency } from '../../../domain/bills/bill.rules';
 import { useNow } from '../../../shared/hooks/useNow';
+import { BalanceReconcile } from '../components/BalanceReconcile';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accounts'>,
@@ -251,6 +253,7 @@ export function AccountsScreen() {
                   onOpenBills={() => navigation.navigate('Bills')}
                   onUnlink={number => confirmUnlink(account, number)}
                   onRemove={() => confirmRemove(account)}
+                  onAddMissing={reconcile => navigation.navigate('AddRecord', { reconcile })}
                 />
               ))}
             </View>
@@ -311,6 +314,7 @@ function AccountCard({
   onOpenBills,
   onUnlink,
   onRemove,
+  onAddMissing,
 }: {
   account: Account;
   transactions: Parameters<typeof calculateBalance>[1];
@@ -322,6 +326,7 @@ function AccountCard({
   onOpenBills: () => void;
   onUnlink: (number: LinkedNumber) => void;
   onRemove: () => void;
+  onAddMissing: (prefill: ReconcilePrefill) => void;
 }) {
   const balanceMinor = calculateBalance(account, transactions, account.id);
   const liability = isLiabilityAccount(account.type);
@@ -356,6 +361,14 @@ function AccountCard({
       >
         {formatRupeesFromMinor(Math.abs(balanceMinor), { showPaise: true })}
       </Text>
+
+      {/* R6: the bank-SMS balance, the difference and how to act on it. */}
+      <BalanceReconcile
+        account={account}
+        transactions={transactions}
+        now={now}
+        onAddMissing={onAddMissing}
+      />
 
       {usage ? (
         <View style={styles.creditRow} testID={`credit-usage-${account.id}`}>

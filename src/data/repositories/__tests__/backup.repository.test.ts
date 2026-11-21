@@ -254,8 +254,8 @@ describeSql('backup repository (real SQLite)', () => {
   });
 
   it('N-1 → N specifically (R5c): a v12 backup has no budgets table; it restores empty, other tables intact', async () => {
-    const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(12);
+    // Pinned to v12 (the schema before budgets) — still must restore after R6.
+    const version = 12;
     const tables = rowsAt(version);
     expect(tables.budgets).toBeUndefined();
     const payload = parseBackupJson(
@@ -269,6 +269,43 @@ describeSql('backup repository (real SQLite)', () => {
     expect(target.rows('budgets')).toEqual([]);
     // Pre-R5c tables (chain_suggestions, v12) still round-trip.
     expect(target.rows('chain_suggestions')).toEqual(FULL_BACKUP_ROWS.chain_suggestions);
+  });
+
+  it('N-1 → N specifically (R6): a v13 backup has no sms_balance columns; it restores with a null snapshot, other columns intact', async () => {
+    const version = CURRENT_SCHEMA_VERSION - 1;
+    expect(version).toBe(13);
+    const tables = rowsAt(version);
+    expect(Object.keys(tables.accounts[0])).not.toContain('sms_balance_minor');
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    const restored = target.rows('accounts') as Array<Record<string, unknown>>;
+    expect(restored).toHaveLength(FULL_BACKUP_ROWS.accounts.length);
+    for (const row of restored) {
+      expect(row.sms_balance_minor).toBeNull();
+      expect(row.sms_balance_at).toBeNull();
+      expect(row.sms_balance_dismissed_at).toBeNull();
+    }
+    expect(restored[0].balance_anchor_minor).toBe(250000);
+    expect(target.rows('budgets')).toEqual(FULL_BACKUP_ROWS.budgets);
+  });
+
+  it('R6: a current backup carries the sms balance snapshot exactly', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    expect((tables.accounts[0] as Record<string, unknown>).sms_balance_minor).toBe(120000);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    const restored = target.rows('accounts') as Array<Record<string, unknown>>;
+    expect(restored[0].sms_balance_minor).toBe(120000);
+    expect(restored[0].sms_balance_at).toBe(1759500000000);
+    expect(restored[0].sms_balance_dismissed_at).toBe(1759500000000);
   });
 
   it('R5c: a current backup carries the budgets rows exactly', async () => {

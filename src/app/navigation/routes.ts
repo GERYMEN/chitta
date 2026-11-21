@@ -43,6 +43,17 @@ export interface FromSmsPrefill {
   lastFour: string | null;
 }
 
+/**
+ * R6 (D-e2): "Add missing transaction" from a balance difference — the account,
+ * the kind inferred from the sign and the |difference| amount. Ids / enum /
+ * number only. The record is saved PENDING (never auto-recorded).
+ */
+export interface ReconcilePrefill {
+  accountId: string;
+  type: 'expense' | 'income';
+  amountMinor: number;
+}
+
 export type MainTabParamList = {
   Home: undefined;
   Transactions: undefined;
@@ -54,7 +65,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList> | undefined;
   TransactionDetail: { transactionId: string };
-  AddRecord: { fromSms?: FromSmsPrefill } | undefined;
+  AddRecord: { fromSms?: FromSmsPrefill; reconcile?: ReconcilePrefill } | undefined;
   EditTransaction: { transactionId: string };
   AddAccount:
     | {
