@@ -120,6 +120,17 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   bill_paid: 'file-document-check-outline',
   bill_reopened: 'file-document-refresh-outline',
   bill_dismissed: 'file-document-remove-outline',
+  chain_suggested: 'link-variant',
+  chain_accepted: 'link-variant',
+  chain_dismissed: 'link-variant-off',
+};
+
+/** R5i (G3): the relation a chain suggestion proposes (for Activity sentences). */
+const CHAIN_RELATION: Record<string, string> = {
+  duplicate: 'a repeat',
+  refund_link: 'a refund',
+  transfer_twin: 'a transfer',
+  incomplete: 'a matching alert',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -723,6 +734,27 @@ export function describeActivity(
     case 'bill_dismissed':
       sentence = 'You dismissed a bill';
       impact = { text: 'Bill dismissed', tone: 'neutral' };
+      break;
+    case 'chain_suggested': {
+      const chainKind = event.metadata?.kind === 'chain_suggested' ? event.metadata.chainKind : 'incomplete';
+      const relation = CHAIN_RELATION[chainKind] ?? 'a link';
+      sentence =
+        chainKind === 'incomplete'
+          ? `The rules flagged ${what} — waiting for a matching alert`
+          : `The rules linked ${what} as ${relation}`;
+      impact = { text: 'Waiting in Review · nothing changed yet', tone: 'pending' };
+      break;
+    }
+    case 'chain_accepted': {
+      const chainKind = event.metadata?.kind === 'chain_accepted' ? event.metadata.chainKind : 'incomplete';
+      const relation = CHAIN_RELATION[chainKind] ?? 'a link';
+      sentence = `You accepted ${what} as ${relation}`;
+      impact = { text: 'Linked by rules', tone: 'neutral' };
+      break;
+    }
+    case 'chain_dismissed':
+      sentence = `You dismissed a rule link for ${what}`;
+      impact = { text: 'Kept as separate items', tone: 'neutral' };
       break;
     default:
       sentence = 'Something changed';

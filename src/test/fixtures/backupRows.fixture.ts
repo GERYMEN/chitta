@@ -140,6 +140,19 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       updated_at: T1,
     },
   ],
+  // R5i (G3): a persisted chain suggestion (ids + enums only).
+  chain_suggestions: [
+    {
+      id: 'qa-chain-1',
+      kind: 'refund_link',
+      child_id: 'qa-t2',
+      parent_id: 'qa-t1',
+      parent_override: '{"link":"refund"}',
+      status: 'open',
+      created_at: T1,
+      updated_at: T1,
+    },
+  ],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

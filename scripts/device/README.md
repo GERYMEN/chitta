@@ -148,6 +148,42 @@ not app bugs. Four were fixed in the same commit; three are still open:
 - **R9 confirms removal by absence**, which an off-screen account also satisfies
   — treat R9 pass as weak until re-checked.
 
+## R5i — Chain review ("Linked by rules") + persistence
+
+```
+scripts/device/r5i.sh [--skip-install]
+```
+
+Owner-assisted: the script never creates, accepts, dismisses or links a
+suggestion by itself. It asks **you** to create a QA SMS pair that the rules
+chain (a QA refund after a QA debit, or a duplicate alert) and to tap
+**Dismiss / Undo / Accept**; the script only watches the "Linked by rules"
+section count and proves the suggestion survives an app restart. QA data only
+(XX1234 / XX9999, refs `000000000xxx`) — clean up the QA rows at the end.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | **You** create a QA chain pair and tap **Sync SMS** | a "N to review" card appears on Home |
+| R3 | Open Review from that card | "Linked by rules · N" shows the suggestion |
+| R4 | **You** tap **Dismiss** on the QA row, then **Undo** in the message | count drops, then returns |
+| R5 | Script force-stops and relaunches Tracker, reopens Review | the suggestion is still there (persistence proof) |
+| R6 | **You** tap the **Accept** button on the QA row | the row disappears |
+| R7 | Crash check since the start | 0 FATAL/ANR |
+
+During the run the script prints `>>>` lines telling you what to create or
+tap; you have ~3 minutes for each. Switch apps any time to stop it safely,
+then resume with `--skip-install`.
+
+### Known limits
+
+- The suggestion needs a **real** chained SMS pair, which only you can create
+  (the script never injects SMS). If your inbox has no pair the rules chain,
+  R2 times out — send a synthetic QA refund-after-debit pair first.
+- R5 uses `am force-stop` (not clear-data) to prove persistence; your rows are
+  untouched.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

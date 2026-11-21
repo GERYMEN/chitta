@@ -3,6 +3,13 @@ import type { Transaction } from '../../../domain/transactions/transaction.types
 import type { ParsedSmsTransaction } from '../parser/readSms';
 import type { RuleChainInfo } from './ruleRead';
 import type { RuleChainOverride, RuleChainSelector } from './rules.types';
+import { chainSuggestionRepository } from '../../../data/repositories/chainSuggestion.repository';
+import {
+  ChainSuggestionKind,
+  ChainSuggestionRecord,
+  sanitizeChainOverride,
+} from '../../../domain/chains/chainSuggestion.types';
+import { generateId } from '../../../shared/utils/id';
 
 /**
  * R5g item 21 — chaining (Tracker semantics: NEVER deletes or merges rows).
@@ -146,39 +153,125 @@ export function chainOutcome(child: ChainChild, chain: RuleChainInfo, parent: Ch
   return { ...base, kind: 'none', hold: false, parentOverride };
 }
 
+/** An OPEN chain suggestion held in memory (ids + enums only; never SMS content). */
 export interface ChainSuggestion {
-  kind: Exclude<ChainOutcomeKind, 'none'>;
+  /** The persisted row id (migration 12 `chain_suggestions`). */
+  id: string;
+  kind: ChainSuggestionKind;
   childId: string;
   parentId: string | null;
   parentOverride: RuleChainOverride | null;
+  /** Epoch ms (persisted as ISO; converted on load). */
   createdAt: number;
 }
 
+function toMemory(record: ChainSuggestionRecord): ChainSuggestion {
+  return {
+    id: record.id,
+    kind: record.kind,
+    childId: record.childId,
+    parentId: record.parentId,
+    parentOverride: record.parentOverride,
+    createdAt: Date.parse(record.createdAt),
+  };
+}
+
 interface ChainSuggestionState {
+  /** OPEN suggestions only (what Review and the de-dupe read). */
   suggestions: ChainSuggestion[];
-  add: (outcomes: ReadonlyArray<ChainOutcome>, nowMs: number) => void;
-  /** The pair was confirmed / dismissed, or the child completed. */
-  remove: (childId: string) => void;
+  /** R5i: load the persisted open rows (app launch + after a restore). */
+  refresh: () => Promise<void>;
+  /** R5g call site: persist new open suggestions (one open row per child). */
+  add: (outcomes: ReadonlyArray<ChainOutcome>, nowMs: number) => Promise<void>;
+  /** R5g call site: a child completed its parent → the parent's row is superseded. */
+  remove: (childId: string) => Promise<void>;
+  /** Review Accept succeeded → the row is marked accepted. */
+  accept: (childId: string) => Promise<void>;
+  /** Review Accept re-check failed (stale pair) → the row is marked superseded. */
+  supersede: (childId: string) => Promise<void>;
+  /** Review Dismiss → the row is marked dismissed; returns it for a 5 s Undo. */
+  dismiss: (childId: string) => Promise<ChainSuggestion | null>;
+  /** Undo a Dismiss → the row goes back to open. */
+  reopen: (suggestion: ChainSuggestion) => Promise<void>;
+  /** Tests only: drop the in-memory list (persistence is a fresh DB per test). */
   clear: () => void;
 }
 
-/** Session-only store of chain suggestions (ids only; never SMS content). */
-export const useChainSuggestions = create<ChainSuggestionState>(set => ({
+/**
+ * R5i (G3): a repository-backed store of chain suggestions. The in-memory
+ * `suggestions` list is the OPEN rows (for the synchronous selectors + the
+ * de-dupe); every write persists through `chainSuggestionRepository` so a
+ * suggestion survives an app restart. IDS + ENUMS ONLY — never SMS content.
+ */
+export const useChainSuggestions = create<ChainSuggestionState>((set, get) => ({
   suggestions: [],
-  add: (outcomes, nowMs) =>
-    set(state => {
-      const fresh = outcomes
-        .filter(o => o.kind !== 'none')
-        .map(o => ({ kind: o.kind as ChainSuggestion['kind'], childId: o.childId, parentId: o.parentId, parentOverride: o.parentOverride, createdAt: nowMs }));
-      const ids = new Set(fresh.map(s => s.childId));
-      return { suggestions: [...state.suggestions.filter(s => !ids.has(s.childId)), ...fresh] };
-    }),
-  remove: childId => set(state => ({ suggestions: state.suggestions.filter(s => s.childId !== childId) })),
+  refresh: async () => {
+    const records = await chainSuggestionRepository
+      .listOpen()
+      .catch((): ChainSuggestionRecord[] => []);
+    set({ suggestions: records.map(toMemory) });
+  },
+  add: async (outcomes, nowMs) => {
+    const nowIso = new Date(nowMs).toISOString();
+    const records: ChainSuggestionRecord[] = outcomes
+      .filter(o => o.kind !== 'none')
+      .map(o => ({
+        id: generateId('chain'),
+        kind: o.kind as ChainSuggestionKind,
+        childId: o.childId,
+        parentId: o.parentId,
+        parentOverride: sanitizeChainOverride(o.parentOverride),
+        status: 'open' as const,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      }));
+    if (records.length === 0) return;
+    const fresh = records.map(toMemory);
+    const ids = new Set(fresh.map(s => s.childId));
+    set(state => ({ suggestions: [...state.suggestions.filter(s => !ids.has(s.childId)), ...fresh] }));
+    await chainSuggestionRepository.replaceOpen(records).catch(() => undefined);
+  },
+  remove: async childId => {
+    set(state => ({ suggestions: state.suggestions.filter(s => s.childId !== childId) }));
+    await chainSuggestionRepository
+      .setStatusByChild(childId, 'superseded', new Date().toISOString())
+      .catch(() => undefined);
+  },
+  accept: async childId => {
+    set(state => ({ suggestions: state.suggestions.filter(s => s.childId !== childId) }));
+    await chainSuggestionRepository
+      .setStatusByChild(childId, 'accepted', new Date().toISOString())
+      .catch(() => undefined);
+  },
+  supersede: async childId => {
+    set(state => ({ suggestions: state.suggestions.filter(s => s.childId !== childId) }));
+    await chainSuggestionRepository
+      .setStatusByChild(childId, 'superseded', new Date().toISOString())
+      .catch(() => undefined);
+  },
+  dismiss: async childId => {
+    const existing = get().suggestions.find(s => s.childId === childId) ?? null;
+    set(state => ({ suggestions: state.suggestions.filter(s => s.childId !== childId) }));
+    await chainSuggestionRepository
+      .setStatusByChild(childId, 'dismissed', new Date().toISOString())
+      .catch(() => undefined);
+    return existing;
+  },
+  reopen: async suggestion => {
+    set(state => ({
+      suggestions: [...state.suggestions.filter(s => s.childId !== suggestion.childId), suggestion],
+    }));
+    await chainSuggestionRepository
+      .setStatusById(suggestion.id, 'open', new Date().toISOString())
+      .catch(() => undefined);
+  },
   clear: () => set({ suggestions: [] }),
 }));
 
 /** Duplicate pairs suggested by chaining (fed to R3b's pair finder). */
-export function chainDuplicatePairs(suggestions: ReadonlyArray<ChainSuggestion>): Array<readonly [string, string]> {
+export function chainDuplicatePairs(
+  suggestions: ReadonlyArray<Pick<ChainSuggestion, 'kind' | 'childId' | 'parentId'>>,
+): Array<readonly [string, string]> {
   return suggestions
     .filter(s => s.kind === 'duplicate' && s.parentId != null)
     .map(s => [s.parentId as string, s.childId] as const);
@@ -186,7 +279,7 @@ export function chainDuplicatePairs(suggestions: ReadonlyArray<ChainSuggestion>)
 
 /** "Waiting for the matching alert" — an incomplete row younger than 24 h. */
 export function isWaitingForMatchingAlert(
-  suggestions: ReadonlyArray<ChainSuggestion>,
+  suggestions: ReadonlyArray<Pick<ChainSuggestion, 'kind' | 'childId' | 'createdAt'>>,
   transactionId: string,
   nowMs: number,
 ): boolean {

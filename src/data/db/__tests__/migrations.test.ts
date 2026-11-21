@@ -312,7 +312,7 @@ describe('runMigrations versioning', () => {
     expect(NUMBERED_MIGRATIONS.some((m: { version: number }) => m.version === 10)).toBe(true);
   });
 
-  it('R5b: migration 11 adds accounts.credit_limit_minor + the bills table, rewrites nothing, and is the last migration', () => {
+  it('R5b: migration 11 adds accounts.credit_limit_minor + the bills table, rewrites nothing', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m11 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 11);
     expect(m11).toBeDefined();
@@ -323,7 +323,21 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS bills/);
     expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b/);
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(11);
+  });
+
+  it('R5i: migration 12 adds the chain_suggestions table (ids/enums only), rewrites nothing, and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m12 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 12);
+    expect(m12).toBeDefined();
+    const joined = m12.statements
+      .map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql))
+      .join('\n');
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS chain_suggestions/);
+    expect(joined).toMatch(/ix_chain_suggestions_status_child/);
+    // No existing row is rewritten, and no SMS body / sender column is stored.
+    expect(joined).not.toMatch(/\bUPDATE\b|\bALTER\b|\bDELETE\b|\bDROP\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(12);
   });
 
   it('R5e: runs migration 10 exactly once and records it', async () => {

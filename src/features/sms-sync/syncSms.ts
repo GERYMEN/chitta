@@ -536,8 +536,9 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     for (const outcome of outcomes) if (outcome.hold && !ruleHolds.has(outcome.childId)) ruleHolds.set(outcome.childId, 'chain');
     const chains = useChainSuggestions.getState();
     // A child that found its parent completes an "incomplete" parent.
-    for (const outcome of outcomes) if (outcome.parentId) chains.remove(outcome.parentId);
-    chains.add(outcomes, now());
+    for (const outcome of outcomes) if (outcome.parentId) await chains.remove(outcome.parentId);
+    // R5i (G3): persist the open suggestions (survives an app restart).
+    await chains.add(outcomes, now());
   }
   // R5e T2: M1–M4 meanings — a stored rule converts (released from the
   // hold), anything else is a persisted suggestion (still held).

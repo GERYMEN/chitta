@@ -1,0 +1,166 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5i-chain-review-message-types (created from
+phase/R5b-bills-dues). Stay on it. Do not switch branches, do not commit.
+Executor = you (a Claude subagent). CODE + TESTS + GATES + DEVICE SCRIPT
+ONLY. NO DEVICE WORK (no adb run) — the owner tests the script later.
+
+READ FIRST (context):
+- ongoing/roadmap/ROADMAP.md ("Working rules"), ongoing/roadmap/STATE.md
+  (R5g/R5e/R5h/R5b rows + decisions log), "ongoing/roadmap/propsal new
+  version with gap.md" (G1 + G3 rows, section 3 gap table).
+- src/features/sms-sync/rules/chaining.ts — ChainOutcomeKind, ChainOutcome,
+  ChainSuggestion, the SESSION-ONLY useChainSuggestions zustand store.
+- src/features/sms-sync/syncSms.ts — resolveChains() and the dispatch block
+  (~lines 514, 533-541) where chain suggestions are produced/held in memory.
+- src/features/review/screens/ReviewScreen.tsx and
+  src/features/review/components/ReviewSections.tsx — the Review screen that
+  today shows Money meaning / transfer / duplicate sections, plus
+  TransferPairCard, DuplicatePairCard, MeaningCard; accept/reject call
+  useTransactionsStore actions that return an `ok` boolean (stale/superseded
+  re-check already lives inside the store actions).
+- src/features/sms-sync/parser/readSms.ts — SmsLabel union, TRANSACTION_LABELS.
+- src/features/sms-sync/rules/ruleRead.ts — nonTransactionLabel/ignoreLabel.
+- src/features/sms-sync/rules/combineReaders.ts — SPECIFIC_READER_LABELS,
+  the extraTransactions (multi-record) path (rule.transactions.slice(1)).
+- src/features/sms-sync/billIngest.ts — BILL_CLASSES, the drop comment for
+  balance_info/otp/collect_request/failed/not_financial.
+- src/data/db/migrations.ts — NUMBERED_MIGRATIONS; highest version is 11.
+- src/data/repositories/bill.repository.ts, R4e backup/restore code, and an
+  existing *_dismissals migration (6/7) as a shape reference.
+
+STATE (verified): R5b shipped on this branch's parent; migration 11 is the
+latest. Statements ALREADY become bills (billIngest.ts, label 'statement' ->
+kind 'card_statement'). Multi-record (one SMS -> up to 3 records, e.g. ATM
+withdrawal + fee) ALREADY works via rules-template reparse (extraTransactions
+in combineReaders.ts, loop in syncSms.ts ~line 443). So those two parts of G1
+are DONE — this phase VERIFIES them, it does not rebuild them.
+
+PHASE R5i — Chain review + message types (proposal G3 + G1).
+
+WHAT IS MISSING (the real work):
+- G3: chain suggestions (duplicate / refund_link / transfer_twin / incomplete
+  produced by rules.json chaining) are held only in the session-only
+  useChainSuggestions store and vanish on app restart, and NOTHING surfaces
+  them in the Review screen. Persist them + show them in Review with an
+  accept-time re-check (stale / superseded), matching the existing
+  transfer/duplicate pattern.
+- G1: 'failed' and 'collect_request' SMS are classified but then silently
+  dropped (no record, no bill, no suggestion, and NOT shown in "Messages not
+  understood" because they ARE understood). Verify + harden this and the
+  multi-record path with tests; no new UI for them by default.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Persist chain suggestions in a NEW table `chain_suggestions` (new numbered
+    migration 12, never edit old ones): id TEXT PK, kind TEXT NOT NULL
+    ('duplicate' | 'refund_link' | 'transfer_twin' | 'incomplete'),
+    child_id TEXT NOT NULL, parent_id TEXT (nullable), parent_override TEXT
+    (nullable; JSON of ENUM/BOOLEAN fields of RuleChainOverride ONLY —
+    deleted, link, incomplete — never any free text or SMS body),
+    status TEXT NOT NULL ('open' | 'accepted' | 'dismissed' | 'superseded'),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL. Index on
+    (status, child_id). One row per child_id (a newer suggestion for the same
+    child REPLACES the open one). Backup/restore (R4e) includes the table;
+    restore of an old backup without the table still works.
+D-b Replace the session-only useChainSuggestions with a repository-backed
+    store (new src/data/repositories/chainSuggestion.repository.ts +
+    src/features/review/state or feature store), keeping the same call sites
+    in syncSms.ts working (add on resolve, remove on completion). Writing a
+    suggestion persists an 'open' row; completing a parent / confirming /
+    dismissing updates status. Suggestions survive restart.
+D-c Chain suggestions NEVER touch balances and NEVER create a transaction on
+    their own. They only surface a pending child + its proposed link; the
+    link is applied only when the user Accepts.
+D-d De-dupe against existing Review sections: a chain suggestion whose child is
+    ALREADY surfaced by useTransferPairs (transfer_twin) or useDuplicatePairs
+    (duplicate) must NOT appear twice. Policy: the Review "Linked by rules"
+    section shows only chain kinds with NO existing UI — refund_link and
+    incomplete — plus any duplicate/transfer_twin chain whose child is not
+    already in the transfer/duplicate sections. Document which kinds you
+    surfaced and why in the report.
+D-e Review "Linked by rules" section (new component, ReviewSections.tsx):
+    each row shows the child (payee/account/date/amount via existing masked
+    rule), the proposed relation (Refund of … / Part of a transfer / Looks
+    like a repeat / Waiting for the matching alert), and actions:
+    - refund_link: Accept -> link as refund (reuse the existing refund link
+      store action), Dismiss.
+    - transfer_twin: Accept -> confirm as transfer (reuse confirmTransferPair
+      semantics), Dismiss.
+    - duplicate: Accept -> mark duplicate (reuse markDuplicate), Dismiss.
+    - incomplete: no Accept (nothing to link yet) — show "Waiting for the
+      matching alert", Dismiss only.
+    Accept RE-CHECKS at tap time: child + parent still exist, still
+    pending/approved, not already linked, not changed. On a stale/superseded
+    pair the store action returns ok=false -> set the row status 'superseded'
+    + snackbar "This pair changed — not recorded" (match existing copy).
+    Dismiss sets status 'dismissed' with a 5 s Undo (reuse the shared
+    Snackbar). >=48 dp targets, a11y labels/roles.
+D-f 'failed' SMS: money did NOT move -> never a transaction, never a bill,
+    never a suggestion, and never shown in "Messages not understood" (it is
+    understood). Keep today's drop behaviour; lock it with tests. No UI.
+D-g 'collect_request' SMS: a request to pay, not money moved -> same as D-f
+    (dropped, tests, no UI). Note in the report that surfacing collect
+    requests as reminders is a possible future owner option, not built here.
+D-h Multi-record (ATM withdrawal + fee, one SMS -> 2 records via template
+    reparse) is already supported. VERIFY with a synthetic test that a
+    template emitting 2 transaction records yields 2 pending rows with
+    distinct per-record content hashes and correct amounts. If no rules.json
+    route produces an ATM-withdrawal-plus-fee pair, ADD the pattern to the
+    rules DATA via scripts/rules (build_rules.js + validate_v2, synthetic
+    samples + negatives) — do NOT hand-edit the generated rules.json.
+D-i Audit: chain_suggested / chain_accepted / chain_dismissed (ids + enum
+    kind only, no amounts beyond the existing masked rule) shown in Activity.
+
+TASKS (failing test with synthetic input first, confirm it fails, then fix):
+T0 Migration 12 (D-a) + chainSuggestion.repository.ts + persisted store
+   (D-b); backup/restore coverage (D-a) + old-backup restore test.
+T1 Wire syncSms.ts resolveChains() to the persisted store (D-b/D-c); keep
+   hold behaviour; complete-parent removal updates status, not a hard delete
+   of history where an audit is expected.
+T2 Review "Linked by rules" section + card(s) (D-e), de-dupe policy (D-d),
+   accept re-check + superseded + dismiss + Undo; a11y.
+T3 G1 hardening: lock 'failed' (D-f) and 'collect_request' (D-g) as dropped
+   with tests; confirm neither reaches bills, transactions, or "not
+   understood".
+T4 G1 multi-record verify (D-h); add the rules-data pattern only if missing.
+T5 Audit types + Activity copy (D-i).
+T6 Device script scripts/device/r5i.sh using scripts/device/lib.sh (read
+   lib.sh, r5b.sh, r5h.sh and README.md first; same style: compact
+   PASS/FAIL, counts only, Tracker-in-front check before every tap/dump,
+   locked screen = stop, 30 s idle wait, live per-test status lines telling
+   the owner what to do, fresh dump before every tap, QA data only, cleanup
+   at the end; never touch the owner's real rows; no screenshots; no db
+   access). Cover: install -r keeps data; open Review from Home; a QA chain
+   suggestion appears in "Linked by rules" (owner-assisted to create the
+   SMS pair, script checks the section count); Accept -> row gone + link
+   shown; Dismiss + Undo; restart app -> suggestion still there (persistence
+   proof); 0 FATAL/ANR in logcat for com.tracker. Update README.md.
+   bash -n the script. Do NOT run it.
+
+PRIVACY (absolute, unchanged): no raw SMS bodies or sender numbers stored or
+logged; chain_suggestions holds ids + enums only (child_id, parent_id, kind,
+the enum/boolean override fields, status, timestamps). Audits ids/enums only.
+Fixtures SYNTHETIC only (QA names, XX1234/XX9999, refs 000000000xxx,
+qa.x@okqa). Never write the reference app's old brand names; the repo calls it
+"chitta-ref-app". No new permission, no dependency, no network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext
+.ts,.tsx 0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/
+openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH; export
+ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R5i-chain-review-message-types.md (what was
+built per task, migration number + columns, which chain kinds are surfaced
+and the de-dupe policy, failed/collect handling, multi-record verification,
+tests added/changed, decisions beyond D-a..D-i, known limits, how to run
+scripts/device/r5i.sh). Leak-scan the report, the diff and new files for
+10-digit phone numbers, real-looking UPI ids, account numbers not
+XX1234/XX9999 style, and personal names (shell only). Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T6 done / not done;
+migration number; which chain kinds surfaced + de-dupe policy; tests changed
+and why; decisions beyond D-a..D-i; anything surprising. Do not paste file
+contents.

@@ -270,6 +270,37 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'CREATE INDEX IF NOT EXISTS ix_bills_source_hash ON bills(source_hash)',
     ],
   },
+  {
+    // R5i (G3) chain suggestions persisted. Before, rules-engine chaining
+    // outcomes (duplicate / refund_link / transfer_twin / incomplete) lived
+    // only in a session-only zustand store and died on restart. This table
+    // keeps them across restarts and feeds the Review "Linked by rules"
+    // section. IDS + ENUMS ONLY — never an SMS body or a sender number:
+    //  - kind: the chaining outcome enum;
+    //  - child_id: the pending child transaction;
+    //  - parent_id: the matched parent (nullable for 'incomplete');
+    //  - parent_override: JSON of the RuleChainOverride ENUM/BOOLEAN fields
+    //    ONLY (deleted / link / incomplete), applied if the user confirms;
+    //  - status: open / accepted / dismissed / superseded.
+    // One OPEN row per child_id (a newer suggestion REPLACES the open one —
+    // the repository deletes the open row for that child before inserting).
+    // Backed up (R4e); a restore of an older backup without the table still
+    // works (the table is created by this migration on the current phone).
+    version: 12,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS chain_suggestions (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    child_id TEXT NOT NULL,
+    parent_id TEXT,
+    parent_override TEXT,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_chain_suggestions_status_child ON chain_suggestions(status, child_id)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

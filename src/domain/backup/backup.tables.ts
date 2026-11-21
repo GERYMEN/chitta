@@ -220,6 +220,25 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       updated_at: 11,
     },
   },
+  {
+    // R5i (G3): persisted chain suggestions (ids + enums only). References a
+    // child / parent transaction, so it restores after `transactions`.
+    // `parent_override` is a JSON of the RuleChainOverride enum/boolean fields
+    // only — never SMS text. A restore of an older backup without this table
+    // still works (the table is created by migration 12 on the phone).
+    name: 'chain_suggestions',
+    sinceVersion: 12,
+    columns: {
+      id: 12,
+      kind: 12,
+      child_id: 12,
+      parent_id: 12,
+      parent_override: 12,
+      status: 12,
+      created_at: 12,
+      updated_at: 12,
+    },
+  },
 ];
 
 /**

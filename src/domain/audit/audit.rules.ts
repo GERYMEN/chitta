@@ -4,6 +4,12 @@ import { AuditMetadata, SmsRunCounts } from './audit.types';
 import { TransferRowSnapshot } from '../transfers/transfer.rules';
 import type { MeaningRowSnapshot } from '../meaning/meaning.rules';
 import { MEANING_KINDS, MeaningKind } from '../meaning/meaning.types';
+import { CHAIN_SUGGESTION_KINDS, ChainSuggestionKind } from '../chains/chainSuggestion.types';
+
+const CHAIN_KINDS: ReadonlySet<string> = new Set(CHAIN_SUGGESTION_KINDS);
+function chainKindOrDefault(value: unknown): ChainSuggestionKind {
+  return CHAIN_KINDS.has(String(value)) ? (value as ChainSuggestionKind) : 'incomplete';
+}
 
 /**
  * Rebuild a metadata payload from whitelisted fields only, so an object
@@ -186,6 +192,20 @@ export function sanitizeAuditMetadata(
       return { kind: 'bill_reopened', billId: String(metadata.billId) };
     case 'bill_dismissed':
       return { kind: 'bill_dismissed', billId: String(metadata.billId) };
+    case 'chain_suggested':
+    case 'chain_accepted':
+      return {
+        kind: metadata.kind,
+        childId: String(metadata.childId),
+        parentId: idOrNull(metadata.parentId),
+        chainKind: chainKindOrDefault(metadata.chainKind),
+      };
+    case 'chain_dismissed':
+      return {
+        kind: 'chain_dismissed',
+        childId: String(metadata.childId),
+        chainKind: chainKindOrDefault(metadata.chainKind),
+      };
     default:
       return null;
   }

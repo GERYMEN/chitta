@@ -11,6 +11,7 @@ import { initTourOnLaunch } from '../features/tour/tourStore';
 import { clearFeedbackScreenshots } from '../native/android/feedback/feedbackNative';
 import { useSmsReaderStore } from '../features/sms-sync/smsReaderStore';
 import { startForegroundAutoRead } from '../features/sms-sync/autoRead/autoReadRunner';
+import { useChainSuggestions } from '../features/sms-sync/rules/chaining';
 
 export function App() {
   const isHydrated = useTransactionsStore(state => state.isHydrated);
@@ -27,6 +28,8 @@ export function App() {
       // R5: auto-read setting + grant (mirrored to the native receiver flag),
       // reader version, "not understood" rows. Never blocks the app.
       useSmsReaderStore.getState().load().catch(() => undefined);
+      // R5i (G3): bring persisted chain suggestions back into memory on launch.
+      useChainSuggestions.getState().refresh().catch(() => undefined);
       // R4c: upgrade installs are marked toured silently; an owed tour is requested.
       return initTourOnLaunch(useTransactionsStore.getState().hasOnboarded).catch(() => undefined);
     });

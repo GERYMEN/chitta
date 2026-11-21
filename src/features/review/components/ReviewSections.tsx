@@ -14,6 +14,9 @@ import { AmountText } from '../../../shared/ui/AmountText';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { useMeaningReviewItems } from '../../meaning/useMeaningReview';
 import { MeaningCard } from '../../meaning/components/MeaningCard';
+import { useChainSuggestions } from '../../sms-sync/rules/chaining';
+import { ChainReviewItem, chainReviewItems } from '../../chains/chainReview';
+import { ChainSuggestionCard } from '../../chains/components/ChainSuggestionCard';
 
 /**
  * R3a "Looks like a transfer" + R3b "Possible duplicates" — shared by Pending
@@ -29,9 +32,12 @@ export function ReviewSections({
   emptyText?: string;
 }) {
   const accounts = useTransactionsStore(state => state.accounts);
+  const transactions = useTransactionsStore(state => state.transactions);
   useRedacted(); // R4c: pair cards re-render masked in the feedback screenshot
   const allTransferPairs = useTransferPairs();
   const allDuplicatePairs = useDuplicatePairs();
+  // R5i (G3): persisted chain suggestions — the "Linked by rules" section.
+  const chainSuggestions = useChainSuggestions(state => state.suggestions);
   // R5e T5: money meanings found by a re-scan on APPROVED rows.
   const allMeaningItems = useMeaningReviewItems();
   const meaningItems = useMemo(
@@ -108,7 +114,64 @@ export function ReviewSections({
       showSnackbar({ message: 'Kept both items' });
     });
 
-  if (transferPairs.length === 0 && duplicatePairs.length === 0 && meaningItems.length === 0) {
+  // D-d: a chain child already surfaced by the transfer / duplicate sections
+  // must NOT appear twice. Exclude every id in those pairs.
+  const chainItems = useMemo(() => {
+    const exclude = new Set<string>();
+    for (const p of transferPairs) {
+      exclude.add(p.debit.id);
+      exclude.add(p.credit.id);
+    }
+    for (const p of duplicatePairs) {
+      exclude.add(p.first.id);
+      exclude.add(p.second.id);
+    }
+    const items = chainReviewItems(chainSuggestions, transactions, exclude);
+    return accountId ? items.filter(i => i.child.accountId === accountId) : items;
+  }, [chainSuggestions, transactions, transferPairs, duplicatePairs, accountId]);
+
+  const acceptChain = (item: ChainReviewItem) =>
+    run(async () => {
+      const { suggestion, child, parent } = item;
+      const store = useTransactionsStore.getState();
+      let ok = false;
+      if (suggestion.kind === 'refund_link' && parent) {
+        ok = (await store.linkRefund(child.id, parent.id)) === null;
+      } else if (suggestion.kind === 'transfer_twin' && parent) {
+        const debit = child.type === 'expense' ? child : parent;
+        const credit = child.type === 'income' ? child : parent;
+        ok = await store.confirmTransferPair(debit.id, credit.id);
+      } else if (suggestion.kind === 'duplicate' && parent) {
+        ok = await store.markDuplicate(parent.id, child.id);
+      }
+      if (ok) {
+        await useChainSuggestions.getState().accept(child.id);
+        showSnackbar({ message: 'Linked by rules' });
+      } else {
+        // D-e: a stale / superseded pair — match the existing copy.
+        await useChainSuggestions.getState().supersede(child.id);
+        showSnackbar({ message: 'This pair changed — not recorded' });
+      }
+    });
+
+  const dismissChain = (item: ChainReviewItem) =>
+    run(async () => {
+      const removed = await useChainSuggestions.getState().dismiss(item.child.id);
+      showSnackbar({
+        message: 'Kept as separate items',
+        actionLabel: 'Undo',
+        onAction: async () => {
+          if (removed) await useChainSuggestions.getState().reopen(removed);
+        },
+      });
+    });
+
+  if (
+    transferPairs.length === 0 &&
+    duplicatePairs.length === 0 &&
+    meaningItems.length === 0 &&
+    chainItems.length === 0
+  ) {
     return emptyText ? <Text style={styles.empty}>{emptyText}</Text> : null;
   }
 
@@ -174,6 +237,26 @@ export function ReviewSections({
               busy={busy}
               onMark={markDuplicate}
               onDismiss={dismissDuplicate}
+            />
+          ))}
+        </View>
+      ) : null}
+      {chainItems.length > 0 ? (
+        <View style={styles.section} testID="chain-section">
+          <Text style={styles.header} testID="chain-header">
+            Linked by rules · {chainItems.length}
+          </Text>
+          <Text style={styles.hint}>
+            Our rules matched these to another message. Nothing changes until you accept.
+          </Text>
+          {chainItems.map(item => (
+            <ChainSuggestionCard
+              key={item.suggestion.id}
+              item={item}
+              accounts={accounts}
+              busy={busy}
+              onAccept={acceptChain}
+              onDismiss={dismissChain}
             />
           ))}
         </View>

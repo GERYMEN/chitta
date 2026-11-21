@@ -5,6 +5,7 @@ import { bumpDataEpoch } from '../../shared/state/dataEpoch';
 import { useBackupStore } from './backupStore';
 import { useNewAccountsStore } from '../sms-sync/newAccountsStore';
 import { useBillsStore } from '../bills/state/billsStore';
+import { useChainSuggestions } from '../sms-sync/rules/chaining';
 
 /**
  * R4e: after a restore replaced every row, bring every in-memory store back
@@ -31,4 +32,6 @@ export async function reloadAfterRestore(): Promise<void> {
   await useNewAccountsStore.getState().refresh();
   // R5b: the restored bills.
   await useBillsStore.getState().refresh();
+  // R5i (G3): the restored chain suggestions (or none, for an older backup).
+  await useChainSuggestions.getState().refresh();
 }

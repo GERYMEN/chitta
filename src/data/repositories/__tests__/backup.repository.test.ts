@@ -236,11 +236,11 @@ describeSql('backup repository (real SQLite)', () => {
     );
   });
 
-  it('N-1 → N specifically (R5b): a v10 backup has no bills table; it restores empty, other tables intact', async () => {
+  it('N-1 → N specifically (R5i): a v11 backup has no chain_suggestions table; it restores empty, other tables intact', async () => {
     const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(10);
+    expect(version).toBe(11);
     const tables = rowsAt(version);
-    expect(tables.bills).toBeUndefined();
+    expect(tables.chain_suggestions).toBeUndefined();
     const payload = parseBackupJson(
       JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
       CURRENT_SCHEMA_VERSION,
@@ -248,9 +248,22 @@ describeSql('backup repository (real SQLite)', () => {
     const target = freshDb();
     await restoreInto(target, payload);
     expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
-    expect(target.rows('bills')).toEqual([]);
-    // Pre-R5b meaning tables still round-trip (they existed at v10).
-    expect(target.rows('money_meaning_rules')).toEqual(FULL_BACKUP_ROWS.money_meaning_rules);
+    // D-a: an old backup without the table still restores; the table is empty.
+    expect(target.rows('chain_suggestions')).toEqual([]);
+    // Pre-R5i tables (bills, v11) still round-trip.
+    expect(target.rows('bills')).toEqual(FULL_BACKUP_ROWS.bills);
+  });
+
+  it('R5i: a current backup carries the chain_suggestions rows exactly', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    expect(tables.chain_suggestions.length).toBeGreaterThan(0);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('chain_suggestions')).toEqual(FULL_BACKUP_ROWS.chain_suggestions);
   });
 
   it('R5e: a v10 backup carries the meaning rules + suggestions exactly', async () => {

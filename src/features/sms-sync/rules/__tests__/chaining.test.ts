@@ -120,7 +120,7 @@ describe('item 21: outcomes are suggestions + holds only', () => {
     const a: Transaction = { ...base, id: 'a', occurredAt: new Date(T - 40 * MIN).toISOString(), refDigest: null };
     const b: Transaction = { ...base, id: 'b', occurredAt: new Date(T).toISOString(), refDigest: null };
     expect(findDuplicatePairs([a, b], [])).toEqual([]);
-    const pairs = chainDuplicatePairs([{ kind: 'duplicate', childId: 'b', parentId: 'a', parentOverride: null, createdAt: T }]);
+    const pairs = chainDuplicatePairs([{ kind: 'duplicate', childId: 'b', parentId: 'a' }]);
     const found = findDuplicatePairs([a, b], [], undefined, pairs);
     expect(found.map(p => [p.first.id, p.second.id])).toEqual([['a', 'b']]);
     expect(a.status).toBe('pending');

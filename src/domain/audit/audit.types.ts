@@ -5,6 +5,7 @@ import type { DuplicateRowSnapshot } from '../duplicates/duplicate.rules';
 import type { MeaningConversionPrevious } from '../meaning/meaning.rules';
 import type { MeaningKind } from '../meaning/meaning.types';
 import type { BillKind, BillSource } from '../bills/bill.types';
+import type { ChainSuggestionKind } from '../chains/chainSuggestion.types';
 
 /**
  * Every money-changing action writes exactly one audit event (R1).
@@ -69,7 +70,15 @@ export type AuditEventType =
   | 'bill_updated'
   | 'bill_paid'
   | 'bill_reopened'
-  | 'bill_dismissed';
+  | 'bill_dismissed'
+  /**
+   * R5i (G3): a chain suggestion surfaced by the rules engine / accepted /
+   * dismissed in Review. Ids + the enum chain kind only — never SMS text, a
+   * sender number or an amount.
+   */
+  | 'chain_suggested'
+  | 'chain_accepted'
+  | 'chain_dismissed';
 
 export type AuditActor = 'system' | 'user';
 
@@ -227,7 +236,15 @@ export type AuditMetadata =
   | { kind: 'bill_updated'; billId: string; fields: string[] }
   | { kind: 'bill_paid'; billId: string; paidMinor: number; linked: boolean }
   | { kind: 'bill_reopened'; billId: string }
-  | { kind: 'bill_dismissed'; billId: string };
+  | { kind: 'bill_dismissed'; billId: string }
+  /**
+   * R5i (G3): chain suggestion events — ids + the enum chain kind only. The
+   * audit row's transaction_id is the child. `parentId` is the matched parent
+   * (null for 'incomplete'). Never a payee, SMS text or amount.
+   */
+  | { kind: 'chain_suggested'; childId: string; parentId: string | null; chainKind: ChainSuggestionKind }
+  | { kind: 'chain_accepted'; childId: string; parentId: string | null; chainKind: ChainSuggestionKind }
+  | { kind: 'chain_dismissed'; childId: string; chainKind: ChainSuggestionKind };
 
 /** R5: counts of one reader run. */
 export interface SmsRunCounts {
