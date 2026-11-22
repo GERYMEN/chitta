@@ -1,0 +1,65 @@
+%% Tracker — navigation map (React Navigation 7: native-stack + bottom-tabs)
+%% initialRouteName = 'Onboarding' (first launch) | 'Tabs' (returning)
+flowchart TD
+  %% ---------- Onboarding stack ----------
+  Onboarding[S_Onboarding: Welcome] -->|Get started| ProfileSetup[S_ProfileSetup: your name]
+  ProfileSetup -->|Next| Permissions[S_Permissions: SMS access]
+  Permissions -->|Next / Skip| SyncStart[S_SyncStart: where SMS sync starts]
+  SyncStart -->|Done| Tabs
+
+  %% ---------- Bottom tabs ----------
+  subgraph Tabs[Tabs - bottom nav]
+    Home[S_Home]
+    Transactions[S_Transactions]
+    Pending[S_Pending]
+    Accounts[S_Accounts]
+  end
+
+  %% ---------- Home entry points ----------
+  Home -->|tap greeting header| Settings{{Profile & settings sheet}}
+  Home -->|Review card 'N to review'| Review[S_Review]
+  Home -->|Uncategorised card| Uncategorised[S_Uncategorised]
+  Home -->|Upcoming card 'Remind me?'| Upcoming[S_Upcoming]
+  Home -->|Where it went card| Insights[S_Insights]
+  Home -->|Budget card| Budgets[S_Budgets]
+  Home -->|due banner| Bills[S_Bills]
+  Home -->|Pending card 'See all'| Pending
+  Home -->|tap a recent txn| TransactionDetail[S_TransactionDetail]
+
+  %% ---------- Settings sheet rows ----------
+  Settings -->|Activity| Activity[S_Activity]
+  Settings -->|Budgets| Budgets
+  Settings -->|People & IOUs| People[S_People]
+  Settings -->|Hidden accounts| IgnoredAccounts[S_IgnoredAccounts]
+  Settings -->|Export CSV| CsvSave[[system save sheet]]
+  Settings -->|Back up data| Backup[S_Backup]
+  Settings -->|Restore from backup| Restore[S_Restore]
+  Settings -->|Messages not understood| NotUnderstood[S_NotUnderstood]
+  Settings -->|Private mode / Theme / App lock / Notifications| Settings
+  Settings -->|App lock unlock gate| AppLock[[Biometric overlay]]
+
+  %% ---------- Transactions ----------
+  Transactions -->|tap row| TransactionDetail
+  Transactions -->|filter chips / Tag filter| Transactions
+  TransactionDetail -->|Edit| EditTransaction[S_EditTransaction]
+  TransactionDetail -->|Split| SplitSheet[[Split / IOU sheet]]
+  TransactionDetail -->|Add tag| TagSheet[[Add tag sheet]]
+  TransactionDetail -->|Attach receipt| PhotoPicker[[system photo picker]]
+  TransactionDetail -->|Mark as transfer| TransactionDetail
+
+  %% ---------- Accounts / Pending ----------
+  Accounts -->|Add account| AddAccount[S_AddAccount]
+  Accounts -->|Use bank balance / Add missing / Dismiss| AddRecord[S_AddRecord: reconcile prefill]
+  Pending -->|New accounts found| SmsSuggestions[S_SmsSuggestions]
+  Pending -->|Approve all / Approve / Reject| Pending
+
+  %% ---------- Budgets / IOU / Bills ----------
+  Budgets -->|Set / Add budget| SetBudget[S_SetBudget]
+  People -->|tap a person| PersonIous[S_PersonIous]
+  People -->|Add an IOU| IouSheet[[Add IOU sheet]]
+  Bills -->|Add bill| AddBill[S_AddBill]
+  Bills -->|Edit bill| EditBill[S_EditBill]
+
+  %% ---------- Manual add ----------
+  Home -. FAB / Add record .-> AddRecord
+  Transactions -. Add record .-> AddRecord

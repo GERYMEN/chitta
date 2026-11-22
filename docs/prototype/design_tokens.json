@@ -1,0 +1,94 @@
+{
+  "$meta": {
+    "app": "Tracker",
+    "source": "src/theme/* (colors.ts, typography.ts, spacing.ts, radii.ts, shadows.ts)",
+    "unit": "px (React Native dp; 1dp = 1px at mdpi)",
+    "designBasis": "docs/DESIGN.md (\"Vibrant Pulse Fintech\"); dark palette derived Material-style",
+    "generated": "2026-11-23"
+  },
+  "font": {
+    "family": "Plus Jakarta Sans",
+    "weights": {
+      "extrabold": "PlusJakartaSans-ExtraBold (800)",
+      "bold": "PlusJakartaSans-Bold (700)",
+      "semibold": "PlusJakartaSans-SemiBold (600)",
+      "medium": "PlusJakartaSans-Medium (500)",
+      "regular": "PlusJakartaSans-Regular (400)"
+    }
+  },
+  "typography": {
+    "displayHero":       { "family": "ExtraBold", "size": 56, "weight": 800, "lineHeight": 64 },
+    "displayHeroMobile": { "family": "ExtraBold", "size": 44, "weight": 800, "lineHeight": 52 },
+    "headlineLg":        { "family": "Bold",      "size": 32, "weight": 700, "lineHeight": 40 },
+    "headlineLgMobile":  { "family": "Bold",      "size": 26, "weight": 700, "lineHeight": 34 },
+    "headlineMd":        { "family": "Bold",      "size": 22, "weight": 700, "lineHeight": 28 },
+    "headlineSm":        { "family": "SemiBold",  "size": 18, "weight": 600, "lineHeight": 24 },
+    "bodyLg":            { "family": "Medium",    "size": 16, "weight": 500, "lineHeight": 24 },
+    "bodyMd":            { "family": "Regular",   "size": 14, "weight": 400, "lineHeight": 20 },
+    "labelLg":           { "family": "Bold",      "size": 14, "weight": 700, "lineHeight": 18 },
+    "labelMd":           { "family": "SemiBold",  "size": 12, "weight": 600, "lineHeight": 16 },
+    "labelSm":           { "family": "Bold",      "size": 10, "weight": 700, "lineHeight": 14 }
+  },
+  "spacing": { "xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32, "screen": 16 },
+  "radius": { "sm": 8, "default": 16, "md": 24, "lg": 32, "xl": 48, "full": 9999 },
+  "elevation": {
+    "level0": "none (flat)",
+    "level1": "none — hairline outlineVariant border, no shadow",
+    "level2": { "color": "obsidian #0B0E11", "offset": [0, 12], "opacity": 0.08, "radius": 32, "androidElevation": 8, "use": "bottom sheets / modals" },
+    "level3": { "color": "obsidian #0B0E11", "offset": [0, -2], "opacity": 0.06, "radius": 12, "androidElevation": 4, "use": "bottom nav / sticky footer" }
+  },
+  "colors": {
+    "light": {
+      "surface": "#f6faff", "surfaceDim": "#d2dbe4", "surfaceBright": "#f6faff",
+      "surfaceContainerLowest": "#ffffff", "surfaceContainerLow": "#ecf5fe", "surfaceContainer": "#e6eff8",
+      "surfaceContainerHigh": "#e0e9f2", "surfaceContainerHighest": "#dbe4ed", "surfaceVariant": "#dbe4ed",
+      "onSurface": "#141d23", "onSurfaceVariant": "#3c4b38",
+      "inverseSurface": "#293138", "inverseOnSurface": "#e9f2fb",
+      "outline": "#6c7b67", "outlineVariant": "#bbcbb3",
+      "surfaceTint": "#006e14", "primary": "#006e14", "onPrimary": "#ffffff", "primaryContainer": "#00d632", "onPrimaryContainer": "#00560e", "inversePrimary": "#2ae540",
+      "secondary": "#5c5f62", "onSecondary": "#ffffff", "secondaryContainer": "#e1e2e7", "onSecondaryContainer": "#626468",
+      "tertiary": "#865300", "onTertiary": "#ffffff", "tertiaryContainer": "#fea51f", "onTertiaryContainer": "#694000",
+      "error": "#ba1a1a", "onError": "#ffffff", "errorContainer": "#ffdad6", "onErrorContainer": "#93000a",
+      "primaryFixed": "#73ff6f", "primaryFixedDim": "#2ae540", "onPrimaryFixed": "#002202", "onPrimaryFixedVariant": "#00530d",
+      "secondaryFixed": "#e1e2e7", "secondaryFixedDim": "#c5c6cb", "onSecondaryFixed": "#191c1f", "onSecondaryFixedVariant": "#44474b",
+      "tertiaryFixed": "#ffddb9", "tertiaryFixedDim": "#ffb961", "onTertiaryFixed": "#2b1700", "onTertiaryFixedVariant": "#663e00",
+      "background": "#f6faff", "onBackground": "#141d23",
+      "obsidian": "#0B0E11", "onObsidian": "#ffffff",
+      "whatsapp": "#25D366", "onWhatsapp": "#0B0E11",
+      "scrim": "rgba(11,14,17,0.72)",
+      "approvedFg": "#00A827", "approvedBg": "#E6F9EC", "pendingFg": "#B7791F", "pendingBg": "#FEF3C7",
+      "rejectedFg": "#6C757D", "rejectedBg": "#E9ECEF", "failedFg": "#DC2626", "failedBg": "#FEE2E2",
+      "categoryAmberFg": "#694000", "categoryAmberBg": "#FBE3C2",
+      "backdrop": "rgba(11,14,17,0.4)", "viewerScrim": "rgba(0,0,0,0.92)"
+    },
+    "dark": {
+      "surface": "#0e1417", "surfaceDim": "#0e1417", "surfaceBright": "#343a3e",
+      "surfaceContainerLowest": "#090f12", "surfaceContainerLow": "#161c1f", "surfaceContainer": "#1a2023",
+      "surfaceContainerHigh": "#252b2e", "surfaceContainerHighest": "#303639", "surfaceVariant": "#3c4b38",
+      "onSurface": "#dde3e9", "onSurfaceVariant": "#bbcbb3",
+      "inverseSurface": "#dde3e9", "inverseOnSurface": "#293138",
+      "outline": "#8a9a83", "outlineVariant": "#3c4b38",
+      "surfaceTint": "#2ae540", "primary": "#2ae540", "onPrimary": "#003907", "primaryContainer": "#00d632", "onPrimaryContainer": "#00560e", "inversePrimary": "#006e14",
+      "secondary": "#c5c6cb", "onSecondary": "#2e3134", "secondaryContainer": "#44474b", "onSecondaryContainer": "#e1e2e7",
+      "tertiary": "#ffb961", "onTertiary": "#472a00", "tertiaryContainer": "#fea51f", "onTertiaryContainer": "#694000",
+      "error": "#ffb4ab", "onError": "#690005", "errorContainer": "#93000a", "onErrorContainer": "#ffdad6",
+      "primaryFixed": "#73ff6f", "primaryFixedDim": "#2ae540", "onPrimaryFixed": "#002202", "onPrimaryFixedVariant": "#00530d",
+      "secondaryFixed": "#e1e2e7", "secondaryFixedDim": "#c5c6cb", "onSecondaryFixed": "#191c1f", "onSecondaryFixedVariant": "#44474b",
+      "tertiaryFixed": "#ffddb9", "tertiaryFixedDim": "#ffb961", "onTertiaryFixed": "#2b1700", "onTertiaryFixedVariant": "#663e00",
+      "background": "#0e1417", "onBackground": "#dde3e9",
+      "obsidian": "#1f272b", "onObsidian": "#ffffff",
+      "whatsapp": "#25D366", "onWhatsapp": "#0B0E11",
+      "scrim": "rgba(0,0,0,0.72)",
+      "approvedFg": "#4ade80", "approvedBg": "#10301c", "pendingFg": "#f5c76b", "pendingBg": "#3a2c0c",
+      "rejectedFg": "#aab2ba", "rejectedBg": "#2a3136", "failedFg": "#ff8a80", "failedBg": "#3d1a1a",
+      "categoryAmberFg": "#ffb961", "categoryAmberBg": "#3a2c0c",
+      "backdrop": "rgba(0,0,0,0.6)", "viewerScrim": "rgba(0,0,0,0.92)"
+    }
+  },
+  "usageNotes": {
+    "shadowPhilosophy": "Hairline outlineVariant borders over shadows; shadow only on level2 (sheets) / level3 (bottom nav).",
+    "money": "Integer minor units (paise); displayed via formatRupeesFromMinor which also applies Private-mode redaction.",
+    "obsidian": "Dark anchor for the balance card / primary pill on light surfaces.",
+    "stateMatrix": "approved/pending/rejected/failed fg+bg pairs flip with theme (stateColorsFor)."
+  }
+}

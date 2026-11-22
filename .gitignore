@@ -76,3 +76,4 @@ yarn-error.log
 
 # Orchestrator run logs (raw executor transcripts; may contain device output)
 ongoing/**/*.log
+docs/prototype/screenshots/
