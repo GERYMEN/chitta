@@ -61,6 +61,7 @@ import {
   useChainSuggestions,
 } from './rules/chaining';
 import { bankCanonicalForText } from './normalizeAccountKey';
+import type { SmsReadResult } from './parser/readSms';
 import type { Account } from '../../domain/accounts/account.types';
 import type { MeaningSuggestion } from '../../domain/meaning/meaning.types';
 import { applyMoneyMeanings, buildExistingRowIndex, suggestionForExistingRow } from './moneyMeaning';
@@ -299,6 +300,41 @@ function emptyResult(declined: boolean): SmsSyncResult {
  * db.transaction as each inserted pending row. A sync writes no approval
  * event (the Pending one-tap approve audits as the user).
  */
+const BALANCE_ONLY_KINDS: ReadonlyArray<ParsedSmsTransaction['accountKind']> = ['bank', 'upi', 'other'];
+
+/**
+ * R6: a balance-only SMS (class balance_info: "Your a/c balance is Rs X")
+ * as match candidates for the snapshot writer. NEVER a transaction — these
+ * objects only go to storeSmsBalanceSnapshots. Needs the SMS's last-4; the
+ * balance is `nonTransaction.amountMinor` (rules: account_balance, else
+ * available_limit / amount; legacy reader: the 'balance' amount).
+ */
+export function balanceOnlyCandidates(
+  read: Pick<SmsReadResult, 'nonTransaction' | 'institution'>,
+  smsDateMs: number,
+): ParsedSmsTransaction[] {
+  const nt = read.nonTransaction;
+  if (!nt || nt.label !== 'balance_info' || nt.amountMinor == null || nt.amountMinor < 0) return [];
+  if (nt.lastFour == null) return [];
+  return BALANCE_ONLY_KINDS.map(
+    accountKind =>
+      ({
+        type: 'income',
+        amountMinor: 0,
+        merchantName: '',
+        occurredAt: new Date(smsDateMs).toISOString(),
+        confidenceScore: 0,
+        sanitizedPreview: '',
+        sourceReferenceHash: '',
+        bankName: '',
+        bankCanonical: read.institution || 'unknown',
+        accountKind,
+        lastFour: nt.lastFour,
+        balanceMinor: nt.amountMinor,
+      }) as ParsedSmsTransaction,
+  );
+}
+
 /**
  * R6 (D-b): write the balance a matched SMS reported onto that account
  * (the SAME R5d key matching the transactions use; no match = no snapshot,
@@ -311,6 +347,8 @@ export async function storeSmsBalanceSnapshots(
   candidates: ReadonlyArray<ParsedSmsTransaction>,
   deletedDecisionKeys: ReadonlySet<string>,
   decisions: ReturnType<typeof toSuggestionDecisions>,
+  /** Candidates built from a balance-only SMS (also bank-checked when matched). */
+  balanceOnly: ReadonlySet<ParsedSmsTransaction> = new Set(),
 ): Promise<void> {
   if (candidates.length === 0) return;
   const { matched } = partitionCandidates(
@@ -323,6 +361,12 @@ export async function storeSmsBalanceSnapshots(
   for (const { parsed, accountId } of matched) {
     const account = useTransactionsStore.getState().accounts.find(a => a.id === accountId);
     if (!account || account.type === 'credit_card' || account.type === 'pay_later') continue;
+    // A balance-only SMS has no transaction kind, so it was tried under a few
+    // kinds; a known bank on both sides must agree (never a cross-bank guess).
+    if (balanceOnly.has(parsed) && parsed.bankCanonical !== 'unknown') {
+      const accountBank = bankCanonicalForText(account.name);
+      if (accountBank !== 'unknown' && accountBank !== parsed.bankCanonical) continue;
+    }
     const atMs = Date.parse(parsed.occurredAt);
     if (parsed.balanceMinor == null || Number.isNaN(atMs)) continue;
     const seen = newest.get(accountId);
@@ -431,6 +475,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
   const unmatchedAll: ParsedSmsTransaction[] = [];
   // R6: SMS that reported an account balance (a number; text never kept).
   const balanceCandidates: ParsedSmsTransaction[] = [];
+  const balanceOnlySet = new Set<ParsedSmsTransaction>();
   // R5e T5: a deduplicated candidate with a meaning suggests it for the
   // EXISTING row it matched (never changes that row).
   const existingIndex = buildExistingRowIndex(store.transactions);
@@ -473,6 +518,12 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
       }
       if (openUnparsed.has(key) && read.label !== 'not_financial') {
         resolvedUnparsed.push({ smsId: message.id, smsDate: message.date });
+      }
+      // R6: a balance-only SMS refreshes the snapshot — snapshot only, it is
+      // never a candidate, so no transaction / pending item is created.
+      for (const c of balanceOnlyCandidates(read, message.date)) {
+        balanceCandidates.push(c);
+        balanceOnlySet.add(c);
       }
       // R5b (D-d): a bill / statement / future-debit notice becomes an open
       // bill — never a transaction, never a balance change.
@@ -573,7 +624,7 @@ export async function syncSms(options: SyncOptions = {}): Promise<SmsSyncResult>
     }
     await yieldToUi();
   }
-  await storeSmsBalanceSnapshots(balanceCandidates, deletedDecisionKeys, decisions).catch(
+  await storeSmsBalanceSnapshots(balanceCandidates, deletedDecisionKeys, decisions, balanceOnlySet).catch(
     () => undefined,
   );
   const created = createdRows.length;

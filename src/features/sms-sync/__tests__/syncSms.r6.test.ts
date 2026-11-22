@@ -181,3 +181,79 @@ describe('R6 sync snapshot', () => {
     expect(text).not.toMatch(/Avl Bal|qa\.store|okqa/i);
   });
 });
+
+const balOnly = (id: string, date: number, bal: string, last4 = '1234', sender = HDFC) => ({
+  id,
+  address: sender,
+  body: `Your HDFC Bank A/c XX${last4} Available Balance is Rs.${bal} as on 05-11-26.`,
+  date,
+});
+const rowsCount = () => useTransactionsStore.getState().transactions.length;
+
+describe('R6 sync snapshot — balance-only SMS', () => {
+  it('a balance-only SMS updates the snapshot and creates NO transaction / pending item', async () => {
+    setup([acct({})]);
+    mockInbox = [balOnly('1', T0, '4,321.00')];
+    const result = await syncSms(RESCAN);
+    expect(result.created).toBe(0);
+    expect(rowsCount()).toBe(0);
+    expect(acc().smsBalanceMinor).toBe(432100);
+    expect(acc().smsBalanceAt).toBe(new Date(T0).toISOString());
+    expect(dbRow().sms_balance_minor).toBe(432100);
+  });
+
+  it('newest wins across the two kinds (transaction SMS newer than balance-only)', async () => {
+    setup([acct({})]);
+    mockInbox = [debit('2', T0 + 5000, '100.00', '8,000.00'), balOnly('1', T0, '9,999.00')];
+    await syncSms(RESCAN);
+    expect(acc().smsBalanceMinor).toBe(800000);
+  });
+
+  it('newest wins across the two kinds (balance-only newer than transaction SMS)', async () => {
+    setup([acct({})]);
+    mockInbox = [balOnly('2', T0 + 5000, '7,000.00'), debit('1', T0, '100.00', '8,000.00')];
+    await syncSms(RESCAN);
+    expect(acc().smsBalanceMinor).toBe(700000);
+    expect(rowsCount()).toBe(1); // only the debit became a row
+  });
+
+  it('never overwrites a newer stored snapshot with an older balance-only SMS', async () => {
+    setup([acct({ sms_balance_minor: 555500, sms_balance_at: T0 + 9 * DAY })]);
+    mockInbox = [balOnly('1', T0, '1.00')];
+    await syncSms(RESCAN);
+    expect(acc().smsBalanceMinor).toBe(555500);
+  });
+
+  it('no matching account: no snapshot, no invented account', async () => {
+    setup([acct({})]);
+    mockInbox = [balOnly('1', T0, '4,321.00', '7777')];
+    await syncSms(RESCAN);
+    expect(acc().smsBalanceMinor).toBeNull();
+    expect(dbRows()).toHaveLength(1);
+  });
+
+  it('a same-last-4 account of a DIFFERENT bank is not matched', async () => {
+    setup([acct({ id: 'acc-icici', name: 'ICICI Bank' })]);
+    mockInbox = [balOnly('1', T0, '4,321.00')];
+    await syncSms(RESCAN);
+    expect(acc('acc-icici').smsBalanceMinor).toBeNull();
+  });
+
+  it('liability accounts are skipped', async () => {
+    setup([acct({ id: 'acc-cc', name: 'HDFC Credit Card', type: 'credit_card' })]);
+    mockInbox = [balOnly('1', T0, '4,321.00')];
+    await syncSms(RESCAN);
+    expect(acc('acc-cc').smsBalanceMinor).toBeNull();
+  });
+
+  it('stores no SMS text and touches no anchor / updated_at', async () => {
+    setup([acct({})]);
+    mockInbox = [balOnly('1', T0, '4,321.00')];
+    await syncSms(RESCAN);
+    const r = dbRow();
+    expect(JSON.stringify(r)).not.toMatch(/Available Balance|as on/i);
+    expect(r.balance_anchor_minor).toBeNull();
+    expect(r.updated_at).toBe('2026-10-01T00:00:00.000Z');
+  });
+});
+

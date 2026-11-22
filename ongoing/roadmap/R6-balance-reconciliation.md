@@ -103,11 +103,18 @@ carry the snapshot columns). All needed because the schema/version moved.
 5. "Use bank balance" has no new audit type and no new store audit shape (D-h).
 6. "Add missing" saves to Pending and navigates there; prefilled merchant
    "Balance difference" (the form requires a merchant).
-7. Snapshot is stored from transaction SMS only; "balance_info" SMS (no
-   transaction) do not feed it.
+7. Balance-only SMS (class `balance_info`, e.g. "Available Balance is Rs X") also feed the
+   snapshot (follow-up): `balanceOnlyCandidates` in `syncSms.ts` builds match-only
+   candidates (never a transaction or pending item) from `nonTransaction.amountMinor`
+   (rules: `account_balance`, else `available_limit` / `amount`; legacy reader: the
+   'balance' amount) and `nonTransaction.lastFour`. They go through the same
+   `partitionCandidates` and `setSmsBalanceSnapshot` (latest wins across both kinds,
+   liability skipped, no match = no-op). With no transaction kind on the SMS they are
+   tried as bank / upi / other, and a known bank on both sides must agree.
 
 ## Known limits
 
+- A balance-only SMS needs a last-4 (a 3-digit mask is not matched).
 - Tracked balance is "now", the bank figure is "as of the SMS": an approved
   manual item dated after the last balance SMS shows as a difference until the
   next balance SMS (spec D-c, kept simple).
@@ -126,6 +133,6 @@ see `scripts/device/README.md`, section R6).
 
 ## Gates
 
-tsc clean; eslint 0 errors (2 pre-existing warnings); jest 149 suites / 2562 tests
+tsc clean; eslint 0 errors (2 pre-existing warnings); jest 149 suites / 2570 tests pass
 pass; `validate_v2.js` ALL OK (rules.json unchanged); `./gradlew assembleDebug`
 BUILD SUCCESSFUL.
