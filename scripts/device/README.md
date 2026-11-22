@@ -489,3 +489,24 @@ helpers: `pick_device`, `wait_idle`, `launch`, `tap`, `has`, `count`,
 `hashes`, `tab_badge`, `grab_first` (count-only regexes only), `swipe_up`,
 `back_if_tracker`, `fatal_count`, `begin`/`pass`/`fail`/`skip`/`summary`.
 Never add a helper that prints a full screen dump or raw text.
+
+## R5e — Money meaning (card payment / ATM / wallet top-up / EMI)
+
+```
+scripts/device/r5e.sh [--skip-install]
+```
+
+Counts-only, owner-assisted. Money-meaning suggestions come from a real bank
+SMS (a card-bill payment, ATM withdrawal, wallet top-up or EMI debit), and adb
+cannot inject SMS — so the suggestion-dependent steps are owner-assisted and
+**SKIP cleanly** when no such item is present. To exercise R5e fully, have one
+such SMS in the inbox (or a prior sync that produced a "Money meaning" card in
+Review) before running.
+
+### Checks
+- R2: a Money-meaning card is reachable in Review (else SKIP).
+- R3: confirming a meaning card (with "Do this automatically next time") offers
+  "Undo transfer" — the item became a transfer (excluded from spend).
+- R4: Undo transfer reverts the QA conversion (so nothing of yours is left changed).
+- R5: meaning rules are manageable in Settings.
+- R6: 0 FATAL/ANR for com.tracker during the run.
