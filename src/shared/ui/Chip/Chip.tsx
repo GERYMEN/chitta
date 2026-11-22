@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { colors, radii, spacing, typography } from '../../../theme';
-import { transactionStateColors } from '../../../theme/colors';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 
 export type ChipTone = 'neutral' | 'active' | 'approved' | 'pending' | 'rejected' | 'failed';
 
@@ -17,7 +16,8 @@ export interface ChipProps {
  * transaction-state matrix (approved/pending/rejected/failed).
  */
 export function Chip({ label, tone = 'neutral', icon, style }: ChipProps) {
-  const toneStyle = TONE_STYLES[tone];
+  const c = useColors();
+  const toneStyle = useMemo(() => makeToneStyles(c)[tone], [c, tone]);
 
   return (
     <View style={[styles.base, toneStyle.container, style]}>
@@ -29,32 +29,34 @@ export function Chip({ label, tone = 'neutral', icon, style }: ChipProps) {
   );
 }
 
-const TONE_STYLES: Record<ChipTone, { container: ViewStyle; label: { color: string } }> = {
+const makeToneStyles = (
+  c: ColorTokens,
+): Record<ChipTone, { container: ViewStyle; label: { color: string } }> => ({
   neutral: {
-    container: { backgroundColor: colors.surfaceContainerLowest, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.outlineVariant },
-    label: { color: colors.onSurfaceVariant },
+    container: { backgroundColor: c.surfaceContainerLowest, borderWidth: StyleSheet.hairlineWidth, borderColor: c.outlineVariant },
+    label: { color: c.onSurfaceVariant },
   },
   active: {
-    container: { backgroundColor: colors.obsidian },
-    label: { color: colors.onObsidian },
+    container: { backgroundColor: c.obsidian },
+    label: { color: c.onObsidian },
   },
   approved: {
-    container: { backgroundColor: transactionStateColors.approved.bg },
-    label: { color: transactionStateColors.approved.fg },
+    container: { backgroundColor: c.approvedBg },
+    label: { color: c.approvedFg },
   },
   pending: {
-    container: { backgroundColor: transactionStateColors.pending.bg },
-    label: { color: transactionStateColors.pending.fg },
+    container: { backgroundColor: c.pendingBg },
+    label: { color: c.pendingFg },
   },
   rejected: {
-    container: { backgroundColor: transactionStateColors.rejected.bg },
-    label: { color: transactionStateColors.rejected.fg },
+    container: { backgroundColor: c.rejectedBg },
+    label: { color: c.rejectedFg },
   },
   failed: {
-    container: { backgroundColor: transactionStateColors.failed.bg },
-    label: { color: transactionStateColors.failed.fg },
+    container: { backgroundColor: c.failedBg },
+    label: { color: c.failedFg },
   },
-};
+});
 
 const styles = StyleSheet.create({
   base: {

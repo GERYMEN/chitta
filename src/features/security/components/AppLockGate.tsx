@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Button } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { clock } from '../../../shared/utils/clock';
@@ -34,6 +34,8 @@ interface AppLockGateProps {
  * Content stays mounted, so navigation state survives a lock.
  */
 export function AppLockGate({ ready, children }: AppLockGateProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [phase, setPhase] = useState<Phase>('pending');
   const phaseRef = useRef<Phase>('pending');
   const backgroundedAt = useRef<number | null>(null);
@@ -112,7 +114,7 @@ export function AppLockGate({ ready, children }: AppLockGateProps) {
         <View style={styles.overlay} testID="app-lock-overlay">
           {phase === 'locked' ? (
             <>
-              <Icon name="lock-outline" size={48} color={colors.onSurfaceVariant} />
+              <Icon name="lock-outline" size={48} color={c.onSurfaceVariant} />
               <Text style={styles.title}>Tracker is locked</Text>
               <Button label="Unlock" onPress={() => unlock().catch(() => undefined)} testID="app-lock-unlock" />
             </>
@@ -123,7 +125,7 @@ export function AppLockGate({ ready, children }: AppLockGateProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   fill: { flex: 1 },
   overlay: {
     position: 'absolute',
@@ -133,10 +135,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 1000,
     elevation: 1000,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
   },
-  title: { ...typography.headlineSm, color: colors.onSurface },
+  title: { ...typography.headlineSm, color: c.onSurface },
 });

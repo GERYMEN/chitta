@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HeaderBackButton, HeaderSpacer, showDialog } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { activeAccounts } from '../../../domain/accounts/account.rules';
 import { CreateAccountInput } from '../../../data/repositories/account.repository';
@@ -33,6 +33,8 @@ type Route = RouteProp<RootStackParamList, 'AddAccount'>;
  * plain add.
  */
 export function AddAccountScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const [submitting, setSubmitting] = useState(false);
@@ -113,10 +115,10 @@ export function AddAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -129,6 +131,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
 });

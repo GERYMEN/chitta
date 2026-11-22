@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { TransactionPatch } from '../../../data/repositories/transaction.repository';
 import { RootStackParamList } from '../../../app/navigation/routes';
@@ -22,6 +22,8 @@ import {
 type EditRoute = RouteProp<RootStackParamList, 'EditTransaction'>;
 
 export function EditTransactionScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation();
   const route = useRoute<EditRoute>();
   const transaction = useTransactionsStore(state =>
@@ -156,10 +158,10 @@ export function EditTransactionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -172,17 +174,17 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   missing: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   missingText: {
     ...typography.bodyLg,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
     paddingHorizontal: spacing.xl,
   },

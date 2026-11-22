@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransferPairs } from '../../transfers/useTransferPairs';
 import { useDuplicatePairs } from '../../duplicates/useDuplicatePairs';
 import { toReviewLabel } from '../../duplicates/duplicateLabels';
@@ -19,6 +19,8 @@ export function ReviewCard({
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const transferPairs = useTransferPairs();
   const duplicatePairs = useDuplicatePairs();
   // R5e T5: + money meanings waiting on approved rows.
@@ -35,7 +37,7 @@ export function ReviewCard({
       testID="review-card"
       style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}>
       <View style={styles.icon}>
-        <Icon name="clipboard-check-outline" size={20} color={colors.secondary} />
+        <Icon name="clipboard-check-outline" size={20} color={c.secondary} />
       </View>
       <Text style={styles.text}>{label}</Text>
       <Text style={styles.link}>Review ›</Text>
@@ -43,7 +45,7 @@ export function ReviewCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -51,7 +53,7 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: spacing.md,
     borderRadius: radii.default,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: c.secondaryContainer,
   },
   pressed: {
     opacity: 0.7,
@@ -60,17 +62,17 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   link: {
     ...typography.labelLg,
-    color: colors.secondary,
+    color: c.secondary,
   },
 });

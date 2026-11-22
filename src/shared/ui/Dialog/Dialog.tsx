@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../Button';
 import { Icon } from '../../icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { shadows } from '../../../theme/shadows';
 import { DialogAction, DialogConfig, isDestructiveDialog, useDialogStore } from './dialogStore';
 
@@ -19,6 +19,8 @@ export interface DialogProps {
  * Built on core RN Modal only (no animation/gesture native dependency).
  */
 export function Dialog({ config, onDismiss, onAction }: DialogProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   if (!config) return null;
 
   const destructive = isDestructiveDialog(config);
@@ -44,7 +46,7 @@ export function Dialog({ config, onDismiss, onAction }: DialogProps) {
               <Icon
                 name={config.icon}
                 size={26}
-                color={destructive ? colors.error : colors.primary}
+                color={destructive ? c.error : c.primary}
               />
             </View>
           ) : null}
@@ -80,7 +82,7 @@ export function DialogHost() {
   return <Dialog config={config} onDismiss={dismiss} onAction={press} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   root: {
     flex: 1,
     alignItems: 'center',
@@ -89,12 +91,12 @@ const styles = StyleSheet.create({
   },
   scrim: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.obsidian,
+    backgroundColor: c.obsidian,
     opacity: 0.4,
   },
   surface: {
     alignSelf: 'stretch',
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderRadius: radii.lg,
     padding: spacing.lg,
   },
@@ -107,18 +109,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   iconWrapNeutral: {
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
   },
   iconWrapDestructive: {
-    backgroundColor: colors.errorContainer,
+    backgroundColor: c.errorContainer,
   },
   title: {
     ...typography.headlineSm,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   message: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     marginTop: spacing.sm,
   },
   actions: {

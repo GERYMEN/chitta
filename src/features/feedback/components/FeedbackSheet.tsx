@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { FEEDBACK_NOTE_MAX } from '../feedback.constants';
 import {
   canSendFeedback,
@@ -52,6 +52,8 @@ export function FeedbackSheet({
   onSend,
   sending = false,
 }: FeedbackSheetProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const sendEnabled = canSendFeedback({ category, note }) && !sending;
 
   return (
@@ -71,7 +73,7 @@ export function FeedbackSheet({
           hitSlop={4}
           testID="feedback-close"
           style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
-          <Icon name="close" size={22} color={colors.onSurface} />
+          <Icon name="close" size={22} color={c.onSurface} />
         </Pressable>
       </View>
 
@@ -103,7 +105,7 @@ export function FeedbackSheet({
         value={note}
         onChangeText={text => onNoteChange(clampNote(text))}
         placeholder={NOTE_PLACEHOLDER}
-        placeholderTextColor={colors.outline}
+        placeholderTextColor={c.outline}
         multiline
         maxLength={FEEDBACK_NOTE_MAX}
         textAlignVertical="top"
@@ -152,7 +154,7 @@ export function FeedbackSheet({
           pressed && sendEnabled && styles.pressed,
           !sendEnabled && styles.disabled,
         ]}>
-        <Icon name="whatsapp" size={22} color={colors.onWhatsapp} />
+        <Icon name="whatsapp" size={22} color={c.onWhatsapp} />
         <Text style={styles.sendText}>Send on WhatsApp</Text>
       </Pressable>
     </BottomSheet>
@@ -168,6 +170,8 @@ function SmallAction({
   onPress: () => void;
   testID: string;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -180,7 +184,7 @@ function SmallAction({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -189,17 +193,17 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.headlineSm,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   versionBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
   },
   versionText: {
     ...typography.labelMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   headerSpacer: {
     flex: 1,
@@ -224,33 +228,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pillIdle: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
   },
   pillSelected: {
-    backgroundColor: colors.obsidian,
+    backgroundColor: c.obsidian,
   },
   pillText: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   pillTextSelected: {
-    color: colors.onObsidian,
+    color: c.onObsidian,
   },
   note: {
     ...typography.bodyLg,
     minHeight: 112,
     borderRadius: radii.default,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
-    backgroundColor: colors.surfaceContainerLowest,
+    borderColor: c.outlineVariant,
+    backgroundColor: c.surfaceContainerLowest,
     padding: spacing.md,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   counter: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
     alignSelf: 'flex-end',
     marginTop: spacing.xs,
     marginBottom: spacing.md,
@@ -265,9 +269,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 112,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
   },
   shotMeta: {
     flex: 1,
@@ -275,7 +279,7 @@ const styles = StyleSheet.create({
   },
   shotCaption: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   shotActions: {
     flexDirection: 'row',
@@ -283,7 +287,7 @@ const styles = StyleSheet.create({
   },
   noShot: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     flex: 1,
   },
   smallAction: {
@@ -291,27 +295,27 @@ const styles = StyleSheet.create({
     minWidth: 64,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
   smallActionText: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   send: {
     flexDirection: 'row',
     gap: spacing.sm,
     minHeight: 56,
     borderRadius: radii.full,
-    backgroundColor: colors.whatsapp,
+    backgroundColor: c.whatsapp,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendText: {
     ...typography.labelLg,
     fontSize: 16,
-    color: colors.onWhatsapp,
+    color: c.onWhatsapp,
   },
   pressed: {
     opacity: 0.8,

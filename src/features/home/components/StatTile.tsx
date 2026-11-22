@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 
 export interface StatTileProps {
@@ -13,17 +13,19 @@ export interface StatTileProps {
 }
 
 export function StatTile({ label, amountMinor, caption, tone }: StatTileProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const isIncome = tone === 'income';
 
   return (
     <Card style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.label}>{label}</Text>
-        <View style={[styles.badge, { backgroundColor: isIncome ? '#E6F9EC' : '#FEE2E2' }]}>
+        <View style={[styles.badge, { backgroundColor: isIncome ? c.approvedBg : c.failedBg }]}>
           <Icon
             name={isIncome ? 'arrow-down' : 'arrow-up'}
             size={14}
-            color={isIncome ? '#00A827' : '#DC2626'}
+            color={isIncome ? c.approvedFg : c.failedFg}
           />
         </View>
       </View>
@@ -33,7 +35,7 @@ export function StatTile({ label, amountMinor, caption, tone }: StatTileProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     flex: 1,
     gap: spacing.xs,
@@ -45,7 +47,7 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
   },
   badge: {
@@ -57,10 +59,10 @@ const styles = StyleSheet.create({
   },
   amount: {
     ...typography.headlineMd,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   caption: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
 });

@@ -1,5 +1,4 @@
-import { colors } from '../../theme';
-import { transactionStateColors } from '../../theme/colors';
+import { ColorTokens } from '../../theme';
 import type { Category } from '../../domain/categories/category.types';
 import type { CategoryColorKey } from '../../domain/categories/category.rules';
 
@@ -9,17 +8,17 @@ export interface CategoryVisual {
   backgroundColor: string;
 }
 
-const DEFAULT_VISUAL: CategoryVisual = {
+const defaultVisual = (colors: ColorTokens): CategoryVisual => ({
   icon: 'file-document-outline',
   iconColor: colors.onSurfaceVariant,
   backgroundColor: colors.surfaceContainerHigh,
-};
+});
 
-const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
+const categoryVisuals = (colors: ColorTokens): Record<string, CategoryVisual> => ({
   'cat-food': {
     icon: 'silverware-fork-knife',
-    iconColor: colors.onTertiaryContainer,
-    backgroundColor: '#FBE3C2',
+    iconColor: colors.categoryAmberFg,
+    backgroundColor: colors.categoryAmberBg,
   },
   'cat-shopping': {
     icon: 'shopping-outline',
@@ -33,8 +32,8 @@ const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
   },
   'cat-coffee': {
     icon: 'coffee-outline',
-    iconColor: colors.onTertiaryContainer,
-    backgroundColor: '#FBE3C2',
+    iconColor: colors.categoryAmberFg,
+    backgroundColor: colors.categoryAmberBg,
   },
   'cat-salary': {
     icon: 'bank-outline',
@@ -65,20 +64,22 @@ const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
   },
   'cat-uncategorised': {
     icon: 'help-circle-outline',
-    iconColor: transactionStateColors.pending.fg,
-    backgroundColor: transactionStateColors.pending.bg,
+    iconColor: colors.pendingFg,
+    backgroundColor: colors.pendingBg,
   },
-};
+});
 
 /** R2 custom-category colours — every pair is an existing theme token. */
-export const CATEGORY_COLOR_SWATCHES: Record<CategoryColorKey, { fg: string; bg: string }> = {
-  green: { fg: colors.primary, bg: transactionStateColors.approved.bg },
+export const categoryColorSwatches = (
+  colors: ColorTokens,
+): Record<CategoryColorKey, { fg: string; bg: string }> => ({
+  green: { fg: colors.primary, bg: colors.approvedBg },
   lime: { fg: colors.onPrimaryFixedVariant, bg: colors.primaryFixed },
   amber: { fg: colors.onTertiaryContainer, bg: colors.tertiaryFixed },
   slate: { fg: colors.onSurfaceVariant, bg: colors.surfaceContainerHigh },
   grey: { fg: colors.onSecondaryFixedVariant, bg: colors.secondaryFixed },
   red: { fg: colors.onErrorContainer, bg: colors.errorContainer },
-};
+});
 
 /**
  * Built-in categories use the fixed visuals above; a custom category uses its
@@ -86,16 +87,19 @@ export const CATEGORY_COLOR_SWATCHES: Record<CategoryColorKey, { fg: string; bg:
  */
 export function getCategoryVisual(
   categoryId: string,
-  category?: Pick<Category, 'icon' | 'color'> | null,
+  category: Pick<Category, 'icon' | 'color'> | null | undefined,
+  colors: ColorTokens,
 ): CategoryVisual {
-  const builtIn = CATEGORY_VISUALS[categoryId];
+  const builtIn = categoryVisuals(colors)[categoryId];
   if (builtIn) return builtIn;
+  const fallback = defaultVisual(colors);
   if (category) {
+    const swatches = categoryColorSwatches(colors);
     const swatch =
-      category.color && category.color in CATEGORY_COLOR_SWATCHES
-        ? CATEGORY_COLOR_SWATCHES[category.color as CategoryColorKey]
-        : { fg: DEFAULT_VISUAL.iconColor, bg: DEFAULT_VISUAL.backgroundColor };
+      category.color && category.color in swatches
+        ? swatches[category.color as CategoryColorKey]
+        : { fg: fallback.iconColor, bg: fallback.backgroundColor };
     return { icon: category.icon, iconColor: swatch.fg, backgroundColor: swatch.bg };
   }
-  return DEFAULT_VISUAL;
+  return fallback;
 }

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DimensionValue, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { colors, radii, spacing, typography } from '../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../theme';
 
 /**
  * R4 chart contract (user decision 2026-10-28: plain RN Views now, maybe a
@@ -68,6 +68,8 @@ export function barHeightOf(value: number, max: number): number {
 }
 
 export function ChartBars(props: ChartBarsProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const max = chartMaxValue(props.data);
   return props.orientation === 'horizontal' ? (
     <View style={styles.horizontal} testID={props.testID}>
@@ -93,6 +95,8 @@ function BarShell({
   style: ViewStyle;
   children: React.ReactNode;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const label = accessibilityLabelFor(datum);
   const testID = `chart-bar-${datum.key}`;
   if (onPressBar) {
@@ -115,7 +119,9 @@ function BarShell({
 }
 
 function HorizontalBar(props: BarProps) {
-  const { datum, max, formatValue, formatDetail, secondaryColor = colors.primary } = props;
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const { datum, max, formatValue, formatDetail, secondaryColor = c.primary } = props;
   const detail = formatDetail ? formatDetail(datum) : null;
   const fillStyle = { width: widthOf(datum.value, max), backgroundColor: datum.color };
   const secondaryFillStyle =
@@ -144,6 +150,8 @@ function HorizontalBar(props: BarProps) {
 }
 
 function VerticalBars(props: ChartBarsProps & { max: number }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { data, max, formatValue, testID } = props;
   const paired = data.some(datum => datum.secondaryValue !== undefined);
   const crowded = data.length > 6;
@@ -161,7 +169,9 @@ function VerticalBars(props: ChartBarsProps & { max: number }) {
 }
 
 function VerticalGroup(props: BarProps & { barWidth: number }) {
-  const { datum, max, barWidth, secondaryColor = colors.primary } = props;
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const { datum, max, barWidth, secondaryColor = c.primary } = props;
   const primaryStyle = {
     height: barHeightOf(datum.value, max),
     width: barWidth,
@@ -190,7 +200,7 @@ function VerticalGroup(props: BarProps & { barWidth: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
@@ -210,18 +220,18 @@ const styles = StyleSheet.create({
   },
   hLabel: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   hValue: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     fontVariant: ['tabular-nums'],
   },
   hTrack: {
     height: 8,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     overflow: 'hidden',
   },
   hTrackSecondary: {
@@ -233,11 +243,11 @@ const styles = StyleSheet.create({
   },
   hDetail: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   vScale: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
     marginBottom: spacing.xs,
   },
   vPlot: {
@@ -264,11 +274,11 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.outlineVariant,
+    borderTopColor: c.outlineVariant,
     paddingTop: spacing.xs,
   },
   vLabel: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
   },
 });

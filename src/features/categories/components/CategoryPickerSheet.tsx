@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheet } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { TransactionType } from '../../../domain/transactions/transaction.types';
 import { categoryLabel, pickableCategories } from '../../../domain/categories/category.rules';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
@@ -32,6 +32,8 @@ export function CategoryPickerSheet({
   includeUncategorised = true,
   title = 'Choose a category',
 }: CategoryPickerSheetProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const categories = useTransactionsStore(state => state.categories);
   const options = useMemo(
     () => pickableCategories(categories, type, { keepId: selectedId, includeUncategorised }),
@@ -42,7 +44,7 @@ export function CategoryPickerSheet({
     <BottomSheet visible={visible} onClose={onClose}>
       <Text style={styles.title}>{title}</Text>
       {options.map(category => {
-        const visual = getCategoryVisual(category.id, category);
+        const visual = getCategoryVisual(category.id, category, c);
         const selected = category.id === selectedId;
         return (
           <Pressable
@@ -59,7 +61,7 @@ export function CategoryPickerSheet({
             <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={1}>
               {categoryLabel(category)}
             </Text>
-            {selected ? <Icon name="check" size={20} color={colors.primary} /> : null}
+            {selected ? <Icon name="check" size={20} color={c.primary} /> : null}
           </Pressable>
         );
       })}
@@ -67,11 +69,11 @@ export function CategoryPickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
     marginBottom: spacing.sm,
   },
   option: {
@@ -92,10 +94,10 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   labelSelected: {
-    color: colors.primary,
+    color: c.primary,
   },
 });

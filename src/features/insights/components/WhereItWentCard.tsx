@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
 import { Period } from '../../../domain/periods/period.types';
 import { CategorySpend } from '../../../domain/insights/insights.types';
@@ -32,6 +32,8 @@ export function WhereItWentCard({
   onPressCategory,
   onSeeAll,
 }: WhereItWentCardProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Card style={styles.card} testID="where-it-went-card">
       <View style={styles.header}>
@@ -64,7 +66,7 @@ export function WhereItWentCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
@@ -79,11 +81,11 @@ const styles = StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   caption: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   seeAll: {
     minHeight: 48,
@@ -93,14 +95,14 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
   },
   pressed: {
     opacity: 0.6,
   },
   empty: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     paddingVertical: spacing.sm,
   },
 });

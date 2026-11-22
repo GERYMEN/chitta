@@ -8,7 +8,7 @@ import { PendingTransactionCard } from '../components/PendingTransactionCard';
 import { TransactionDetailContent } from '../../transactions/components/TransactionDetailContent';
 import { BottomSheet, Button, Chip, showDialog, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useShallow } from 'zustand/react/shallow';
 import { useTransactionsStore, selectPending } from '../../transactions/state/transactionsStore';
 import { Transaction } from '../../../domain/transactions/transaction.types';
@@ -37,10 +37,14 @@ type Nav = CompositeNavigationProp<
 type Route = RouteProp<MainTabParamList, 'Pending'>;
 
 function Separator() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return <View style={styles.separator} />;
 }
 
 export function PendingScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const pending = useTransactionsStore(useShallow(selectPending));
@@ -209,7 +213,7 @@ export function PendingScreen() {
           accessibilityRole="button"
           accessibilityLabel="Refresh"
           testID="pending-refresh">
-          <Icon name="refresh" size={24} color={colors.onSurface} />
+          <Icon name="refresh" size={24} color={c.onSurface} />
         </Pressable>
       </View>
 
@@ -223,7 +227,7 @@ export function PendingScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[colors.primary]}
+            colors={[c.primary]}
           />
         }
         ListHeaderComponent={
@@ -239,7 +243,7 @@ export function PendingScreen() {
                 accessibilityLabel={`${notUnderstoodCount} messages not understood. Review`}
                 testID="pending-not-understood"
                 style={({ pressed }) => [styles.notUnderstood, pressed && styles.notUnderstoodPressed]}>
-                <Icon name="message-question-outline" size={18} color={colors.onSurfaceVariant} />
+                <Icon name="message-question-outline" size={18} color={c.onSurfaceVariant} />
                 <Text style={styles.notUnderstoodText}>
                   {notUnderstoodCount} not understood
                 </Text>
@@ -249,7 +253,7 @@ export function PendingScreen() {
 
             <View style={styles.summaryCard}>
               <View style={styles.summaryIcon}>
-                <Icon name="lightning-bolt" size={20} color={colors.primary} />
+                <Icon name="lightning-bolt" size={20} color={c.primary} />
               </View>
               <View style={styles.summaryTextWrap}>
                 <Text style={styles.summaryTitle}>{pending.length} waiting for approval</Text>
@@ -266,7 +270,7 @@ export function PendingScreen() {
                   variant="primary"
                   disabled={approveAllTargets.length === 0 || approving}
                   onPress={confirmApproveAll}
-                  icon={<Icon name="check-all" size={16} color={colors.onPrimary} />}
+                  icon={<Icon name="check-all" size={16} color={c.onPrimary} />}
                   testID="pending-approve-all"
                 />
               </View>
@@ -280,7 +284,7 @@ export function PendingScreen() {
                   disabled={autoState.disabled || approving}
                   loading={approving}
                   onPress={confirmAutoApprove}
-                  icon={<Icon name="lightning-bolt" size={16} color={colors.obsidian} />}
+                  icon={<Icon name="lightning-bolt" size={16} color={c.obsidian} />}
                   testID="pending-auto-approve"
                 />
                 {autoState.hint ? (
@@ -367,7 +371,7 @@ export function PendingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   notUnderstood: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -376,23 +380,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
     borderRadius: 12,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
   },
   notUnderstoodPressed: {
     opacity: 0.7,
   },
   notUnderstoodText: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   notUnderstoodLink: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
   },
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -418,12 +422,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   subtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     marginTop: spacing.xs,
     marginBottom: spacing.md,
   },
@@ -431,7 +435,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: 16,
     padding: spacing.md,
     marginBottom: spacing.md,
@@ -440,7 +444,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -450,11 +454,11 @@ const styles = StyleSheet.create({
   summaryTitle: {
     ...typography.headlineSm,
     fontSize: 15,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   summaryCaption: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   autoWrap: {
     gap: spacing.xs,
@@ -462,7 +466,7 @@ const styles = StyleSheet.create({
   },
   autoHint: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   filterRow: {
     flexDirection: 'row',
@@ -476,7 +480,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     ...typography.labelLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -486,7 +490,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
 });

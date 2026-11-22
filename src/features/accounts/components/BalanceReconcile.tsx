@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { showDialog } from '../../../shared/ui';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 import { Account } from '../../../domain/accounts/account.types';
@@ -34,6 +34,8 @@ export function BalanceReconcile({
   now: Date;
   onAddMissing: (prefill: ReconcilePrefill) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const result = reconcileBalance(account, transactions, account.id);
   if (!result) return null;
 
@@ -70,7 +72,7 @@ export function BalanceReconcile({
   return (
     <View style={styles.wrap} testID={`bank-sms-${id}`}>
       <View style={styles.row}>
-        <Icon name="message-text-outline" size={16} color={colors.outline} />
+        <Icon name="message-text-outline" size={16} color={c.outline} />
         <Text style={styles.line}>
           {`Bank SMS: ${formatRupeesFromMinor(bankMinor, { showPaise: true })} as of ${formatAsOf(
             asOf,
@@ -120,6 +122,8 @@ function ActionButton({
   onPress: () => void;
   testID: string;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -132,11 +136,11 @@ function ActionButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   wrap: { gap: spacing.xs, marginTop: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  line: { ...typography.bodyMd, color: colors.outline, flexShrink: 1 },
-  difference: { ...typography.labelMd, color: colors.error },
+  line: { ...typography.bodyMd, color: c.outline, flexShrink: 1 },
+  difference: { ...typography.labelMd, color: c.error },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   action: {
     minHeight: 48,
@@ -144,7 +148,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     justifyContent: 'center',
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: c.surfaceContainer,
   },
-  actionLabel: { ...typography.labelMd, color: colors.onSurface },
+  actionLabel: { ...typography.labelMd, color: c.onSurface },
 });

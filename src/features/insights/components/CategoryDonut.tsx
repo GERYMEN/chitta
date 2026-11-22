@@ -3,7 +3,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChartDonut } from '../../../components/charts/ChartDonut';
 import { AmountText } from '../../../shared/ui';
 import { useRedacted } from '../../../shared/privacy/redaction';
-import { chartOtherColor, chartSeriesColors, colors, spacing, typography } from '../../../theme';
+import {
+  chartOtherColorFor,
+  chartSeriesColorsFor,
+  spacing,
+  typography,
+  useColors,
+  ColorTokens,
+} from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
 import { categoryLabel } from '../../../domain/categories/category.rules';
 import { CategorySpend } from '../../../domain/insights/insights.types';
@@ -28,8 +35,10 @@ export interface DonutItem {
 export function donutItems(
   rows: ReadonlyArray<CategorySpend>,
   categories: ReadonlyArray<Category>,
+  c: ColorTokens,
 ): { totalMinor: number; items: DonutItem[] } {
   const model = buildPieModel(rows);
+  const series = chartSeriesColorsFor(c);
   const byId = new Map(categories.map(category => [category.id, category]));
   let rank = 0;
   const items = model.slices.map(slice => {
@@ -39,12 +48,12 @@ export function donutItems(
         slice,
         name: OTHER_LABEL,
         a11yName: otherCategoriesA11yName(slice.categoryCount),
-        color: chartOtherColor,
+        color: chartOtherColorFor(c),
         percentLabel,
       };
     }
     const name = categoryLabel(byId.get(slice.categoryId));
-    const color = chartSeriesColors[rank % chartSeriesColors.length];
+    const color = series[rank % series.length];
     rank += 1;
     return { slice, name, a11yName: name, color, percentLabel };
   });
@@ -67,9 +76,11 @@ export interface CategoryDonutProps {
  * and its legend row do the same thing.
  */
 export function CategoryDonut({ rows, categories, onPressSlice, testID }: CategoryDonutProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   // R4c: labels below are built with formatRupeesFromMinor → re-render on the flag.
   const redacted = useRedacted();
-  const { totalMinor, items } = useMemo(() => donutItems(rows, categories), [rows, categories]);
+  const { totalMinor, items } = useMemo(() => donutItems(rows, categories, c), [rows, categories, c]);
   const byKey = useMemo(() => new Map(items.map(item => [item.slice.key, item])), [items]);
   const summary = useMemo(
     () =>
@@ -141,7 +152,7 @@ export function CategoryDonut({ rows, categories, onPressSlice, testID }: Catego
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   wrap: {
     gap: spacing.md,
     paddingTop: spacing.sm,
@@ -151,7 +162,7 @@ const styles = StyleSheet.create({
   },
   totalCaption: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   legend: {
     gap: 0,
@@ -173,11 +184,11 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   percent: {
     ...typography.labelLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     minWidth: 40,
     textAlign: 'right',
   },

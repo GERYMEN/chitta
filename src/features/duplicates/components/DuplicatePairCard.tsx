@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Account } from '../../../domain/accounts/account.types';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { defaultKeepId, DuplicatePair } from '../../../domain/duplicates/duplicate.rules';
@@ -27,6 +27,8 @@ export function DuplicatePairCard({
   onMark: (keptId: string, duplicateId: string) => void;
   onDismiss: (pair: DuplicatePair) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [keepId, setKeepId] = useState(() => defaultKeepId(pair));
   const hideId = keepId === pair.first.id ? pair.second.id : pair.first.id;
 
@@ -34,7 +36,7 @@ export function DuplicatePairCard({
     <Card style={styles.card} testID="duplicate-pair-card">
       <View style={styles.topRow}>
         <View style={styles.icon}>
-          <Icon name="content-duplicate" size={20} color={colors.secondary} />
+          <Icon name="content-duplicate" size={20} color={c.secondary} />
         </View>
         <Text style={styles.title}>{duplicatePairTitle(pair.first, accounts)}</Text>
       </View>
@@ -83,6 +85,8 @@ function SideRow({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -94,7 +98,7 @@ function SideRow({
       <Icon
         name={kept ? 'radiobox-marked' : 'radiobox-blank'}
         size={20}
-        color={kept ? colors.primary : colors.outline}
+        color={kept ? c.primary : c.outline}
       />
       <View style={styles.sideText}>
         <Text style={styles.sideLine} numberOfLines={1}>
@@ -108,7 +112,7 @@ function SideRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
@@ -121,14 +125,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.full,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: c.secondaryContainer,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     ...typography.headlineSm,
     fontSize: 15,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   side: {
@@ -139,11 +143,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
   },
   sideKept: {
-    borderColor: colors.primary,
-    backgroundColor: colors.surfaceContainerLow,
+    borderColor: c.primary,
+    backgroundColor: c.surfaceContainerLow,
   },
   pressed: {
     opacity: 0.7,
@@ -154,15 +158,15 @@ const styles = StyleSheet.create({
   },
   sideLine: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   sideMeta: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   hint: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   actions: {
     flexDirection: 'row',

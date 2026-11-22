@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState , useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, HeaderBackButton, HeaderSpacer, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors } from '../../../theme';
+import { useColors } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { checkNewBackupPassword } from '../../../domain/backup/backupPassword';
 import { BackupError, BACKUP_ERROR_MESSAGES } from '../../../domain/backup/backup.payload';
 import { PasswordField } from '../components/PasswordField';
-import { backupScreenStyles as styles } from '../components/backupScreenStyles';
+import { makeBackupScreenStyles } from '../components/backupScreenStyles';
 import { saveBackup } from '../backupService';
 import { useBackupStore } from '../backupStore';
 import { BACKUP_SAVED_MESSAGE, FORGOT_PASSWORD_WARNING, lastBackupLabel } from '../backupLabels';
@@ -24,6 +24,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  * state and is cleared after a save.
  */
 export function BackupScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeBackupScreenStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const lastBackupAt = useBackupStore(state => state.lastBackupAt);
   const [password, setPassword] = useState('');
@@ -97,7 +99,7 @@ export function BackupScreen() {
           onSubmitEditing={handleSave}
         />
         <View style={styles.warning} accessible accessibilityLabel={FORGOT_PASSWORD_WARNING}>
-          <Icon name="alert-outline" size={20} color={colors.onTertiaryContainer} />
+          <Icon name="alert-outline" size={20} color={c.onTertiaryContainer} />
           <Text style={styles.warningText}>{FORGOT_PASSWORD_WARNING}</Text>
         </View>
         {error ? (

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { SyncStartOptions } from '../../sms-sync/components/SyncStartOptions';
 import {
@@ -30,6 +30,8 @@ export async function saveOnboardingSyncStart(
 
 /** R4b onboarding step after Permissions: "Where should SMS sync start?" */
 export function SyncStartScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation();
   const [choice, setChoice] = useState<SmsSyncStartChoice>(DEFAULT_SMS_SYNC_START_CHOICE);
   const [saving, setSaving] = useState(false);
@@ -77,10 +79,10 @@ export function SyncStartScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   content: {
     padding: spacing.screen,
@@ -93,15 +95,15 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     ...typography.labelMd,
-    color: colors.primary,
+    color: c.primary,
   },
   headline: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   subtext: {
     ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   footer: {
     padding: spacing.screen,

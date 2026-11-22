@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Account } from '../../../domain/accounts/account.types';
 import { TransferPair } from '../../../domain/transfers/transfer.rules';
 import { transferPairDates, transferPairTitle } from '../transferLabels';
@@ -21,11 +21,13 @@ export function TransferPairCard({
   onConfirm: (pair: TransferPair) => void;
   onDismiss: (pair: TransferPair) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Card style={styles.card} testID="transfer-pair-card">
       <View style={styles.topRow}>
         <View style={styles.icon}>
-          <Icon name="swap-horizontal" size={20} color={colors.secondary} />
+          <Icon name="swap-horizontal" size={20} color={c.secondary} />
         </View>
         <View style={styles.meta}>
           <Text style={styles.title}>{transferPairTitle(pair, accounts)}</Text>
@@ -54,7 +56,7 @@ export function TransferPairCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
@@ -67,7 +69,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.full,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: c.secondaryContainer,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -77,11 +79,11 @@ const styles = StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 15,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   dates: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     marginTop: 2,
   },
   actions: {

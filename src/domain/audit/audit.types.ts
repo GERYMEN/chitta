@@ -132,7 +132,9 @@ export type AuditedSettingKey =
   | 'notif_weekly'
   | 'notif_weekly_day'
   | 'notif_weekly_hour'
-  | 'notif_recurring_series';
+  | 'notif_recurring_series'
+  /** R12: 'system' / 'light' / 'dark' only. */
+  | 'theme_mode';
 
 /**
  * Small typed payloads only. NEVER SMS text, SMS sender, or

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, spacing } from '../../../theme';
+import { radii, spacing, useColors, ColorTokens } from '../../../theme';
 import { shadows } from '../../../theme/shadows';
 
 export interface BottomSheetProps {
@@ -26,6 +26,8 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
  * dependency — used by Pending → Review and any other modal review flow.
  */
 export function BottomSheet({ visible, onClose, children }: BottomSheetProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const [mounted, setMounted] = React.useState(visible);
   // Keep the last action row clear of the gesture-nav zone: the sheet is
@@ -70,10 +72,10 @@ export function BottomSheet({ visible, onClose, children }: BottomSheetProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(11, 14, 17, 0.4)',
+    backgroundColor: c.backdrop,
   },
   sheet: {
     position: 'absolute',
@@ -81,7 +83,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     maxHeight: '90%',
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,
     paddingTop: spacing.sm,
@@ -91,7 +93,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.outlineVariant,
+    backgroundColor: c.outlineVariant,
     marginBottom: spacing.sm,
   },
   content: {

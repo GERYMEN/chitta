@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
   AccessibilityActionEvent,
   AccessibilityInfo,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../../../shared/icons';
-import { colors } from '../../../theme';
+import { useColors, ColorTokens } from '../../../theme';
 import { showSnackbar } from '../../../shared/ui';
 import { navigationRef } from '../../../app/navigation/navigationRef';
 import { settingsRepository } from '../../../data/repositories/settings.repository';
@@ -62,6 +62,8 @@ const SHEET_CLOSE_MS = 280;
  * for transform/opacity) + PanResponder — no gesture/animation dependency.
  */
 export function FeedbackWidget() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const [size, setSize] = useState(FALLBACK_LAYOUT);
   const layout: WidgetLayout = {
@@ -428,7 +430,7 @@ export function FeedbackWidget() {
               transform: [{ translateX }, { translateY }, { scale }],
             },
           ]}>
-          <Icon name="message-alert-outline" size={24} color={colors.onObsidian} />
+          <Icon name="message-alert-outline" size={24} color={c.onObsidian} />
         </Animated.View>
       ) : null}
 
@@ -451,7 +453,7 @@ export function FeedbackWidget() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   button: {
     position: 'absolute',
     left: 0,
@@ -459,12 +461,12 @@ const styles = StyleSheet.create({
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
     borderRadius: BUTTON_RADIUS,
-    backgroundColor: colors.obsidian,
+    backgroundColor: c.obsidian,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    shadowColor: colors.obsidian,
+    borderColor: c.outlineVariant,
+    shadowColor: c.obsidian,
   },
   buttonDocked: {
     elevation: 3,

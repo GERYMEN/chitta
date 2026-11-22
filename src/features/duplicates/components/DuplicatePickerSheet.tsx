@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheet } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import {
   DUPLICATE_PICKER_DAYS,
@@ -26,6 +26,8 @@ export function DuplicatePickerSheet({
   transaction: Transaction;
   onSelect: (keptId: string) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const transactions = useTransactionsStore(state => state.transactions);
   const options = useMemo(
     () => (visible ? duplicatePickerOptions(transaction, transactions) : []),
@@ -52,7 +54,7 @@ export function DuplicatePickerSheet({
               accessibilityLabel={`Duplicate of ${duplicateRowLine(option)}`}
               testID="duplicate-option"
               style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
-              <Icon name="content-duplicate" size={20} color={colors.secondary} />
+              <Icon name="content-duplicate" size={20} color={c.secondary} />
               <View style={styles.optionText}>
                 <Text style={styles.optionTitle} numberOfLines={1}>
                   {duplicateRowLine(option)}
@@ -67,15 +69,15 @@ export function DuplicatePickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   body: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     marginBottom: spacing.sm,
   },
   option: {
@@ -92,10 +94,10 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   optionMeta: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
 });

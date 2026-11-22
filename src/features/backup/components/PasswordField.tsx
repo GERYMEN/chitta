@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 
 export interface PasswordFieldProps {
   label: string;
@@ -31,6 +31,8 @@ export function PasswordField({
   onSubmitEditing,
   autoFocus,
 }: PasswordFieldProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
@@ -51,7 +53,7 @@ export function PasswordField({
           onSubmitEditing={onSubmitEditing}
           autoFocus={autoFocus}
           style={styles.input}
-          placeholderTextColor={colors.outline}
+          placeholderTextColor={c.outline}
         />
         <Pressable
           onPress={onToggleVisible}
@@ -63,7 +65,7 @@ export function PasswordField({
           <Icon
             name={visible ? 'eye-off-outline' : 'eye-outline'}
             size={22}
-            color={colors.onSurfaceVariant}
+            color={c.onSurfaceVariant}
           />
         </Pressable>
       </View>
@@ -76,13 +78,13 @@ export function PasswordField({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   wrap: {
     gap: spacing.xs,
   },
   label: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   row: {
     flexDirection: 'row',
@@ -90,19 +92,19 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radii.default,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
-    backgroundColor: colors.surfaceContainerLowest,
+    borderColor: c.outlineVariant,
+    backgroundColor: c.surfaceContainerLowest,
     paddingLeft: spacing.md,
   },
   rowError: {
-    borderColor: colors.error,
+    borderColor: c.error,
     borderWidth: 1,
   },
   input: {
     flex: 1,
     minHeight: 48,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   toggle: {
     width: 48,
@@ -115,6 +117,6 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.bodyMd,
-    color: colors.error,
+    color: c.error,
   },
 });

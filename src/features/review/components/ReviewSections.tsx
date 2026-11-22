@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { showSnackbar } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { TransferPair } from '../../../domain/transfers/transfer.rules';
 import { DuplicatePair } from '../../../domain/duplicates/duplicate.rules';
@@ -31,6 +31,8 @@ export function ReviewSections({
   /** Shown when there is nothing to review (omit to render nothing). */
   emptyText?: string;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const accounts = useTransactionsStore(state => state.accounts);
   const transactions = useTransactionsStore(state => state.transactions);
   useRedacted(); // R4c: pair cards re-render masked in the feedback screenshot
@@ -265,19 +267,19 @@ export function ReviewSections({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   section: {
     gap: spacing.sm,
   },
   header: {
     ...typography.labelLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   hint: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   meaningItem: {
     gap: spacing.xs,
@@ -289,12 +291,12 @@ const styles = StyleSheet.create({
   },
   meaningTitle: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   empty: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
     padding: spacing.xl,
   },

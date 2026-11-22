@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Button, Card, showSnackbar } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useBillsStore } from '../state/billsStore';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { matchBillSuggestions } from '../../../domain/bills/billMatch.rules';
@@ -15,6 +15,8 @@ import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
  * this (dismissed for this session). Never auto-marked.
  */
 export function BillPaidSuggestions() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const bills = useBillsStore(state => state.bills);
   const refresh = useBillsStore(state => state.refresh);
   const markPaid = useBillsStore(state => state.markPaid);
@@ -88,12 +90,12 @@ export function BillPaidSuggestions() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   section: { gap: spacing.sm, marginBottom: spacing.md },
-  sectionTitle: { ...typography.labelLg, color: colors.outline, letterSpacing: 0.5 },
+  sectionTitle: { ...typography.labelLg, color: c.outline, letterSpacing: 0.5 },
   card: { gap: spacing.xs },
-  title: { ...typography.headlineSm, fontSize: 15, color: colors.onSurface },
-  meta: { ...typography.bodyMd, color: colors.outline },
+  title: { ...typography.headlineSm, fontSize: 15, color: c.onSurface },
+  meta: { ...typography.bodyMd, color: c.outline },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   actionBtn: { flex: 1 },
 });

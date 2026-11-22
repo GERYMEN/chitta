@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { shadows } from '../../../theme/shadows';
 import { navigationRef } from '../../../app/navigation/navigationRef';
 import { useTourStore } from '../tourStore';
@@ -52,6 +52,8 @@ function showTab(tab: TourTab) {
  * missing.
  */
 export function TourOverlay() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const active = useTourStore(s => s.active);
   const index = useTourStore(s => s.index);
   const requested = useTourStore(s => s.requested);
@@ -246,22 +248,22 @@ export function TourOverlay() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   dim: {
-    backgroundColor: colors.scrim,
+    backgroundColor: c.scrim,
   },
   hole: {
     position: 'absolute',
-    borderColor: colors.scrim,
+    borderColor: c.scrim,
   },
   ring: {
     position: 'absolute',
     borderWidth: 2,
-    borderColor: colors.primaryContainer,
+    borderColor: c.primaryContainer,
   },
   tooltip: {
     position: 'absolute',
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
@@ -274,16 +276,16 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.headlineSm,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   counter: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   body: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   actions: {
     flexDirection: 'row',
@@ -301,20 +303,20 @@ const styles = StyleSheet.create({
   },
   skipText: {
     ...typography.labelLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   next: {
     minHeight: 48,
     minWidth: 96,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.full,
-    backgroundColor: colors.obsidian,
+    backgroundColor: c.obsidian,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nextText: {
     ...typography.labelLg,
-    color: colors.onObsidian,
+    color: c.onObsidian,
   },
   pressed: {
     opacity: 0.8,

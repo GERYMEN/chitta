@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { requestSmsPermissions } from '../../../native/android/permissions/smsPermission';
 import { useSmsReaderStore } from '../../sms-sync/smsReaderStore';
 import { saveOnboardingSyncStart } from './SyncStartScreen';
@@ -59,6 +59,8 @@ const PRIVACY_POINTS = [
 ];
 
 export function PermissionsScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation();
   const [instantAlerts, setInstantAlerts] = useState(true);
 
@@ -103,7 +105,7 @@ export function PermissionsScreen() {
           <Card key={row.title} style={styles.permissionCard}>
             <View style={styles.permissionTopRow}>
               <View style={styles.permissionIcon}>
-                <Icon name={row.icon} size={20} color={colors.primary} />
+                <Icon name={row.icon} size={20} color={c.primary} />
               </View>
               <View style={styles.permissionText}>
                 <Text style={styles.permissionTitle}>{row.title}</Text>
@@ -116,8 +118,8 @@ export function PermissionsScreen() {
                 value={row.locked ? true : instantAlerts}
                 onValueChange={row.locked ? undefined : setInstantAlerts}
                 disabled={row.locked}
-                trackColor={{ true: colors.primary, false: colors.surfaceContainerHigh }}
-                thumbColor={colors.surfaceContainerLowest}
+                trackColor={{ true: c.primary, false: c.surfaceContainerHigh }}
+                thumbColor={c.surfaceContainerLowest}
               />
             </View>
             <Text style={styles.permissionBody}>{row.description}</Text>
@@ -126,13 +128,13 @@ export function PermissionsScreen() {
 
         <View style={styles.privacyBlock}>
           <View style={styles.privacyHeaderRow}>
-            <Icon name="shield-check-outline" size={22} color={colors.primary} />
+            <Icon name="shield-check-outline" size={22} color={c.primary} />
             <Text style={styles.privacyHeading}>100% On-Device Privacy</Text>
           </View>
 
           {PRIVACY_POINTS.map(point => (
             <View key={point.title} style={styles.privacyRow}>
-              <Icon name="check-circle-outline" size={18} color={colors.primary} />
+              <Icon name="check-circle-outline" size={18} color={c.primary} />
               <View style={styles.privacyTextWrap}>
                 <Text style={styles.privacyTitle}>{point.title}</Text>
                 <Text style={styles.privacyBody}>{point.body}</Text>
@@ -152,10 +154,10 @@ export function PermissionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   content: {
     padding: spacing.screen,
@@ -168,19 +170,19 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     ...typography.labelMd,
-    color: colors.primary,
+    color: c.primary,
   },
   stepPercent: {
     ...typography.labelMd,
-    color: colors.primary,
+    color: c.primary,
   },
   headline: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   subtext: {
     ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   permissionCard: {
     gap: spacing.sm,
@@ -194,7 +196,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -204,14 +206,14 @@ const styles = StyleSheet.create({
   permissionTitle: {
     ...typography.headlineSm,
     fontSize: 15,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   permissionBody: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   privacyBlock: {
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.md,
@@ -224,7 +226,7 @@ const styles = StyleSheet.create({
   privacyHeading: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   privacyRow: {
     flexDirection: 'row',
@@ -235,11 +237,11 @@ const styles = StyleSheet.create({
   },
   privacyTitle: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   privacyBody: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   footer: {
     padding: spacing.screen,
@@ -247,7 +249,7 @@ const styles = StyleSheet.create({
   },
   manualLink: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
 });

@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { readSmsById } from '../../../native/android/sms/smsReader';
@@ -46,6 +46,8 @@ type Open =
   | { kind: 'error' };
 
 export function NotUnderstoodScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   useRedacted(); // R4c: SMS text masked in feedback screenshots
   const rows = useSmsReaderStore(state => state.unparsed);
@@ -182,7 +184,7 @@ export function NotUnderstoodScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Icon name="check-circle-outline" size={32} color={colors.primary} />
+            <Icon name="check-circle-outline" size={32} color={c.primary} />
             <Text style={styles.emptyTitle}>Nothing here</Text>
             <Text style={styles.emptyBody}>Every bank message so far was understood.</Text>
           </View>
@@ -200,7 +202,7 @@ export function NotUnderstoodScreen() {
                 testID="not-understood-row"
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
                 <View style={styles.rowIcon}>
-                  <Icon name="message-question-outline" size={20} color={colors.onSurfaceVariant} />
+                  <Icon name="message-question-outline" size={20} color={c.onSurfaceVariant} />
                 </View>
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle}>{institutionDisplayName(item.institution)}</Text>
@@ -209,12 +211,12 @@ export function NotUnderstoodScreen() {
                     {unparsedReasonLabel(item.reasonCode)}
                   </Text>
                 </View>
-                <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} size={22} color={colors.outline} />
+                <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} size={22} color={c.outline} />
               </Pressable>
               {isOpen && open ? (
                 <View style={styles.detail}>
                   {open.kind === 'loading' ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
+                    <ActivityIndicator size="small" color={c.primary} />
                   ) : null}
                   {open.kind === 'denied' ? (
                     <>
@@ -296,8 +298,8 @@ export function NotUnderstoodScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -306,10 +308,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     minHeight: 48,
   },
-  headerTitle: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface },
+  headerTitle: { ...typography.headlineSm, fontSize: 16, color: c.onSurface },
   content: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xl * 2, flexGrow: 1, gap: spacing.sm },
-  intro: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginBottom: spacing.md },
-  card: { borderRadius: radii.default, backgroundColor: colors.surfaceContainerLow, overflow: 'hidden' },
+  intro: { ...typography.bodyMd, color: c.onSurfaceVariant, marginBottom: spacing.md },
+  card: { borderRadius: radii.default, backgroundColor: c.surfaceContainerLow, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -323,19 +325,19 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowText: { flex: 1 },
-  rowTitle: { ...typography.labelLg, color: colors.onSurface },
-  rowCaption: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  rowTitle: { ...typography.labelLg, color: c.onSurface },
+  rowCaption: { ...typography.bodyMd, color: c.onSurfaceVariant },
   detail: { padding: spacing.md, paddingTop: 0, gap: spacing.sm },
-  status: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  sourceBox: { backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: spacing.md, gap: spacing.xs },
-  sourceLabel: { ...typography.labelSm, color: colors.outline, letterSpacing: 0.5 },
-  body: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  status: { ...typography.bodyMd, color: c.onSurfaceVariant },
+  sourceBox: { backgroundColor: c.surfaceContainer, borderRadius: 12, padding: spacing.md, gap: spacing.xs },
+  sourceLabel: { ...typography.labelSm, color: c.outline, letterSpacing: 0.5 },
+  body: { ...typography.bodyMd, color: c.onSurfaceVariant },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xl },
-  emptyTitle: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface },
-  emptyBody: { ...typography.bodyMd, color: colors.outline, textAlign: 'center' },
+  emptyTitle: { ...typography.headlineSm, fontSize: 16, color: c.onSurface },
+  emptyBody: { ...typography.bodyMd, color: c.outline, textAlign: 'center' },
 });

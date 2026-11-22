@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Button, HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { accountRepository } from '../../../data/repositories/account.repository';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { ACCOUNT_KEY_NORMALIZER_VERSION } from '../normalizeAccountKey';
@@ -17,6 +17,8 @@ import { unignoreAccount } from '../importSuggestion';
  * so matching SMS are handled again from the next sync.
  */
 export function IgnoredAccountsScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation();
   useRedacted(); // R4c: last-4 masked in the feedback screenshot
   const [rows, setRows] = useState<IgnoredAccount[] | null>(null);
@@ -68,7 +70,7 @@ export function IgnoredAccountsScreen() {
         ListEmptyComponent={
           rows ? (
             <View style={styles.empty} testID="ignored-accounts-empty">
-              <Icon name="eye-outline" size={32} color={colors.primary} />
+              <Icon name="eye-outline" size={32} color={c.primary} />
               <Text style={styles.emptyTitle}>Nothing hidden</Text>
               <Text style={styles.emptyBody}>Accounts you ignore will be listed here.</Text>
             </View>
@@ -77,7 +79,7 @@ export function IgnoredAccountsScreen() {
         renderItem={({ item }) => (
           <View style={styles.row} testID="ignored-account-row">
             <View style={styles.rowIcon}>
-              <Icon name="eye-off-outline" size={20} color={colors.onSurfaceVariant} />
+              <Icon name="eye-off-outline" size={20} color={c.onSurfaceVariant} />
             </View>
             <Text style={styles.rowTitle} numberOfLines={2}>
               {item.label}
@@ -96,8 +98,8 @@ export function IgnoredAccountsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -106,9 +108,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     minHeight: 48,
   },
-  headerTitle: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface },
+  headerTitle: { ...typography.headlineSm, fontSize: 16, color: c.onSurface },
   content: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xl * 2, flexGrow: 1, gap: spacing.sm },
-  intro: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginBottom: spacing.md },
+  intro: { ...typography.bodyMd, color: c.onSurfaceVariant, marginBottom: spacing.md },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -117,18 +119,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radii.default,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
   },
   rowIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowTitle: { ...typography.labelLg, color: colors.onSurface, flex: 1 },
+  rowTitle: { ...typography.labelLg, color: c.onSurface, flex: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xl },
-  emptyTitle: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface },
-  emptyBody: { ...typography.bodyMd, color: colors.outline, textAlign: 'center' },
+  emptyTitle: { ...typography.headlineSm, fontSize: 16, color: c.onSurface },
+  emptyBody: { ...typography.bodyMd, color: c.outline, textAlign: 'center' },
 });

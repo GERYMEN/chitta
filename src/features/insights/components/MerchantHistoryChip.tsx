@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 
 export interface MerchantHistoryChipProps {
   /** merchantChipLabel(...): "1 visit · ₹200 this month". */
@@ -15,6 +15,8 @@ export interface MerchantHistoryChipProps {
  * 48dp touch target.
  */
 export function MerchantHistoryChip({ label, onPress }: MerchantHistoryChipProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -22,7 +24,7 @@ export function MerchantHistoryChip({ label, onPress }: MerchantHistoryChipProps
       accessibilityLabel={`${label}. Show these transactions`}
       testID="merchant-history-chip"
       style={({ pressed }) => [styles.target, pressed && styles.pressed]}>
-      <Icon name="storefront-outline" size={16} color={colors.onSecondaryContainer} />
+      <Icon name="storefront-outline" size={16} color={c.onSecondaryContainer} />
       <Text style={styles.label} numberOfLines={1}>
         {label}
       </Text>
@@ -31,7 +33,7 @@ export function MerchantHistoryChip({ label, onPress }: MerchantHistoryChipProps
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   target: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -41,18 +43,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: c.secondaryContainer,
   },
   pressed: {
     opacity: 0.7,
   },
   label: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flexShrink: 1,
   },
   chevron: {
     ...typography.labelLg,
-    color: colors.secondary,
+    color: c.secondary,
   },
 });

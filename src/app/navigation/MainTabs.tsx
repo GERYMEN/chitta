@@ -5,7 +5,7 @@ import { TransactionsScreen } from '../../features/transactions/screens/Transact
 import { PendingScreen } from '../../features/pending/screens/PendingScreen';
 import { AccountsScreen } from '../../features/accounts/screens/AccountsScreen';
 import { Icon } from '../../shared/icons';
-import { colors } from '../../theme';
+import { useColors } from '../../theme';
 import { useShallow } from 'zustand/react/shallow';
 import { useTransactionsStore, selectPending } from '../../features/transactions/state/transactionsStore';
 import { MainTabParamList } from './routes';
@@ -21,14 +21,15 @@ const TAB_ICON: Record<keyof MainTabParamList, string> = {
 };
 
 export function MainTabs() {
+  const c = useColors();
   const pendingCount = useTransactionsStore(useShallow(selectPending)).length;
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.outline,
+        tabBarActiveTintColor: c.primary,
+        tabBarInactiveTintColor: c.outline,
         tabBarIcon: ({ color, size }) =>
           route.name === 'Pending' ? (
             // R4c: tour step 2 spotlights the Pending tab.

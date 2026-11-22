@@ -1,9 +1,8 @@
 import { StyleSheet } from 'react-native';
-import { colors, radii, spacing, typography } from '../../../theme';
-import { transactionStateColors } from '../../../theme/colors';
+import { ColorTokens, radii, spacing, typography } from '../../../theme';
 
 /** Shared layout of the R4e Backup and Restore screens. */
-export const backupScreenStyles = StyleSheet.create({
+export const makeBackupScreenStyles = (colors: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -40,7 +39,7 @@ export const backupScreenStyles = StyleSheet.create({
     alignItems: 'flex-start',
     padding: spacing.md,
     borderRadius: radii.default,
-    backgroundColor: transactionStateColors.pending.bg,
+    backgroundColor: colors.pendingBg,
   },
   warningText: {
     flex: 1,

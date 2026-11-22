@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, BottomSheet, showDialog, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { useBillsStore, BillPaidPrior } from '../state/billsStore';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -21,6 +21,8 @@ import { Transaction } from '../../../domain/transactions/transaction.types';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function BillsScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const bills = useBillsStore(state => state.bills);
   const refresh = useBillsStore(state => state.refresh);
@@ -108,7 +110,7 @@ export function BillsScreen() {
           label="Add bill"
           variant="brand"
           onPress={() => navigation.navigate('AddBill')}
-          icon={<Icon name="plus" size={18} color={colors.onObsidian} />}
+          icon={<Icon name="plus" size={18} color={c.onObsidian} />}
           style={styles.addButton}
         />
 
@@ -155,6 +157,8 @@ function Section({
   onDismiss: (bill: Bill) => void;
   onLink: (bill: Bill) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   if (bills.length === 0) return null;
   return (
     <View style={styles.section}>
@@ -206,13 +210,15 @@ function Section({
 }
 
 function BillAction({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
       style={styles.action}
       accessibilityRole="button"
       accessibilityLabel={label}>
-      <Icon name={icon} size={16} color={colors.primary} />
+      <Icon name={icon} size={16} color={c.primary} />
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );
@@ -229,6 +235,8 @@ function LinkPaymentSheet({
   onClose: () => void;
   onPick: (bill: Bill, txn: Transaction) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const candidates = useMemo(() => {
     if (!bill) return [];
     return transactions
@@ -269,28 +277,28 @@ function LinkPaymentSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: c.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.md, paddingBottom: spacing.xl * 2 },
   addButton: {},
   empty: { padding: spacing.xl, alignItems: 'center' },
-  emptyText: { ...typography.bodyMd, color: colors.outline, textAlign: 'center' },
+  emptyText: { ...typography.bodyMd, color: c.outline, textAlign: 'center' },
   section: { gap: spacing.sm },
-  sectionTitle: { ...typography.labelLg, color: colors.outline, letterSpacing: 0.5 },
-  overdueText: { color: '#DC2626' },
+  sectionTitle: { ...typography.labelLg, color: c.outline, letterSpacing: 0.5 },
+  overdueText: { color: c.failedFg },
   billCard: { gap: spacing.xs },
   billTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  payee: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface, flex: 1 },
-  amount: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface },
-  meta: { ...typography.bodyMd, color: colors.outline },
-  mutedText: { color: colors.outline },
+  payee: { ...typography.headlineSm, fontSize: 16, color: c.onSurface, flex: 1 },
+  amount: { ...typography.headlineSm, fontSize: 16, color: c.onSurface },
+  meta: { ...typography.bodyMd, color: c.outline },
+  mutedText: { color: c.outline },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   action: {
     flexDirection: 'row',
@@ -299,8 +307,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingRight: spacing.sm,
   },
-  actionLabel: { ...typography.labelLg, color: colors.primary },
-  sheetTitle: { ...typography.headlineSm, color: colors.onSurface, marginBottom: spacing.sm },
+  actionLabel: { ...typography.labelLg, color: c.primary },
+  sheetTitle: { ...typography.headlineSm, color: c.onSurface, marginBottom: spacing.sm },
   sheetList: { maxHeight: 320 },
   sheetRow: {
     flexDirection: 'row',
@@ -309,6 +317,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: radii.sm,
   },
-  sheetRowLabel: { ...typography.bodyLg, color: colors.onSurface, flex: 1 },
-  sheetRowAmount: { ...typography.bodyLg, color: colors.onSurface },
+  sheetRowLabel: { ...typography.bodyLg, color: c.onSurface, flex: 1 },
+  sheetRowAmount: { ...typography.bodyLg, color: c.onSurface },
 });

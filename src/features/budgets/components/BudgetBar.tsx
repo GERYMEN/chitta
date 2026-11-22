@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { radii } from '../../../theme';
+import { radii, useColors } from '../../../theme';
 import { BudgetProgress } from '../../../domain/budgets/budget.rules';
-import { BUDGET_STATE_COLORS } from '../budgetLabels';
+import { budgetStateColors } from '../budgetLabels';
 
 /**
  * R5c (D-d): a horizontal progress bar for one budget. The fill width is the
@@ -11,7 +11,8 @@ import { BUDGET_STATE_COLORS } from '../budgetLabels';
  * numbers beside it carry the meaning, so it is hidden from the a11y tree.
  */
 export function BudgetBar({ progress, height = 8 }: { progress: BudgetProgress; height?: number }) {
-  const palette = BUDGET_STATE_COLORS[progress.state];
+  const c = useColors();
+  const palette = budgetStateColors(c)[progress.state];
   const fillPct = Math.max(0, Math.min(1, progress.ratio)) * 100;
   return (
     <View

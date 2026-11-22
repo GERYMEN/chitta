@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   GestureResponderEvent,
@@ -8,7 +8,7 @@ import {
   Text,
   ViewStyle,
 } from 'react-native';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 
 export type ButtonVariant = 'primary' | 'brand' | 'ghost' | 'destructive';
 
@@ -45,7 +45,8 @@ export function Button({
   testID,
   accessibilityLabel,
 }: ButtonProps) {
-  const variantStyle = VARIANT_STYLES[variant];
+  const c = useColors();
+  const variantStyle = useMemo(() => makeVariantStyles(c)[variant], [c, variant]);
 
   return (
     <Pressable
@@ -78,24 +79,26 @@ export function Button({
   );
 }
 
-const VARIANT_STYLES: Record<ButtonVariant, { container: ViewStyle; label: { color: string } }> = {
+const makeVariantStyles = (
+  c: ColorTokens,
+): Record<ButtonVariant, { container: ViewStyle; label: { color: string } }> => ({
   primary: {
-    container: { backgroundColor: colors.obsidian },
-    label: { color: colors.onObsidian },
+    container: { backgroundColor: c.obsidian },
+    label: { color: c.onObsidian },
   },
   brand: {
-    container: { backgroundColor: colors.primaryContainer },
-    label: { color: colors.obsidian },
+    container: { backgroundColor: c.primaryContainer },
+    label: { color: c.obsidian },
   },
   ghost: {
-    container: { backgroundColor: colors.surfaceContainerHigh },
-    label: { color: colors.onSurface },
+    container: { backgroundColor: c.surfaceContainerHigh },
+    label: { color: c.onSurface },
   },
   destructive: {
-    container: { backgroundColor: colors.errorContainer },
-    label: { color: colors.onErrorContainer },
+    container: { backgroundColor: c.errorContainer },
+    label: { color: c.onErrorContainer },
   },
-};
+});
 
 const styles = StyleSheet.create({
   base: {

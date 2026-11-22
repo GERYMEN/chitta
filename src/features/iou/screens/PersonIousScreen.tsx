@@ -5,7 +5,7 @@ import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navig
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, showDialog, showSnackbar } from '../../../shared/ui';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 import { useNow } from '../../../shared/hooks/useNow';
@@ -30,6 +30,8 @@ const SETTLE_ERROR_TEXT: Record<SettleError, string> = {
  * (optionally linking a transaction) with a 5 s Undo.
  */
 export function PersonIousScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<RootStackParamList, 'PersonIous'>>();
   useRedacted();
@@ -155,14 +157,14 @@ export function PersonIousScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: c.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.md, paddingBottom: spacing.xl * 2 },
-  net: { ...typography.headlineMd, color: colors.onSurface },
-  empty: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  line: { ...typography.bodyLg, color: colors.onSurface },
-  meta: { ...typography.bodyMd, color: colors.outline },
+  net: { ...typography.headlineMd, color: c.onSurface },
+  empty: { ...typography.bodyMd, color: c.onSurfaceVariant },
+  line: { ...typography.bodyLg, color: c.onSurface },
+  meta: { ...typography.bodyMd, color: c.outline },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
 });

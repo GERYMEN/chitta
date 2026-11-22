@@ -467,6 +467,21 @@ image. No permission dialog may appear.
 | R10 | **You** clean up the QA tag + expense | steps shown |
 | R11 | Crash check since the start | 0 FATAL/ANR |
 
+## R12 — Dark theme
+
+```
+scripts/device/r12.sh [--skip-install]
+```
+
+Owner-assisted, fixed labels only. The only thing the script changes is the
+Theme choice (it ends on System). It checks the Settings **Theme** control
+(System / Light / Dark) is present, taps Dark, has you open a handful of screens
+in dark, relaunch (the choice must persist), then taps Light and System, and
+counts FATAL/ANR (must be 0). **Contrast is a manual, visual step**: walk every
+screen, sheet, dialog, snackbar, slider, switch, chart and the tour in Dark and
+look for unreadable text, white flashes or invisible icons; with System, toggle
+the phone's dark mode and confirm Tracker follows live.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Switch, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { NotificationSettingsRows } from '../../notifications/components/NotificationSettingsRows';
 import { BottomSheet, confirmDialog, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
+import { THEME_MODES, ThemeModeSetting, setThemeMode, useThemeModeStore } from '../../../theme/themeMode';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { ProfileForm } from './ProfileForm';
 import { ProfileFormValues } from './profileForm.schema';
@@ -92,6 +93,8 @@ export function ProfileSettingsSheet({
   onOpenNotUnderstood,
   onOpenIgnoredAccounts,
 }: ProfileSettingsSheetProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   // R5: auto-read toggle + not-understood count (counts only).
   const autoReadSetting = useSmsReaderStore(state => state.autoReadSetting);
   const receiveGranted = useSmsReaderStore(state => state.receiveGranted);
@@ -107,6 +110,16 @@ export function ProfileSettingsSheet({
   // R9b: app lock (live truth = the loaded app-lock config).
   const [appLockOn, setAppLockOn] = useState(false);
   const [appLockTimeout, setAppLockTimeoutState] = useState<AppLockTimeout>('immediate');
+
+  // R12: Theme (System / Light / Dark); applies live, persisted + audited.
+  const themeMode = useThemeModeStore(state => state.mode);
+  async function handleThemeMode(next: ThemeModeSetting) {
+    try {
+      await setThemeMode(next);
+    } catch {
+      ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
+    }
+  }
 
   async function handleHideAmounts(on: boolean) {
     try {
@@ -294,13 +307,13 @@ export function ProfileSettingsSheet({
         testID="settings-activity-row"
         style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
         <View style={styles.activityIcon}>
-          <Icon name="history" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="history" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Activity</Text>
           <Text style={styles.activityCaption}>Every approval, edit and deletion</Text>
         </View>
-        <Icon name="chevron-right" size={22} color={colors.outline} />
+        <Icon name="chevron-right" size={22} color={c.outline} />
       </Pressable>
       <Pressable
         onPress={onOpenCategories}
@@ -309,13 +322,13 @@ export function ProfileSettingsSheet({
         testID="settings-categories-row"
         style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
         <View style={styles.activityIcon}>
-          <Icon name="shape-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="shape-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Categories</Text>
           <Text style={styles.activityCaption}>Custom categories and merchant rules</Text>
         </View>
-        <Icon name="chevron-right" size={22} color={colors.outline} />
+        <Icon name="chevron-right" size={22} color={c.outline} />
       </Pressable>
       {onOpenBills ? (
         <Pressable
@@ -325,13 +338,13 @@ export function ProfileSettingsSheet({
           testID="settings-bills-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="file-document-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="file-document-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Bills & dues</Text>
             <Text style={styles.activityCaption}>Card statements, bills and reminders</Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {onOpenBudgets ? (
@@ -342,13 +355,13 @@ export function ProfileSettingsSheet({
           testID="settings-budgets-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="gauge" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="gauge" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Budgets</Text>
             <Text style={styles.activityCaption}>Monthly spending caps, overall and by category</Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {onOpenPeople ? (
@@ -359,13 +372,13 @@ export function ProfileSettingsSheet({
           testID="settings-people-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="account-cash-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="account-cash-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>People & IOUs</Text>
             <Text style={styles.activityCaption}>Who owes you, and who you owe</Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {onReplayTour ? (
@@ -376,13 +389,13 @@ export function ProfileSettingsSheet({
           testID="settings-replay-tour-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="map-marker-path" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="map-marker-path" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Replay tour</Text>
             <Text style={styles.activityCaption}>Show the quick app tour again</Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {onOpenBackup ? (
@@ -393,7 +406,7 @@ export function ProfileSettingsSheet({
           testID="settings-backup-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="shield-lock-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="shield-lock-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Back up data</Text>
@@ -401,7 +414,7 @@ export function ProfileSettingsSheet({
               {lastBackupLabel(lastBackupAt)}
             </Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {onOpenRestore ? (
@@ -412,18 +425,45 @@ export function ProfileSettingsSheet({
           testID="settings-restore-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="database-import-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="database-import-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Restore from backup</Text>
             <Text style={styles.activityCaption}>Replace all data with a backup file</Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
+      <View style={styles.activityRow} testID="settings-theme-row">
+        <View style={styles.activityIcon}>
+          <Icon name="theme-light-dark" size={20} color={c.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>Theme</Text>
+          <Text style={styles.activityCaption}>System follows your phone</Text>
+        </View>
+      </View>
+      <View style={styles.lockTimeoutRow} testID="settings-theme-options">
+        {THEME_MODES.map(option => {
+          const selected = option === themeMode;
+          const label = option === 'system' ? 'System' : option === 'light' ? 'Light' : 'Dark';
+          return (
+            <Pressable
+              key={option}
+              onPress={() => handleThemeMode(option)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Theme ${label}`}
+              testID={`settings-theme-${option}`}
+              style={[styles.lockTimeoutChip, selected && styles.lockTimeoutChipOn]}>
+              <Text style={[styles.lockTimeoutText, selected && styles.lockTimeoutTextOn]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
       <View style={styles.activityRow} testID="settings-hide-amounts-row">
         <View style={styles.activityIcon}>
-          <Icon name="eye-off-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="eye-off-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Private mode</Text>
@@ -438,7 +478,7 @@ export function ProfileSettingsSheet({
       </View>
       <View style={styles.activityRow} testID="settings-app-lock-row">
         <View style={styles.activityIcon}>
-          <Icon name="lock-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="lock-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>App lock</Text>
@@ -477,7 +517,7 @@ export function ProfileSettingsSheet({
       <NotificationSettingsRows visible={visible} />
       <View style={styles.activityRow} testID="settings-secure-screen-row">
         <View style={styles.activityIcon}>
-          <Icon name="shield-lock-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="shield-lock-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Hide in recents and block screenshots</Text>
@@ -498,17 +538,17 @@ export function ProfileSettingsSheet({
         testID="settings-export-csv-row"
         style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
         <View style={styles.activityIcon}>
-          <Icon name="file-document-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="file-document-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Export transactions (CSV)</Text>
           <Text style={styles.activityCaption}>Approved transactions, saved where you choose</Text>
         </View>
-        <Icon name="chevron-right" size={22} color={colors.outline} />
+        <Icon name="chevron-right" size={22} color={c.outline} />
       </Pressable>
       <View style={styles.activityRow} testID="settings-auto-read-row">
         <View style={styles.activityIcon}>
-          <Icon name="message-badge-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="message-badge-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>Read new SMS automatically</Text>
@@ -536,7 +576,7 @@ export function ProfileSettingsSheet({
           testID="settings-rescan-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="message-text-clock-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="message-text-clock-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Re-read messages with the new reader</Text>
@@ -544,7 +584,7 @@ export function ProfileSettingsSheet({
               From {syncStartLabel(smsSyncStartAt)} · existing items stay as they are
             </Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {/* R5e: stored meaning rules ("Do this automatically next time"). */}
@@ -557,7 +597,7 @@ export function ProfileSettingsSheet({
           testID="settings-not-understood-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="message-question-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="message-question-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Messages not understood</Text>
@@ -565,7 +605,7 @@ export function ProfileSettingsSheet({
               {notUnderstoodCount === 0 ? 'None right now' : `${notUnderstoodCount} to review`}
             </Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       {onOpenIgnoredAccounts ? (
@@ -576,13 +616,13 @@ export function ProfileSettingsSheet({
           testID="settings-hidden-accounts-row"
           style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
           <View style={styles.activityIcon}>
-            <Icon name="eye-off-outline" size={20} color={colors.onSurfaceVariant} />
+            <Icon name="eye-off-outline" size={20} color={c.onSurfaceVariant} />
           </View>
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Hidden accounts</Text>
             <Text style={styles.activityCaption}>Accounts you chose to ignore · Un-ignore</Text>
           </View>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
       ) : null}
       <Pressable
@@ -593,7 +633,7 @@ export function ProfileSettingsSheet({
         testID="settings-sync-start-row"
         style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
         <View style={styles.activityIcon}>
-          <Icon name="calendar-start" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="calendar-start" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>
@@ -601,7 +641,7 @@ export function ProfileSettingsSheet({
           </Text>
           <Text style={styles.activityCaption}>Where Sync SMS begins reading</Text>
         </View>
-        <Icon name={editingStart ? 'chevron-up' : 'chevron-down'} size={22} color={colors.outline} />
+        <Icon name={editingStart ? 'chevron-up' : 'chevron-down'} size={22} color={c.outline} />
       </Pressable>
       {editingStart ? (
         <SyncStartEditor
@@ -624,7 +664,7 @@ export function ProfileSettingsSheet({
       {/* R5g T5 / item 24: the SMS rules document in use (version + bank count). */}
       <View style={styles.activityRow} testID="settings-about">
         <View style={styles.activityIcon}>
-          <Icon name="information-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="information-outline" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
           <Text style={styles.activityTitle}>About</Text>
@@ -637,7 +677,7 @@ export function ProfileSettingsSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -647,7 +687,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
     borderRadius: radii.default,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
   },
   pressed: {
     opacity: 0.7,
@@ -656,7 +696,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -665,11 +705,11 @@ const styles = StyleSheet.create({
   },
   activityTitle: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   activityCaption: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   lockTimeoutRow: {
     flexDirection: 'row',
@@ -685,18 +725,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: colors.outline,
+    borderColor: c.outline,
   },
-  lockTimeoutChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  lockTimeoutText: { ...typography.labelLg, color: colors.onSurface },
-  lockTimeoutTextOn: { color: colors.onPrimary },
+  lockTimeoutChipOn: { backgroundColor: c.primary, borderColor: c.primary },
+  lockTimeoutText: { ...typography.labelLg, color: c.onSurface },
+  lockTimeoutTextOn: { color: c.onPrimary },
   title: {
     ...typography.headlineMd,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   subtitle: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },

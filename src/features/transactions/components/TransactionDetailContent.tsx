@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AmountText, Button, Card, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { confidenceTier } from '../../../domain/transactions/transaction.rules';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
@@ -133,6 +133,8 @@ export function TransactionDetailActions({
   onRestoreDuplicate,
   onSplit,
 }: TransactionDetailActionsProps) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const isPending = transaction.status === 'pending';
   const transactions = useTransactionsStore(state => state.transactions);
   const meaningSuggestions = useTransactionsStore(
@@ -149,7 +151,7 @@ export function TransactionDetailActions({
           variant="ghost"
           onPress={() => onRestoreDuplicate(transaction)}
           icon={
-            <Icon name="backup-restore" size={18} color={colors.onSurface} />
+            <Icon name="backup-restore" size={18} color={pal.onSurface} />
           }
           testID="detail-restore-duplicate"
         />
@@ -193,7 +195,7 @@ export function TransactionDetailActions({
           label="Split"
           variant="ghost"
           onPress={() => onSplit(transaction)}
-          icon={<Icon name="account-multiple-outline" size={18} color={colors.onSurface} />}
+          icon={<Icon name="account-multiple-outline" size={18} color={pal.onSurface} />}
           testID="detail-split"
         />
       ) : null}
@@ -202,7 +204,7 @@ export function TransactionDetailActions({
           label="Link to original expense"
           variant="ghost"
           onPress={() => onLinkRefund(transaction)}
-          icon={<Icon name="cash-refund" size={18} color={colors.onSurface} />}
+          icon={<Icon name="cash-refund" size={18} color={pal.onSurface} />}
           testID="detail-link-refund"
         />
       ) : null}
@@ -212,7 +214,7 @@ export function TransactionDetailActions({
           variant="ghost"
           onPress={() => onUnlinkRefund(transaction)}
           icon={
-            <Icon name="link-variant-off" size={18} color={colors.onSurface} />
+            <Icon name="link-variant-off" size={18} color={pal.onSurface} />
           }
           testID="detail-unlink-refund"
         />
@@ -223,7 +225,7 @@ export function TransactionDetailActions({
           variant="ghost"
           onPress={() => onMarkDuplicate(transaction)}
           icon={
-            <Icon name="content-duplicate" size={18} color={colors.onSurface} />
+            <Icon name="content-duplicate" size={18} color={pal.onSurface} />
           }
           testID="detail-mark-duplicate"
         />
@@ -234,7 +236,7 @@ export function TransactionDetailActions({
           variant="ghost"
           onPress={() => onMarkAsTransfer(transaction)}
           icon={
-            <Icon name="swap-horizontal" size={18} color={colors.onSurface} />
+            <Icon name="swap-horizontal" size={18} color={pal.onSurface} />
           }
           testID="detail-mark-transfer"
         />
@@ -244,7 +246,7 @@ export function TransactionDetailActions({
           label="Undo transfer"
           variant="ghost"
           onPress={() => onUndoTransfer(transaction)}
-          icon={<Icon name="undo-variant" size={18} color={colors.onSurface} />}
+          icon={<Icon name="undo-variant" size={18} color={pal.onSurface} />}
           testID="detail-undo-transfer"
         />
       ) : null}
@@ -313,6 +315,8 @@ export function TransactionDetailContent({
   onOpenTransaction,
   merchantChip = null,
 }: TransactionDetailContentProps) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   // R4c: names, note, SMS text, amounts and last-4 masked in the feedback screenshot.
   useRedacted();
   const [transparencyOpen, setTransparencyOpen] = useState(
@@ -324,7 +328,7 @@ export function TransactionDetailContent({
   const transactions = useTransactionsStore(state => state.transactions);
 
   const category = categories.find(c => c.id === transaction.categoryId);
-  const visual = getCategoryVisual(transaction.categoryId, category);
+  const visual = getCategoryVisual(transaction.categoryId, category, pal);
   const account = accounts.find(a => a.id === transaction.accountId);
   const tier = confidenceTier(transaction.confidenceScore);
   const isPending = transaction.status === 'pending';
@@ -365,7 +369,7 @@ export function TransactionDetailContent({
           label="Part of a transfer"
           tone="neutral"
           icon={
-            <Icon name="swap-horizontal" size={14} color={colors.secondary} />
+            <Icon name="swap-horizontal" size={14} color={pal.secondary} />
           }
         />
       ) : hiddenDuplicate ? (
@@ -373,26 +377,26 @@ export function TransactionDetailContent({
           label="Duplicate · hidden"
           tone="neutral"
           icon={
-            <Icon name="content-duplicate" size={14} color={colors.secondary} />
+            <Icon name="content-duplicate" size={14} color={pal.secondary} />
           }
         />
       ) : isPending ? (
         <Chip
           label="Pending Approval"
           tone="pending"
-          icon={<Icon name="clock-outline" size={14} color="#B7791F" />}
+          icon={<Icon name="clock-outline" size={14} color={pal.pendingFg} />}
         />
       ) : transaction.status === 'rejected' ? (
         <Chip
           label="Rejected"
           tone="rejected"
-          icon={<Icon name="close-circle-outline" size={14} color="#6C757D" />}
+          icon={<Icon name="close-circle-outline" size={14} color={pal.rejectedFg} />}
         />
       ) : (
         <Chip
           label="Approved"
           tone="approved"
-          icon={<Icon name="check-circle-outline" size={14} color="#00A827" />}
+          icon={<Icon name="check-circle-outline" size={14} color={pal.approvedFg} />}
         />
       )}
 
@@ -525,7 +529,7 @@ export function TransactionDetailContent({
             pressed && styles.pressed,
           ]}
         >
-          <Icon name="content-duplicate" size={18} color={colors.secondary} />
+          <Icon name="content-duplicate" size={18} color={pal.secondary} />
           <Text style={styles.hiddenLinkText}>
             {hiddenDuplicatesLabel(hiddenDuplicates.length)}
           </Text>
@@ -622,7 +626,7 @@ export function TransactionDetailContent({
               <Text style={styles.detailValue} numberOfLines={2}>
                 {categoryLabel(category)}
               </Text>
-              <Icon name="pencil-outline" size={16} color={colors.primary} />
+              <Icon name="pencil-outline" size={16} color={pal.primary} />
             </View>
           </Pressable>
         ) : (
@@ -730,6 +734,8 @@ export function TransactionDetailContent({
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -740,7 +746,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   container: {
     gap: spacing.md,
   },
@@ -764,7 +770,7 @@ const styles = StyleSheet.create({
   },
   merchant: {
     ...typography.headlineMd,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   amount: {
     marginTop: spacing.xs,
@@ -776,7 +782,7 @@ const styles = StyleSheet.create({
   },
   metaLine: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
     marginTop: spacing.xs,
     textAlign: 'center',
   },
@@ -786,7 +792,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   detailRow: {
     flexDirection: 'row',
@@ -796,7 +802,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   tappableRow: {
     minHeight: 48,
@@ -813,7 +819,7 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
     flexShrink: 1,
     textAlign: 'right',
     marginLeft: spacing.md,
@@ -832,39 +838,39 @@ const styles = StyleSheet.create({
   },
   transparencyLabel: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   transparencyValue: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   transparencyMeta: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   sourceBox: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: pal.surfaceContainer,
     borderRadius: 12,
     padding: spacing.md,
     gap: spacing.xs,
   },
   sourceLabel: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: pal.outline,
     letterSpacing: 0.5,
   },
   sourceText: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: pal.onSurfaceVariant,
     fontStyle: 'italic',
   },
   sourceFootnote: {
     ...typography.labelSm,
-    color: colors.primary,
+    color: pal.primary,
   },
   linkText: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: pal.primary,
   },
   hiddenLink: {
     flexDirection: 'row',
@@ -873,11 +879,11 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: spacing.md,
     borderRadius: 16,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: pal.secondaryContainer,
   },
   hiddenLinkText: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
     flex: 1,
   },
   actions: {

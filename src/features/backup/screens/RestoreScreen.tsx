@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState , useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -11,7 +11,7 @@ import {
   showSnackbar,
 } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors } from '../../../theme';
+import { useColors } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { resetToHome } from '../../../app/navigation/navigationRef';
 import { canTryRestorePassword } from '../../../domain/backup/backupPassword';
@@ -19,7 +19,7 @@ import { BackupError, BACKUP_ERROR_MESSAGES } from '../../../domain/backup/backu
 import type { PickedBackup } from '../../../native/android/backup/backupNative';
 import { useSyncRunStore } from '../../sms-sync/syncRunner';
 import { PasswordField } from '../components/PasswordField';
-import { backupScreenStyles as styles } from '../components/backupScreenStyles';
+import { makeBackupScreenStyles } from '../components/backupScreenStyles';
 import { abandonRestore, openBackup, pickBackup, restoreBackup } from '../backupService';
 import {
   BACKUP_RESTORED_MESSAGE,
@@ -40,6 +40,8 @@ function messageOf(error: unknown): string {
  * The password lives only in this screen's state.
  */
 export function RestoreScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeBackupScreenStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const syncRunning = useSyncRunStore(state => state.running);
   const [picked, setPicked] = useState<PickedBackup | null>(null);
@@ -112,7 +114,7 @@ export function RestoreScreen() {
           Open a Tracker backup file (.trkbak) and enter the password it was saved with.
         </Text>
         <View style={styles.warning} accessible accessibilityLabel={RESTORE_REPLACES_WARNING}>
-          <Icon name="alert-outline" size={20} color={colors.onTertiaryContainer} />
+          <Icon name="alert-outline" size={20} color={c.onTertiaryContainer} />
           <Text style={styles.warningText}>{RESTORE_REPLACES_WARNING}</Text>
         </View>
         {syncRunning ? (
@@ -124,7 +126,7 @@ export function RestoreScreen() {
         {picked ? (
           <>
             <View style={styles.fileRow} testID="restore-file">
-              <Icon name="file-lock-outline" size={22} color={colors.onSurfaceVariant} />
+              <Icon name="file-lock-outline" size={22} color={c.onSurfaceVariant} />
               <Text style={styles.fileName} numberOfLines={1}>
                 {picked.name || 'Backup file'}
               </Text>

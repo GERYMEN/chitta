@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon } from '../../icons';
-import { colors } from '../../../theme';
+import { useColors } from '../../../theme';
 
 /** Touch target of the header back button (and its spacer), dp. */
 export const HEADER_BUTTON_SIZE = 48;
@@ -17,6 +17,7 @@ export interface HeaderBackButtonProps {
  * Built from the 48dp New Accounts Found header button.
  */
 export function HeaderBackButton({ onPress, testID = 'header-back' }: HeaderBackButtonProps) {
+  const c = useColors();
   return (
     <Pressable
       onPress={onPress}
@@ -24,7 +25,7 @@ export function HeaderBackButton({ onPress, testID = 'header-back' }: HeaderBack
       accessibilityLabel="Back"
       testID={testID}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-      <Icon name="arrow-left" size={22} color={colors.onSurface} />
+      <Icon name="arrow-left" size={22} color={c.onSurface} />
     </Pressable>
   );
 }

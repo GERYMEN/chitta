@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 
 export interface OnboardingShellProps {
   stepIndex: number;
@@ -35,6 +35,8 @@ export function OnboardingShell({
   footerLink,
   children,
 }: OnboardingShellProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -82,10 +84,10 @@ export function OnboardingShell({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     paddingHorizontal: spacing.screen,
   },
   header: {
@@ -96,11 +98,11 @@ const styles = StyleSheet.create({
   },
   brand: {
     ...typography.headlineSm,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   skip: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
   },
   dots: {
     flexDirection: 'row',
@@ -113,10 +115,10 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   dotActive: {
-    backgroundColor: colors.primaryContainer,
+    backgroundColor: c.primaryContainer,
   },
   dotInactive: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
   },
   illustration: {
     flex: 1,
@@ -128,11 +130,11 @@ const styles = StyleSheet.create({
   },
   headline: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   subtext: {
     ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   footer: {
     gap: spacing.sm,
@@ -140,7 +142,7 @@ const styles = StyleSheet.create({
   },
   back: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
   footerLink: {
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
   },
   footerLinkText: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
   },
   pressed: {
     opacity: 0.6,

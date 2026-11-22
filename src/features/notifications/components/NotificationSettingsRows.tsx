@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, ToastAndroid, View } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { NotificationSettings } from '../../../domain/notifications/notifications.rules';
 import {
   NOTIF_BILLS_KEY,
@@ -31,6 +31,8 @@ const DEFAULTS: NotificationSettings = { bills: false, recurring: false, weekly:
  * Amounts are left out of every notification while Private mode is on.
  */
 export function NotificationSettingsRows({ visible }: { visible: boolean }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULTS);
 
   const reload = useCallback(() => {
@@ -67,7 +69,7 @@ export function NotificationSettingsRows({ visible }: { visible: boolean }) {
           <View key={row.key}>
             <View style={styles.row} testID={`settings-notif-${row.id}-row`}>
               <View style={styles.icon}>
-                <Icon name={row.icon} size={20} color={colors.onSurfaceVariant} />
+                <Icon name={row.icon} size={20} color={c.onSurfaceVariant} />
               </View>
               <View style={styles.text}>
                 <Text style={styles.title}>{row.title}</Text>
@@ -112,6 +114,8 @@ export function NotificationSettingsRows({ visible }: { visible: boolean }) {
 }
 
 function Chip({ label, selected, onPress, testID }: { label: string; selected: boolean; onPress: () => void; testID: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -125,7 +129,7 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -135,19 +139,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
     borderRadius: radii.default,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
   },
   icon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: { flex: 1 },
-  title: { ...typography.labelLg, color: colors.onSurface },
-  caption: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  title: { ...typography.labelLg, color: c.onSurface },
+  caption: { ...typography.bodyMd, color: c.onSurfaceVariant },
   chips: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -162,9 +166,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: colors.outline,
+    borderColor: c.outline,
   },
-  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { ...typography.labelLg, color: colors.onSurface },
-  chipTextOn: { color: colors.onPrimary },
+  chipOn: { backgroundColor: c.primary, borderColor: c.primary },
+  chipText: { ...typography.labelLg, color: c.onSurface },
+  chipTextOn: { color: c.onPrimary },
 });

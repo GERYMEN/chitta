@@ -14,7 +14,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { PaymentMethod, TransactionType } from '../../../domain/transactions/transaction.types';
 import { Account } from '../../../domain/accounts/account.types';
 import {
@@ -69,6 +69,8 @@ export function TransactionForm({
   onChooseTransfer,
   validate,
 }: TransactionFormProps) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const allAccounts = useTransactionsStore(state => state.accounts);
   // D10: the picker only offers active accounts.
   const accounts = useMemo(() => activeAccounts(allAccounts), [allAccounts]);
@@ -197,7 +199,7 @@ export function TransactionForm({
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="e.g. 450.50"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={pal.outline}
             keyboardType="decimal-pad"
             testID="transaction-amount-input"
           />
@@ -216,7 +218,7 @@ export function TransactionForm({
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="e.g. Swiggy"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={pal.outline}
             testID="transaction-merchant-input"
           />
         )}
@@ -266,7 +268,7 @@ export function TransactionForm({
                 <Icon
                   name={field.value === deletedCurrentAccount.id ? 'radiobox-marked' : 'radiobox-blank'}
                   size={20}
-                  color={colors.outline}
+                  color={pal.outline}
                 />
                 <View style={styles.accountMeta}>
                   <Text style={styles.accountName}>{accountDisplayLabel(deletedCurrentAccount)}</Text>
@@ -312,13 +314,13 @@ export function TransactionForm({
       <FieldLabel>Date & Time</FieldLabel>
       <View style={styles.dateRow}>
         <Pressable style={styles.dateButton} onPress={() => setPicker('date')}>
-          <Icon name="calendar-outline" size={18} color={colors.primary} />
+          <Icon name="calendar-outline" size={18} color={pal.primary} />
           <Text style={styles.dateButtonText}>
             {occurredDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
           </Text>
         </Pressable>
         <Pressable style={styles.dateButton} onPress={() => setPicker('time')}>
-          <Icon name="clock-outline" size={18} color={colors.primary} />
+          <Icon name="clock-outline" size={18} color={pal.primary} />
           <Text style={styles.dateButtonText}>
             {occurredDate.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}
           </Text>
@@ -336,7 +338,7 @@ export function TransactionForm({
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="Add a personal note"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={pal.outline}
             multiline
           />
         )}
@@ -362,10 +364,14 @@ export function TransactionForm({
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return <Text style={styles.fieldLabel}>{children}</Text>;
 }
 
 function FieldError({ error }: { error?: string }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   if (!error) return null;
   return <Text style={styles.errorText}>{error}</Text>;
 }
@@ -379,6 +385,8 @@ function AccountOption({
   selected: boolean;
   onPress: () => void;
 }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return (
     <Pressable
       onPress={onPress}
@@ -389,7 +397,7 @@ function AccountOption({
       <Icon
         name={selected ? 'radiobox-marked' : 'radiobox-blank'}
         size={20}
-        color={selected ? colors.primary : colors.outline}
+        color={selected ? pal.primary : pal.outline}
       />
       <View style={styles.accountMeta}>
         <Text style={styles.accountName}>{account.name}</Text>
@@ -401,10 +409,10 @@ function AccountOption({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: pal.surface,
   },
   content: {
     padding: spacing.screen,
@@ -413,7 +421,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: pal.outline,
     letterSpacing: 0.5,
     marginTop: spacing.sm,
   },
@@ -427,14 +435,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   noteInput: {
     minHeight: 80,
@@ -447,9 +455,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
     borderRadius: radii.md,
     padding: spacing.md,
   },
@@ -462,11 +470,11 @@ const styles = StyleSheet.create({
   },
   accountName: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   accountSubtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   dateRow: {
     flexDirection: 'row',
@@ -478,20 +486,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
     borderRadius: radii.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
   dateButtonText: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   errorText: {
     ...typography.bodyMd,
-    color: colors.error,
+    color: pal.error,
   },
   submit: {
     marginTop: spacing.md,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +10,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Button, Card, Chip, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import {
   selectActiveAccounts,
   selectDeletedAccounts,
@@ -70,6 +70,8 @@ function groupKeyOf(type: AccountType): AccountType {
 }
 
 export function AccountsScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   useRedacted(); // R4c: balances + last-4 masked in the feedback screenshot
   const transactions = useTransactionsStore(state => state.transactions);
@@ -171,7 +173,7 @@ export function AccountsScreen() {
                 <Icon
                   name="shield-check-outline"
                   size={14}
-                  color={colors.primaryContainer}
+                  color={c.primaryContainer}
                 />
               }
             />
@@ -202,16 +204,16 @@ export function AccountsScreen() {
           accessibilityRole="button"
           accessibilityLabel="Bills and dues"
           testID="accounts-bills-entry">
-          <Icon name="file-document-outline" size={20} color={colors.primary} />
+          <Icon name="file-document-outline" size={20} color={c.primary} />
           <Text style={styles.billsEntryLabel}>Bills & dues</Text>
           <Text style={styles.billsEntryCount}>
             {bills.filter(b => b.status === 'open').length} open
           </Text>
-          <Icon name="chevron-right" size={22} color={colors.outline} />
+          <Icon name="chevron-right" size={22} color={c.outline} />
         </Pressable>
 
         <View style={styles.privacyBanner}>
-          <Icon name="shield-lock-outline" size={20} color={colors.primary} />
+          <Icon name="shield-lock-outline" size={20} color={c.primary} />
           <View style={styles.privacyTextWrap}>
             <View style={styles.privacyHeaderRow}>
               <Text style={styles.privacyTitle}>Zero Bank Login Required</Text>
@@ -264,7 +266,7 @@ export function AccountsScreen() {
           label="Add New Money Source"
           variant="primary"
           onPress={() => navigation.navigate('AddAccount')}
-          icon={<Icon name="plus" size={18} color={colors.onObsidian} />}
+          icon={<Icon name="plus" size={18} color={c.onObsidian} />}
         />
 
         {removed.length > 0 ? (
@@ -278,7 +280,7 @@ export function AccountsScreen() {
               <Icon
                 name={deletedOpen ? 'chevron-up' : 'chevron-down'}
                 size={22}
-                color={colors.outline}
+                color={c.outline}
               />
             </Pressable>
             {deletedOpen
@@ -328,6 +330,8 @@ function AccountCard({
   onRemove: () => void;
   onAddMissing: (prefill: ReconcilePrefill) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const balanceMinor = calculateBalance(account, transactions, account.id);
   const liability = isLiabilityAccount(account.type);
   // R5b D-b: used / available credit for credit_card / pay_later accounts.
@@ -340,7 +344,7 @@ function AccountCard({
           <Icon
             name={ACCOUNT_ICON[account.type]}
             size={22}
-            color={colors.primary}
+            color={c.primary}
           />
         </View>
         <View style={styles.accountMeta}>
@@ -390,7 +394,7 @@ function AccountCard({
           <Icon
             name="file-document-outline"
             size={16}
-            color={billUrgency(openBill, now) === 'overdue' ? colors.error : colors.outline}
+            color={billUrgency(openBill, now) === 'overdue' ? c.error : c.outline}
           />
           <Text
             style={[
@@ -408,7 +412,7 @@ function AccountCard({
           <Text style={styles.balanceRowLabel}>Linked card / account numbers</Text>
           {linked.map(number => (
             <View key={number.key} style={styles.linkedRow}>
-              <Icon name="link-variant" size={16} color={colors.outline} />
+              <Icon name="link-variant" size={16} color={c.outline} />
               <Text style={styles.linkedLabel}>{number.label}</Text>
               <Pressable
                 onPress={() => onUnlink(number)}
@@ -442,17 +446,17 @@ function AccountCard({
         style={styles.removeAction}
         accessibilityRole="button"
         accessibilityLabel={`Remove account ${account.name}`}>
-        <Icon name="trash-can-outline" size={18} color={colors.error} />
+        <Icon name="trash-can-outline" size={18} color={c.error} />
         <Text style={styles.removeLabel}>Remove account</Text>
       </Pressable>
     </Card>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   scroll: {
     flex: 1,
@@ -464,11 +468,11 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   subtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   balanceCard: {
     gap: spacing.sm,
@@ -480,16 +484,16 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     ...typography.labelMd,
-    color: colors.inverseOnSurface,
+    color: c.inverseOnSurface,
     letterSpacing: 0.5,
   },
   balanceAmount: {
     ...typography.displayHeroMobile,
-    color: colors.onObsidian,
+    color: c.onObsidian,
   },
   balanceCaption: {
     ...typography.bodyMd,
-    color: colors.inverseOnSurface,
+    color: c.inverseOnSurface,
     marginBottom: spacing.sm,
   },
   flowBanner: {
@@ -497,12 +501,12 @@ const styles = StyleSheet.create({
   },
   flowText: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   privacyBanner: {
     flexDirection: 'row',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
   },
@@ -518,11 +522,11 @@ const styles = StyleSheet.create({
   privacyTitle: {
     ...typography.headlineSm,
     fontSize: 15,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   privacyBody: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   group: {
     gap: spacing.sm,
@@ -533,7 +537,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
   groupHeader: {
@@ -542,12 +546,12 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
   },
   groupCount: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   accountCard: {
     gap: spacing.xs,
@@ -562,7 +566,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -572,19 +576,19 @@ const styles = StyleSheet.create({
   accountName: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   accountSubtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   balanceRowLabel: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   balanceRowValue: {
     ...typography.headlineMd,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   removeAction: {
     flexDirection: 'row',
@@ -596,7 +600,7 @@ const styles = StyleSheet.create({
   },
   removeLabel: {
     ...typography.labelLg,
-    color: colors.error,
+    color: c.error,
   },
   linkedSection: {
     gap: spacing.xs,
@@ -609,7 +613,7 @@ const styles = StyleSheet.create({
   },
   linkedLabel: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   unlinkAction: {
@@ -619,7 +623,7 @@ const styles = StyleSheet.create({
   },
   unlinkLabel: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
   },
   deletedHeader: {
     flexDirection: 'row',
@@ -636,25 +640,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   liabilityValue: {
-    color: '#DC2626',
+    color: c.failedFg,
   },
   billsEntry: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
     minHeight: 48,
   },
   billsEntryLabel: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   billsEntryCount: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   creditRow: {
     marginTop: spacing.xs,
@@ -667,6 +671,6 @@ const styles = StyleSheet.create({
   },
   openBillLabel: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
 });

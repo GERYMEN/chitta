@@ -1,5 +1,4 @@
-import { colors } from '../../theme';
-import { transactionStateColors } from '../../theme/colors';
+import { ColorTokens } from '../../theme';
 import { BudgetState } from '../../domain/budgets/budget.rules';
 import { formatRupeesFromMinor } from '../../shared/utils/currency';
 
@@ -9,26 +8,13 @@ import { formatRupeesFromMinor } from '../../shared/utils/currency';
  * the empty part of the progress bar; `fill` the used part; `bg` a soft tint
  * for chips / the card.
  */
-export const BUDGET_STATE_COLORS: Record<BudgetState, { fill: string; track: string; bg: string; fg: string }> = {
-  under: {
-    fill: colors.primary,
-    track: transactionStateColors.approved.bg,
-    bg: transactionStateColors.approved.bg,
-    fg: transactionStateColors.approved.fg,
-  },
-  near: {
-    fill: transactionStateColors.pending.fg,
-    track: transactionStateColors.pending.bg,
-    bg: transactionStateColors.pending.bg,
-    fg: transactionStateColors.pending.fg,
-  },
-  over: {
-    fill: transactionStateColors.failed.fg,
-    track: transactionStateColors.failed.bg,
-    bg: transactionStateColors.failed.bg,
-    fg: transactionStateColors.failed.fg,
-  },
-};
+export const budgetStateColors = (
+  c: ColorTokens,
+): Record<BudgetState, { fill: string; track: string; bg: string; fg: string }> => ({
+  under: { fill: c.primary, track: c.approvedBg, bg: c.approvedBg, fg: c.approvedFg },
+  near: { fill: c.pendingFg, track: c.pendingBg, bg: c.pendingBg, fg: c.pendingFg },
+  over: { fill: c.failedFg, track: c.failedBg, bg: c.failedBg, fg: c.failedFg },
+});
 
 export const BUDGET_STATE_LABEL: Record<BudgetState, string> = {
   under: 'On track',

@@ -10,7 +10,7 @@ import { StatTile } from '../components/StatTile';
 import { PendingTransactionCard } from '../../pending/components/PendingTransactionCard';
 import { TransactionRow, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import {
   useTransactionsStore,
   selectPending,
@@ -62,6 +62,8 @@ type Nav = CompositeNavigationProp<
 >;
 
 export function HomeScreen() {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const navigation = useNavigation<Nav>();
   const transactions = useTransactionsStore(state => state.transactions);
   const accounts = useTransactionsStore(useShallow(selectActiveAccounts));
@@ -285,14 +287,14 @@ export function HomeScreen() {
             {avatarInitial ? (
               <Text style={styles.avatarText}>{avatarInitial}</Text>
             ) : (
-              <Icon name="account-outline" size={22} color={colors.onPrimaryContainer} />
+              <Icon name="account-outline" size={22} color={pal.onPrimaryContainer} />
             )}
           </View>
           <View style={styles.greetingTextWrap}>
             <Text style={styles.greeting}>{greeting}</Text>
             <Text style={styles.dateLine}>{formatMonthYear(now)}</Text>
           </View>
-          <Icon name="pencil-outline" size={20} color={colors.outline} />
+          <Icon name="pencil-outline" size={20} color={pal.outline} />
         </Pressable>
 
       <BalanceCard
@@ -358,7 +360,7 @@ export function HomeScreen() {
         </View>
 
         <View style={styles.infoBanner}>
-          <Icon name="message-text-outline" size={18} color={colors.onSurfaceVariant} />
+          <Icon name="message-text-outline" size={18} color={pal.onSurfaceVariant} />
           <Text style={styles.infoBannerText}>
             Detected from SMS & UPI. Approve before recording.
           </Text>
@@ -399,8 +401,7 @@ export function HomeScreen() {
         {recent.map(transaction => {
           const visual = getCategoryVisual(
             transaction.categoryId,
-            categories.find(c => c.id === transaction.categoryId),
-          );
+            categories.find(c => c.id === transaction.categoryId), pal);
           return (
             <TransactionRow
               key={transaction.id}
@@ -480,10 +481,10 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: pal.surface,
   },
   scroll: {
     flex: 1,
@@ -506,24 +507,24 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primaryFixed,
+    backgroundColor: pal.primaryFixed,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
     ...typography.headlineSm,
-    color: colors.onPrimaryContainer,
+    color: pal.onPrimaryContainer,
   },
   greetingTextWrap: {
     flex: 1,
   },
   greeting: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   dateLine: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
     marginTop: spacing.xs,
   },
   periodBlock: {
@@ -550,33 +551,33 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   waitingBadge: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: pal.pendingBg,
     borderRadius: 999,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
   waitingBadgeText: {
     ...typography.labelMd,
-    color: '#B7791F',
+    color: pal.pendingFg,
   },
   seeAll: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: pal.primary,
   },
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: pal.surfaceContainerLow,
     borderRadius: 12,
     padding: spacing.md,
   },
   infoBannerText: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: pal.onSurfaceVariant,
     flex: 1,
   },
 });

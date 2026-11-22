@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AmountText, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { Account } from '../../../domain/accounts/account.types';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
@@ -31,6 +31,8 @@ export function UncategorisedRow({
   onOpen: (transaction: Transaction) => void;
   onChooseCategory: (transaction: Transaction) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [expanded, setExpanded] = useState(false);
   useRedacted(); // R4c
   const isSms = transaction.sourceType === 'sms';
@@ -71,7 +73,7 @@ export function UncategorisedRow({
           <Chip
             label="Uncategorised"
             tone="pending"
-            icon={<Icon name="chevron-down" size={14} color={colors.onSurfaceVariant} />}
+            icon={<Icon name="chevron-down" size={14} color={c.onSurfaceVariant} />}
           />
         </Pressable>
       </View>
@@ -98,16 +100,16 @@ export function UncategorisedRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderRadius: radii.default,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
   },
   topRow: {
     flexDirection: 'row',
@@ -129,26 +131,26 @@ const styles = StyleSheet.create({
   },
   merchant: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flexShrink: 1,
   },
   meta: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   smsSection: {
     gap: spacing.xs,
     paddingTop: spacing.xs,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.outlineVariant,
+    borderTopColor: c.outlineVariant,
   },
   smsLabel: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
   },
   smsText: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
 });

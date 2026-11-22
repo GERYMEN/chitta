@@ -14,7 +14,7 @@ import {
   showDialog,
   showSnackbar,
 } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../state/transactionsStore';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { CategoryPickerSheet } from '../../categories/components/CategoryPickerSheet';
@@ -46,6 +46,8 @@ type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function TransactionDetailScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   useRedacted(); // R4c: merchant chip label masked in the feedback screenshot
   const route = useRoute<DetailRoute>();
@@ -286,7 +288,7 @@ export function TransactionDetailScreen() {
           <HeaderSpacer />
         </View>
         <View style={styles.missing}>
-          <Icon name="trash-can-outline" size={32} color={colors.outline} />
+          <Icon name="trash-can-outline" size={32} color={c.outline} />
           <Text style={styles.missingTitle}>Transaction deleted</Text>
           <Text style={styles.missingText}>
             This record was removed. Its history stays in Activity.
@@ -390,10 +392,10 @@ export function TransactionDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   content: {
     padding: spacing.screen,
@@ -405,7 +407,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.xl,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -418,7 +420,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   missing: {
     flex: 1,
@@ -426,16 +428,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     padding: spacing.xl,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   missingTitle: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   missingText: {
     ...typography.bodyLg,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
 });

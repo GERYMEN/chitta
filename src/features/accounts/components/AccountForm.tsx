@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,7 +10,7 @@ import {
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Chip } from '../../../shared/ui';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { AccountType } from '../../../domain/accounts/account.types';
 import {
   accountFormSchema,
@@ -39,6 +39,8 @@ export interface AccountFormProps {
  * calling screen decides what to do with the validated values.
  */
 export function AccountForm({ onSubmit, initialValues, submitting = false }: AccountFormProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const {
     control,
     handleSubmit,
@@ -72,7 +74,7 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="e.g. HDFC Bank"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={c.outline}
             testID="account-name-input"
           />
         )}
@@ -111,7 +113,7 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="e.g. 1234"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={c.outline}
             testID="account-lastfour-input"
           />
         )}
@@ -129,7 +131,7 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="0"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={c.outline}
             keyboardType="decimal-pad"
             testID="account-opening-balance-input"
           />
@@ -150,7 +152,7 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
                 onChangeText={field.onChange}
                 onBlur={field.onBlur}
                 placeholder="e.g. 200000"
-                placeholderTextColor={colors.outline}
+                placeholderTextColor={c.outline}
                 keyboardType="decimal-pad"
                 testID="account-credit-limit-input"
               />
@@ -175,18 +177,22 @@ export function AccountForm({ onSubmit, initialValues, submitting = false }: Acc
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return <Text style={styles.fieldLabel}>{children}</Text>;
 }
 
 function FieldError({ error }: { error?: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   if (!error) return null;
   return <Text style={styles.errorText}>{error}</Text>;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   content: {
     padding: spacing.screen,
@@ -195,7 +201,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
     marginTop: spacing.sm,
   },
@@ -205,22 +211,22 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   errorText: {
     ...typography.bodyMd,
-    color: colors.error,
+    color: c.error,
   },
   hint: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   submit: {
     marginTop: spacing.md,

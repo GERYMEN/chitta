@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chip } from '../../../shared/ui';
 import { AmountText } from '../../../shared/ui/AmountText';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { confidenceTier } from '../../../domain/transactions/transaction.rules';
 import { getCategoryVisual } from '../../../shared/constants/categoryVisuals';
@@ -44,6 +44,8 @@ export function PendingTransactionCard({
   onApprove,
   onReview,
 }: PendingTransactionCardProps) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const categories = useTransactionsStore(state => state.categories);
   const chainSuggestions = useChainSuggestions(state => state.suggestions);
   // R5e T3: an open money meaning (card bill / ATM / wallet / own transfer).
@@ -53,7 +55,7 @@ export function PendingTransactionCard({
   useRedacted(); // R4c
 
   const category = categories.find(c => c.id === transaction.categoryId);
-  const visual = getCategoryVisual(transaction.categoryId, category);
+  const visual = getCategoryVisual(transaction.categoryId, category, pal);
   const tier = confidenceTier(transaction.confidenceScore);
 
   return (
@@ -104,7 +106,7 @@ export function PendingTransactionCard({
           onPress={() => onApprove(transaction)}
           fullWidth={false}
           style={styles.approveButton}
-          icon={<Icon name="check" size={16} color={colors.obsidian} />}
+          icon={<Icon name="check" size={16} color={pal.obsidian} />}
         />
         <Button
           label="Review"
@@ -118,7 +120,7 @@ export function PendingTransactionCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.md,
   },
@@ -141,16 +143,16 @@ const styles = StyleSheet.create({
   merchant: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   subtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
     marginTop: 2,
   },
   disagreeNote: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   chipRow: {
     flexDirection: 'row',

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheet } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { rankRefundCandidates, REFUND_LOOKBACK_DAYS } from '../../../domain/refunds/refund.rules';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -23,6 +23,8 @@ export function RefundCandidateSheet({
   refund: Transaction;
   onSelect: (expenseId: string) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const transactions = useTransactionsStore(state => state.transactions);
   const candidates = useMemo(
     () => (visible ? rankRefundCandidates(refund, transactions) : []),
@@ -49,7 +51,7 @@ export function RefundCandidateSheet({
               accessibilityLabel={`Link to ${expense.merchantName}`}
               testID="refund-candidate"
               style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
-              <Icon name="cash-refund" size={20} color={colors.primary} />
+              <Icon name="cash-refund" size={20} color={c.primary} />
               <View style={styles.optionText}>
                 <Text style={styles.optionTitle} numberOfLines={1}>
                   {expense.merchantName}
@@ -65,15 +67,15 @@ export function RefundCandidateSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   body: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     marginBottom: spacing.sm,
   },
   option: {
@@ -91,14 +93,14 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   optionMeta: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   optionLeft: {
     ...typography.labelMd,
-    color: colors.primary,
+    color: c.primary,
   },
 });

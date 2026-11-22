@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { GestureResponderEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, spacing, typography } from '../../../theme';
-import { transactionStateColors } from '../../../theme/colors';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { AmountText } from '../AmountText';
 import { TransactionStatus, TransactionType } from '../../../domain/transactions/transaction.types';
 import { redactText, useRedacted } from '../../privacy/redaction';
@@ -28,12 +27,12 @@ const STATUS_LABEL: Record<TransactionStatus, string> = {
   invalid: 'Could not process',
 };
 
-const STATUS_TONE = {
-  approved: transactionStateColors.approved.fg,
-  pending: transactionStateColors.pending.fg,
-  rejected: transactionStateColors.rejected.fg,
-  invalid: transactionStateColors.failed.fg,
-} satisfies Record<TransactionStatus, string>;
+const statusTone = (c: ColorTokens): Record<TransactionStatus, string> => ({
+  approved: c.approvedFg,
+  pending: c.pendingFg,
+  rejected: c.rejectedFg,
+  invalid: c.failedFg,
+});
 
 export function TransactionRow({
   merchantName,
@@ -46,6 +45,8 @@ export function TransactionRow({
   testID,
   tag = null,
 }: TransactionRowProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   // R4c: merchant / payee masked (amount via AmountText) in the feedback screenshot.
   useRedacted();
   return (
@@ -71,7 +72,7 @@ export function TransactionRow({
       </View>
       <View style={styles.trailing}>
         <AmountText amountMinor={amountMinor} type={type} variant="headlineSm" />
-        <Text style={[styles.status, { color: STATUS_TONE[status] }]}>
+        <Text style={[styles.status, { color: statusTone(c)[status] }]}>
           {STATUS_LABEL[status]}
         </Text>
       </View>
@@ -79,7 +80,7 @@ export function TransactionRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -109,22 +110,22 @@ const styles = StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
     flexShrink: 1,
   },
   tag: {
     paddingHorizontal: spacing.xs + 2,
     paddingVertical: 1,
     borderRadius: radii.full,
-    backgroundColor: transactionStateColors.approved.bg,
+    backgroundColor: c.approvedBg,
   },
   tagText: {
     ...typography.labelSm,
-    color: colors.primary,
+    color: c.primary,
   },
   subtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     marginTop: 2,
   },
   trailing: {

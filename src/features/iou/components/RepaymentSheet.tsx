@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomSheet, Button } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { canLinkAsRepayment } from '../../../domain/iou/iou.rules';
 import { IouShare } from '../../../domain/iou/iou.types';
 import { Transaction } from '../../../domain/transactions/transaction.types';
@@ -59,6 +59,8 @@ export function RepaymentSheet({
   share: IouShare | null;
   onSettle: (share: IouShare, transactionId: string | null) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const transactions = useTransactionsStore(state => state.transactions);
   const shares = useIouStore(state => state.shares);
@@ -99,7 +101,7 @@ export function RepaymentSheet({
               accessibilityLabel={`Link ${redactText(t.merchantName)} ${formatRupeesFromMinor(t.amountMinor)}`}
               testID="iou-candidate"
               style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
-              <Icon name={lent ? 'cash-plus' : 'cash-minus'} size={20} color={colors.primary} />
+              <Icon name={lent ? 'cash-plus' : 'cash-minus'} size={20} color={c.primary} />
               <View style={styles.optionText}>
                 <Text style={styles.optionTitle} numberOfLines={1}>
                   {redactText(t.merchantName)}
@@ -116,14 +118,14 @@ export function RepaymentSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  title: { ...typography.headlineSm, fontSize: 18, color: colors.onSurface },
-  body: { ...typography.bodyMd, color: colors.outline, marginBottom: spacing.sm },
-  sub: { ...typography.labelLg, color: colors.outline, marginTop: spacing.md, marginBottom: spacing.xs },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  title: { ...typography.headlineSm, fontSize: 18, color: c.onSurface },
+  body: { ...typography.bodyMd, color: c.outline, marginBottom: spacing.sm },
+  sub: { ...typography.labelLg, color: c.outline, marginTop: spacing.md, marginBottom: spacing.xs },
   scroll: { maxHeight: 300 },
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 56, paddingVertical: spacing.xs },
   pressed: { opacity: 0.6 },
   optionText: { flex: 1 },
-  optionTitle: { ...typography.bodyLg, color: colors.onSurface },
-  optionMeta: { ...typography.bodyMd, color: colors.outline },
+  optionTitle: { ...typography.bodyLg, color: c.onSurface },
+  optionMeta: { ...typography.bodyMd, color: c.outline },
 });

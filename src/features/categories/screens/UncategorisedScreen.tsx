@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useShallow } from 'zustand/react/shallow';
 import { Icon } from '../../../shared/icons';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { uncategorisedItems } from '../../../domain/categories/category.rules';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -23,6 +23,8 @@ import { RootStackParamList } from '../../../app/navigation/routes';
  * "View original SMS" link (see UncategorisedRow).
  */
 export function UncategorisedScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const accounts = useTransactionsStore(state => state.accounts);
   const items = useTransactionsStore(useShallow(state => uncategorisedItems(state.transactions)));
@@ -69,7 +71,7 @@ export function UncategorisedScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Icon name="check-circle-outline" size={32} color={colors.primary} />
+            <Icon name="check-circle-outline" size={32} color={c.primary} />
             <Text style={styles.emptyTitle}>All categorised</Text>
             <Text style={styles.emptyBody}>New SMS items without a merchant rule will show up here.</Text>
           </View>
@@ -90,10 +92,10 @@ export function UncategorisedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -107,7 +109,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   content: {
     paddingHorizontal: spacing.screen,
@@ -116,7 +118,7 @@ const styles = StyleSheet.create({
   },
   intro: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     marginBottom: spacing.md,
   },
   empty: {
@@ -129,11 +131,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   emptyBody: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
 });

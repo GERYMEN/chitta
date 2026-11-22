@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet, Button, Chip, showSnackbar } from '../../../shared/ui';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { splitTotalForExpense } from '../../../domain/iou/iou.rules';
 import { SplitShareInput } from '../../../domain/iou/iou.types';
@@ -32,6 +32,8 @@ export function SplitSheet({
   onClose: () => void;
   expense: Transaction;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const people = useIouStore(state => state.people);
   const shares = useIouStore(state => state.shares);
@@ -88,7 +90,7 @@ export function SplitSheet({
               value={row.name}
               onChangeText={name => patchRow(index, { name })}
               placeholder="Person's name"
-              placeholderTextColor={colors.outline}
+              placeholderTextColor={c.outline}
               accessibilityLabel={`Person ${index + 1} name`}
               testID={`split-name-${index}`}
             />
@@ -97,7 +99,7 @@ export function SplitSheet({
               value={row.amount}
               onChangeText={amount => patchRow(index, { amount })}
               placeholder="₹ amount"
-              placeholderTextColor={colors.outline}
+              placeholderTextColor={c.outline}
               keyboardType="decimal-pad"
               accessibilityLabel={`Person ${index + 1} amount in rupees`}
               testID={`split-amount-${index}`}
@@ -138,25 +140,25 @@ export function SplitSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  title: { ...typography.headlineSm, fontSize: 18, color: colors.onSurface },
-  body: { ...typography.bodyMd, color: colors.outline, marginBottom: spacing.sm },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  title: { ...typography.headlineSm, fontSize: 18, color: c.onSurface },
+  body: { ...typography.bodyMd, color: c.outline, marginBottom: spacing.sm },
   scroll: { maxHeight: 420 },
   row: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     minHeight: 48,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   nameInput: { flex: 2 },
   amountInput: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   chipTouch: { minHeight: 48, justifyContent: 'center' },
-  error: { ...typography.bodyMd, color: colors.error, marginTop: spacing.sm },
+  error: { ...typography.bodyMd, color: c.error, marginTop: spacing.sm },
   save: { marginTop: spacing.sm },
 });

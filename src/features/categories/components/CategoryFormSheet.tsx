@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet, Button, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Category, CategoryKind } from '../../../domain/categories/category.types';
 import {
   CATEGORY_COLOR_KEYS,
@@ -11,7 +11,7 @@ import {
   CategoryColorKey,
   validateCategoryName,
 } from '../../../domain/categories/category.rules';
-import { CATEGORY_COLOR_SWATCHES } from '../../../shared/constants/categoryVisuals';
+import { categoryColorSwatches } from '../../../shared/constants/categoryVisuals';
 
 export interface CategoryFormValues {
   name: string;
@@ -61,6 +61,8 @@ export function CategoryFormSheet({
   onSave,
   onArchive,
 }: CategoryFormSheetProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [values, setValues] = useState<CategoryFormValues>(() => initialValues(editing));
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -85,7 +87,7 @@ export function CategoryFormSheet({
     }
   }
 
-  const swatch = CATEGORY_COLOR_SWATCHES[values.color];
+  const swatch = categoryColorSwatches(c)[values.color];
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
@@ -97,7 +99,7 @@ export function CategoryFormSheet({
         onChangeText={name => setValues(v => ({ ...v, name }))}
         onBlur={() => setTouched(true)}
         placeholder="e.g. Pets"
-        placeholderTextColor={colors.outline}
+        placeholderTextColor={c.outline}
         maxLength={CATEGORY_NAME_MAX + 5}
         style={styles.input}
         testID="category-name-input"
@@ -134,10 +136,10 @@ export function CategoryFormSheet({
               accessibilityState={{ checked: selected }}
               style={[
                 styles.iconCell,
-                { backgroundColor: selected ? swatch.bg : colors.surfaceContainerLow },
+                { backgroundColor: selected ? swatch.bg : c.surfaceContainerLow },
                 selected && { borderColor: swatch.fg },
               ]}>
-              <Icon name={icon} size={22} color={selected ? swatch.fg : colors.onSurfaceVariant} />
+              <Icon name={icon} size={22} color={selected ? swatch.fg : c.onSurfaceVariant} />
             </Pressable>
           );
         })}
@@ -155,8 +157,8 @@ export function CategoryFormSheet({
               accessibilityLabel={key}
               accessibilityState={{ checked: selected }}
               style={[styles.swatchCell, selected && styles.swatchSelected]}>
-              <View style={[styles.swatch, { backgroundColor: CATEGORY_COLOR_SWATCHES[key].bg }]}>
-                <View style={[styles.swatchDot, { backgroundColor: CATEGORY_COLOR_SWATCHES[key].fg }]} />
+              <View style={[styles.swatch, { backgroundColor: categoryColorSwatches(c)[key].bg }]}>
+                <View style={[styles.swatchDot, { backgroundColor: categoryColorSwatches(c)[key].fg }]} />
               </View>
             </Pressable>
           );
@@ -184,33 +186,33 @@ export function CategoryFormSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   label: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
     marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 48,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   error: {
     ...typography.bodyMd,
-    color: colors.error,
+    color: c.error,
     marginTop: spacing.xs,
   },
   row: {
@@ -242,7 +244,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   swatchSelected: {
-    borderColor: colors.obsidian,
+    borderColor: c.obsidian,
   },
   swatch: {
     width: 36,

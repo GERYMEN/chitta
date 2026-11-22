@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomSheet, Card, Chip, TransactionRow } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useTransactionsStore,
@@ -53,6 +53,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Picker = 'account' | 'category' | 'tag' | null;
 
 export function TransactionsScreen() {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const navigation = useNavigation<Nav>();
   // R4c: totals, day nets, merchant chip, search text and last-4 masked in
   // the feedback screenshot (rows mask themselves).
@@ -178,10 +180,10 @@ export function TransactionsScreen() {
             {/* R4c: tour step 4 spotlights search + filters. */}
             <TourTarget targetKey="transactions.search">
               <View style={styles.searchBar}>
-                <Icon name="magnify" size={18} color={colors.outline} />
+                <Icon name="magnify" size={18} color={pal.outline} />
               <TextInput
                 placeholder="Search merchant or notes"
-                placeholderTextColor={colors.outline}
+                placeholderTextColor={pal.outline}
                 value={redactText(filters.query)}
                 onChangeText={query => setFilters({ query })}
                 style={styles.searchInput}
@@ -282,7 +284,7 @@ export function TransactionsScreen() {
           </View>
         )}
         renderItem={({ item }) => {
-          const visual = getCategoryVisual(item.categoryId, categoryById.get(item.categoryId));
+          const visual = getCategoryVisual(item.categoryId, categoryById.get(item.categoryId), pal);
           return (
             <TransactionRow
               merchantName={item.merchantName}
@@ -429,6 +431,7 @@ function FilterChip({
   testID?: string;
   accessibilityLabel?: string;
 }) {
+  const pal = useColors();
   return (
     <Pressable
       onPress={onPress}
@@ -442,7 +445,7 @@ function FilterChip({
         tone={active ? 'active' : 'neutral'}
         icon={
           icon ? (
-            <Icon name={icon} size={14} color={active ? colors.onObsidian : colors.onSurfaceVariant} />
+            <Icon name={icon} size={14} color={active ? pal.onObsidian : pal.onSurfaceVariant} />
           ) : undefined
         }
       />
@@ -459,6 +462,8 @@ function PickerOption({
   selected: boolean;
   onPress: () => void;
 }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return (
     <Pressable
       onPress={onPress}
@@ -468,7 +473,7 @@ function PickerOption({
       <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]} numberOfLines={1}>
         {label}
       </Text>
-      {selected ? <Icon name="check" size={20} color={colors.primary} /> : null}
+      {selected ? <Icon name="check" size={20} color={pal.primary} /> : null}
     </Pressable>
   );
 }
@@ -482,7 +487,9 @@ function SummaryStat({
   value: string;
   tone: 'income' | 'expense' | 'net';
 }) {
-  const color = tone === 'income' ? colors.primary : tone === 'expense' ? colors.onSurface : colors.primary;
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
+  const color = tone === 'income' ? pal.primary : tone === 'expense' ? pal.onSurface : pal.primary;
   return (
     <View style={styles.summaryStat}>
       <Text style={styles.summaryLabel}>{label}</Text>
@@ -491,10 +498,10 @@ function SummaryStat({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: pal.surface,
   },
   content: {
     padding: spacing.screen,
@@ -502,11 +509,11 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   subtitle: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },
@@ -526,12 +533,12 @@ const styles = StyleSheet.create({
   },
   summaryDivider: {
     width: StyleSheet.hairlineWidth,
-    backgroundColor: colors.outlineVariant,
+    backgroundColor: pal.outlineVariant,
     marginHorizontal: spacing.sm,
   },
   summaryLabel: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   summaryValue: {
     ...typography.headlineSm,
@@ -542,9 +549,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
     borderRadius: radii.full,
     height: 48,
     paddingHorizontal: spacing.md,
@@ -553,7 +560,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
     padding: 0,
   },
   filterRow: {
@@ -564,7 +571,7 @@ const styles = StyleSheet.create({
   },
   totalsNote: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: pal.outline,
     marginTop: -spacing.sm,
     marginBottom: spacing.md,
   },
@@ -574,18 +581,18 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
     textAlign: 'center',
   },
   sheetTitle: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: pal.onSurface,
     marginBottom: spacing.sm,
   },
   sheetHeading: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: pal.outline,
     letterSpacing: 0.5,
     marginTop: spacing.md,
     marginBottom: spacing.xs,
@@ -602,11 +609,11 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
     flex: 1,
   },
   optionLabelSelected: {
-    color: colors.primary,
+    color: pal.primary,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -617,7 +624,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: pal.outline,
     letterSpacing: 0.5,
   },
 });

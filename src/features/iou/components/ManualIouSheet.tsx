@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet, Button, Chip, showSnackbar } from '../../../shared/ui';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { IouDirection } from '../../../domain/iou/iou.types';
 import { useIouStore } from '../state/iouStore';
 import { parseRupeesToMinor, SPLIT_ERROR_TEXT } from '../iouLabels';
@@ -19,6 +19,8 @@ export function ManualIouSheet({
   onClose: () => void;
   initialPersonName?: string;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const people = useIouStore(state => state.people);
   const addManual = useIouStore(state => state.addManual);
   const [direction, setDirection] = useState<IouDirection>('borrowed');
@@ -77,7 +79,7 @@ export function ManualIouSheet({
           setError(null);
         }}
         placeholder="Person's name"
-        placeholderTextColor={colors.outline}
+        placeholderTextColor={c.outline}
         accessibilityLabel="Person name"
         testID="iou-manual-name"
       />
@@ -103,7 +105,7 @@ export function ManualIouSheet({
           setError(null);
         }}
         placeholder="₹ amount"
-        placeholderTextColor={colors.outline}
+        placeholderTextColor={c.outline}
         keyboardType="decimal-pad"
         accessibilityLabel="Amount in rupees"
         testID="iou-manual-amount"
@@ -113,7 +115,7 @@ export function ManualIouSheet({
         value={note}
         onChangeText={setNote}
         placeholder="Note (optional)"
-        placeholderTextColor={colors.outline}
+        placeholderTextColor={c.outline}
         accessibilityLabel="Note"
         testID="iou-manual-note"
       />
@@ -127,21 +129,21 @@ export function ManualIouSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  title: { ...typography.headlineSm, fontSize: 18, color: colors.onSurface, marginBottom: spacing.sm },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  title: { ...typography.headlineSm, fontSize: 18, color: c.onSurface, marginBottom: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   chipTouch: { minHeight: 48, justifyContent: 'center' },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     minHeight: 48,
     marginBottom: spacing.sm,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
-  error: { ...typography.bodyMd, color: colors.error },
+  error: { ...typography.bodyMd, color: c.error },
   save: { marginTop: spacing.sm },
 });

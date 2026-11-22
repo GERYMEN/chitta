@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Slider } from '../../../shared/ui';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import {
   AUTO_APPROVE_THRESHOLD_MAX,
   AUTO_APPROVE_THRESHOLD_MIN,
@@ -32,6 +32,8 @@ export function ProfileForm({
   submitLabel,
   submitting = false,
 }: ProfileFormProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const {
     control,
     handleSubmit,
@@ -60,7 +62,7 @@ export function ProfileForm({
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             placeholder="e.g. Alex"
-            placeholderTextColor={colors.outline}
+            placeholderTextColor={c.outline}
             maxLength={USER_NAME_MAX_LENGTH + 10}
             autoCapitalize="words"
             accessibilityLabel="Your name"
@@ -83,10 +85,10 @@ export function ProfileForm({
               value={field.value === 'auto'}
               onValueChange={on => field.onChange(on ? 'auto' : 'manual')}
               trackColor={{
-                true: colors.primary,
-                false: colors.surfaceContainerHigh,
+                true: c.primary,
+                false: c.surfaceContainerHigh,
               }}
-              thumbColor={colors.surfaceContainerLowest}
+              thumbColor={c.surfaceContainerLowest}
               accessibilityLabel="Auto-approve"
               accessibilityRole="switch"
             />
@@ -161,35 +163,35 @@ export function ProfileForm({
 /** typography.bodyMd.lineHeight (typed optional on TextStyle). */
 const BODY_MD_LINE_HEIGHT = typography.bodyMd.lineHeight ?? 20;
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   form: {
     gap: spacing.sm,
   },
   fieldLabel: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
     marginTop: spacing.sm,
   },
   fieldLabelInline: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 48,
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   errorText: {
     ...typography.bodyMd,
-    color: colors.error,
+    color: c.error,
   },
   switchRow: {
     flexDirection: 'row',
@@ -200,7 +202,7 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   thresholdBlock: {
@@ -217,7 +219,7 @@ const styles = StyleSheet.create({
   },
   thresholdValue: {
     ...typography.headlineSm,
-    color: colors.primary,
+    color: c.primary,
   },
   rangeRow: {
     flexDirection: 'row',
@@ -226,11 +228,11 @@ const styles = StyleSheet.create({
   },
   rangeText: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   helpText: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   thresholdCopy: {
     gap: spacing.xs,
@@ -239,7 +241,7 @@ const styles = StyleSheet.create({
   },
   noteText: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   submit: {
     marginTop: spacing.md,

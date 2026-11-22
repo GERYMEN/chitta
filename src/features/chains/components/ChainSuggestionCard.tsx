@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Account } from '../../../domain/accounts/account.types';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import { AmountText } from '../../../shared/ui/AmountText';
@@ -30,6 +30,8 @@ export function ChainSuggestionCard({
   onAccept: (item: ChainReviewItem) => void;
   onDismiss: (item: ChainReviewItem) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { child, suggestion } = item;
   const account = accounts.find(a => a.id === child.accountId) ?? null;
   const relation = chainRelationLabel(suggestion.kind);
@@ -39,7 +41,7 @@ export function ChainSuggestionCard({
     <Card style={styles.card} testID="chain-suggestion-card">
       <View style={styles.topRow}>
         <View style={styles.icon}>
-          <Icon name="link-variant" size={20} color={colors.secondary} />
+          <Icon name="link-variant" size={20} color={c.secondary} />
         </View>
         <Text style={styles.relation} testID="chain-relation">
           {relation}
@@ -78,7 +80,7 @@ export function ChainSuggestionCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
@@ -91,14 +93,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.full,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: c.secondaryContainer,
     alignItems: 'center',
     justifyContent: 'center',
   },
   relation: {
     ...typography.headlineSm,
     fontSize: 15,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   row: {
@@ -108,7 +110,7 @@ const styles = StyleSheet.create({
   },
   line: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   actions: {

@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { hasUnsettled, totals } from '../../../domain/iou/iou.rules';
 import { useIouStore } from '../state/iouStore';
@@ -14,6 +14,8 @@ import { youGetLabel, youOweLabel } from '../iouLabels';
  * the redaction-aware formatter (Private mode masks them). Tap -> People.
  */
 export function IouCard({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const shares = useIouStore(state => state.shares);
   const refresh = useIouStore(state => state.refresh);
@@ -37,9 +39,9 @@ export function IouCard({ onPress }: { onPress: () => void }) {
       accessibilityLabel={`IOUs: ${get}, ${owe}`}
       testID="home-iou-card">
       <View style={styles.headerRow}>
-        <Icon name="account-cash-outline" size={20} color={colors.primary} />
+        <Icon name="account-cash-outline" size={20} color={c.primary} />
         <Text style={styles.title}>IOUs</Text>
-        <Icon name="chevron-right" size={22} color={colors.outline} />
+        <Icon name="chevron-right" size={22} color={c.outline} />
       </View>
       <View style={styles.amountRow}>
         <Text style={styles.get} testID="home-iou-get">
@@ -53,17 +55,17 @@ export function IouCard({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
     minHeight: 48,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { ...typography.labelLg, color: colors.onSurface, flex: 1 },
+  title: { ...typography.labelLg, color: c.onSurface, flex: 1 },
   amountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  get: { ...typography.bodyLg, color: colors.primary },
-  owe: { ...typography.bodyLg, color: colors.onSurface },
+  get: { ...typography.bodyLg, color: c.primary },
+  owe: { ...typography.bodyLg, color: c.onSurface },
 });

@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import {
   SMS_SYNC_START_OPTIONS,
   SmsSyncStartMode,
@@ -30,6 +30,8 @@ interface RowProps {
 }
 
 function OptionRow({ label, helper, selected, recommended, onPress, testID }: RowProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -41,7 +43,7 @@ function OptionRow({ label, helper, selected, recommended, onPress, testID }: Ro
       <Icon
         name={selected ? 'radiobox-marked' : 'radiobox-blank'}
         size={22}
-        color={selected ? colors.primary : colors.outline}
+        color={selected ? c.primary : c.outline}
       />
       <View style={styles.text}>
         <View style={styles.titleRow}>
@@ -65,6 +67,8 @@ export function SyncStartOptions({
   customLabel = null,
   onPickCustom,
 }: SyncStartOptionsProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.list} accessibilityRole="radiogroup">
       {SMS_SYNC_START_OPTIONS.map(option => (
@@ -91,7 +95,7 @@ export function SyncStartOptions({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   list: {
     gap: spacing.sm,
   },
@@ -103,13 +107,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.default,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   rowSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.surfaceContainerLowest,
+    borderColor: c.primary,
+    backgroundColor: c.surfaceContainerLowest,
   },
   pressed: {
     opacity: 0.7,
@@ -125,13 +129,13 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   badge: {
     height: 24,
   },
   helper: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
 });

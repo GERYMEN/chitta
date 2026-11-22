@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { AppProviders } from './providers/AppProviders';
 import { RootNavigator } from './navigation/RootNavigator';
 import { useTransactionsStore } from '../features/transactions/state/transactionsStore';
-import { colors } from '../theme';
+import { useColors, useTheme, ThemeProvider, ColorTokens } from '../theme';
+import { initThemeOnLaunch } from '../theme/themeMode';
 import { DialogHost, SnackbarHost } from '../shared/ui';
 import { FeedbackWidget } from '../features/feedback/components/FeedbackWidget';
 import { TourOverlay } from '../features/tour/components/TourOverlay';
@@ -16,7 +17,19 @@ import { AppLockGate } from '../features/security/components/AppLockGate';
 import { startNotificationReconciler } from '../features/notifications/reconcile';
 import { useChainSuggestions } from '../features/sms-sync/rules/chaining';
 
+/** R12: the theme provider sits above everything that reads colours (incl. the nav container). */
 export function App() {
+  return (
+    <ThemeProvider>
+      <AppRoot />
+    </ThemeProvider>
+  );
+}
+
+function AppRoot() {
+  const c = useColors();
+  const { mode } = useTheme();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const isHydrated = useTransactionsStore(state => state.isHydrated);
   const hasOnboarded = useTransactionsStore(state => state.hasOnboarded);
   const hydrate = useTransactionsStore(state => state.hydrate);
@@ -31,7 +44,8 @@ export function App() {
     const ready = useTransactionsStore.getState().isHydrated ? Promise.resolve() : hydrate();
     // R9a: apply saved Hide amounts + secure screen as soon as the DB is open.
     ready
-      .then(() => initSecurityOnLaunch())
+      // R12: the saved theme is applied before the first screen is drawn (no light flash).
+      .then(() => Promise.all([initSecurityOnLaunch(), initThemeOnLaunch()]))
       .catch(() => undefined)
       .then(() => setSecurityReady(true));
     ready.then(() => {
@@ -56,7 +70,7 @@ export function App() {
     <AppProviders>
       {/* R9b: opaque lock overlay above everything while the app lock is engaged. */}
       <AppLockGate ready={isHydrated && securityReady}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} />
         {isHydrated && securityReady ? (
           <>
             <RootNavigator initialRouteName={hasOnboarded ? 'Tabs' : 'Onboarding'} />
@@ -66,7 +80,7 @@ export function App() {
           </>
         ) : (
           <View style={styles.loading}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={c.primary} />
           </View>
         )}
         <SnackbarHost />
@@ -76,11 +90,11 @@ export function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   loading: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
 });

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { shadows } from '../../../theme/shadows';
 import { useSnackbarStore } from './snackbarStore';
 import { useRedacted } from '../../privacy/redaction';
@@ -11,6 +11,8 @@ import { useRedacted } from '../../privacy/redaction';
  * tab bar / gesture zone with one optional action (e.g. "Undo").
  */
 export function SnackbarHost() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const current = useSnackbarStore(state => state.current);
   const press = useSnackbarStore(state => state.press);
   const insets = useSafeAreaInsets();
@@ -43,7 +45,7 @@ export function SnackbarHost() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   wrap: {
     position: 'absolute',
     left: spacing.screen,
@@ -56,11 +58,11 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.md,
     paddingRight: spacing.xs,
     borderRadius: radii.default,
-    backgroundColor: colors.obsidian,
+    backgroundColor: c.obsidian,
   },
   message: {
     ...typography.bodyMd,
-    color: colors.onObsidian,
+    color: c.onObsidian,
     flex: 1,
   },
   action: {
@@ -75,6 +77,6 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     ...typography.labelLg,
-    color: colors.primaryFixedDim,
+    color: c.primaryFixedDim,
   },
 });

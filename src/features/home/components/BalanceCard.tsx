@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chip } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
 import { scanProgressLabel } from '../../../domain/settings/smsSyncStart.rules';
 import { TourTarget } from '../../tour/components/TourTarget';
@@ -30,6 +30,8 @@ export function BalanceCard({
   syncProgress = null,
   onCancelSync,
 }: BalanceCardProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Card tone="obsidian" style={styles.card}>
       <View style={styles.topRow}>
@@ -37,7 +39,7 @@ export function BalanceCard({
         <Chip
           label="Verified & Approved"
           tone="active"
-          icon={<Icon name="check-decagram" size={14} color={colors.primaryContainer} />}
+          icon={<Icon name="check-decagram" size={14} color={c.primaryContainer} />}
         />
       </View>
 
@@ -74,7 +76,7 @@ export function BalanceCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.md,
   },
@@ -85,12 +87,12 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.labelMd,
-    color: colors.inverseOnSurface,
+    color: c.inverseOnSurface,
     letterSpacing: 0.5,
   },
   amount: {
     ...typography.displayHeroMobile,
-    color: colors.onObsidian,
+    color: c.onObsidian,
   },
   actions: {
     flexDirection: 'row',
@@ -113,7 +115,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     ...typography.labelLg,
-    color: colors.onObsidian,
+    color: c.onObsidian,
   },
   cancelButton: {
     flex: 1,

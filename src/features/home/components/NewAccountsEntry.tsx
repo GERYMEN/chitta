@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { newAccountsLabel } from '../../sms-sync/newAccountsStore';
 
 /**
@@ -9,6 +9,8 @@ import { newAccountsLabel } from '../../sms-sync/newAccountsStore';
  * automatic one) saw but the user has not reviewed yet. Counts only.
  */
 export function NewAccountsEntry({ count, onPress }: { count: number; onPress: () => void }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   if (count <= 0) return null;
   const label = newAccountsLabel(count);
   return (
@@ -18,7 +20,7 @@ export function NewAccountsEntry({ count, onPress }: { count: number; onPress: (
       accessibilityLabel={`${label}. Review`}
       testID="home-new-accounts"
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-      <Icon name="bank-plus" size={20} color={colors.primary} />
+      <Icon name="bank-plus" size={20} color={c.primary} />
       <View style={styles.text}>
         <Text style={styles.title}>{label}</Text>
         <Text style={styles.body}>SMS from accounts you have not added yet.</Text>
@@ -28,11 +30,11 @@ export function NewAccountsEntry({ count, onPress }: { count: number; onPress: (
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     minHeight: 56,
     borderRadius: radii.default,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
@@ -40,7 +42,7 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.7 },
   text: { flex: 1 },
-  title: { ...typography.labelLg, color: colors.onSurface },
-  body: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  action: { ...typography.labelLg, color: colors.primary },
+  title: { ...typography.labelLg, color: c.onSurface },
+  body: { ...typography.bodyMd, color: c.onSurfaceVariant },
+  action: { ...typography.labelLg, color: c.primary },
 });

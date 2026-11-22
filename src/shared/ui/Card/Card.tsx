@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors, radii, spacing } from '../../../theme';
+import { radii, spacing, useColors, ColorTokens } from '../../../theme';
 
 export interface CardProps {
   children: React.ReactNode;
@@ -15,6 +15,8 @@ export interface CardProps {
  * 20-24px radius, 20px padding.
  */
 export function Card({ children, style, tone = 'surface', testID }: CardProps) {
+  const c = useColors();
+  const TONE_STYLES = useMemo(() => makeTONE_STYLES(c), [c]);
   return (
     <View style={[styles.base, TONE_STYLES[tone], style]} testID={testID}>
       {children}
@@ -22,14 +24,14 @@ export function Card({ children, style, tone = 'surface', testID }: CardProps) {
   );
 }
 
-const TONE_STYLES = StyleSheet.create({
+const makeTONE_STYLES = (c: ColorTokens) => StyleSheet.create({
   surface: {
-    backgroundColor: colors.surfaceContainerLowest,
-    borderColor: colors.outlineVariant,
+    backgroundColor: c.surfaceContainerLowest,
+    borderColor: c.outlineVariant,
     borderWidth: StyleSheet.hairlineWidth,
   },
   obsidian: {
-    backgroundColor: colors.obsidian,
+    backgroundColor: c.obsidian,
     borderWidth: 0,
   },
 });

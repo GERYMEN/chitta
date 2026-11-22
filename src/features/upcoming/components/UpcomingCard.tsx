@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { relativeDueLabel } from '../../../domain/recurring/recurring.rules';
 import { approxAmountLabel } from '../upcomingLabels';
@@ -15,6 +15,8 @@ const MAX_ROWS = 3;
  * Amounts are estimates ("~") and go through the redaction-aware formatter.
  */
 export function UpcomingCard({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const { now, upcoming } = useUpcoming();
   if (upcoming.length === 0) return null;
@@ -32,9 +34,9 @@ export function UpcomingCard({ onPress }: { onPress: () => void }) {
       accessibilityLabel={a11y}
       testID="home-upcoming-card">
       <View style={styles.headerRow}>
-        <Icon name="calendar-clock" size={20} color={colors.primary} />
+        <Icon name="calendar-clock" size={20} color={c.primary} />
         <Text style={styles.title}>Upcoming</Text>
-        <Icon name="chevron-right" size={22} color={colors.outline} />
+        <Icon name="chevron-right" size={22} color={c.outline} />
       </View>
       {shown.map(s => (
         <View key={s.merchantKey} style={styles.row}>
@@ -50,17 +52,17 @@ export function UpcomingCard({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
     minHeight: 48,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { ...typography.labelLg, color: colors.onSurface, flex: 1 },
+  title: { ...typography.labelLg, color: c.onSurface, flex: 1 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
-  name: { ...typography.bodyLg, color: colors.onSurface, flex: 1 },
-  detail: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  name: { ...typography.bodyLg, color: c.onSurface, flex: 1 },
+  detail: { ...typography.bodyMd, color: c.onSurfaceVariant },
 });

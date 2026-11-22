@@ -15,7 +15,7 @@ import {
   HeaderSpacer,
   showDialog,
 } from '../../../shared/ui';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Account, AccountType } from '../../../domain/accounts/account.types';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import { RootStackParamList } from '../../../app/navigation/routes';
@@ -67,6 +67,8 @@ const TYPE_LABEL: Record<AccountType, string> = {
  * Ignore records an 'ignored' decision. Back / leaving writes nothing.
  */
 export function SmsSuggestionsScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { runId } = route.params;
@@ -243,6 +245,8 @@ function SuggestionCard({
   onLink,
   onIgnore,
 }: SuggestionCardProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [expanded, setExpanded] = useState(false);
   useRedacted(); // R4c: title last-4 + in/out amounts masked in the feedback screenshot
   const summary = useMemo(() => summarizeGroup(group.items), [group.items]);
@@ -278,7 +282,7 @@ function SuggestionCard({
         <Icon
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={20}
-          color={colors.primary}
+          color={c.primary}
         />
       </Pressable>
 
@@ -328,6 +332,8 @@ function SuggestionCard({
 }
 
 function WaitingItemRow({ item }: { item: ParsedSmsTransaction }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [previewOpen, setPreviewOpen] = useState(false);
   useRedacted(); // R4c
   const reference = parseSmsReference(item.sourceReferenceHash);
@@ -340,7 +346,7 @@ function WaitingItemRow({ item }: { item: ParsedSmsTransaction }) {
           <Icon
             name={income ? 'arrow-bottom-left' : 'arrow-top-right'}
             size={16}
-            color={income ? colors.primary : colors.onSurface}
+            color={income ? c.primary : c.onSurface}
           />
         </View>
         <View style={styles.itemMiddle}>
@@ -371,6 +377,8 @@ function LinkPicker({
   accounts: Account[];
   onPick: (account: Account) => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.picker}>
       <Text style={styles.pickerTitle}>Link to an existing account</Text>
@@ -381,7 +389,7 @@ function LinkPicker({
           onPress={() => onPick(account)}
           style={styles.pickerRow}
           accessibilityRole="button">
-          <Icon name="wallet-outline" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="wallet-outline" size={20} color={c.onSurfaceVariant} />
           <Text style={styles.pickerLabel}>{accountDisplayLabel(account)}</Text>
         </Pressable>
       ))}
@@ -389,10 +397,10 @@ function LinkPicker({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -403,7 +411,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   content: {
     padding: spacing.screen,
@@ -412,7 +420,7 @@ const styles = StyleSheet.create({
   },
   summary: {
     ...typography.labelLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   empty: {
     padding: spacing.xl,
@@ -421,7 +429,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     textAlign: 'center',
   },
   card: {
@@ -436,17 +444,17 @@ const styles = StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   count: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
     marginTop: spacing.xs,
   },
   meta: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   toggle: {
     minHeight: 48,
@@ -456,14 +464,14 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
   },
   items: {
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
   itemRow: {
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.sm,
     padding: spacing.sm,
     gap: spacing.xs,
@@ -481,25 +489,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   arrowIn: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
   },
   arrowOut: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: c.surfaceContainer,
   },
   itemMiddle: {
     flex: 1,
   },
   itemMerchant: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   itemDate: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
   },
   preview: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   actions: {
     gap: spacing.sm,
@@ -507,7 +515,7 @@ const styles = StyleSheet.create({
   },
   debitHint: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
     marginTop: spacing.xs,
   },
   picker: {
@@ -517,7 +525,7 @@ const styles = StyleSheet.create({
   pickerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   pickerRow: {
     minHeight: 48,
@@ -527,6 +535,6 @@ const styles = StyleSheet.create({
   },
   pickerLabel: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
 });

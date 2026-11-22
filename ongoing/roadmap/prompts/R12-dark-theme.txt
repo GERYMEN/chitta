@@ -1,0 +1,124 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R12-dark-theme (created from phase/R11-tags-receipts; stack
+tip; highest migration = 16). Stay on it. Do not switch branches, commit or push.
+Executor = you (a Claude subagent). CODE + TESTS + GATES + DEVICE SCRIPT ONLY.
+NO adb / NO device run. NO commit/push/branch switch — the orchestrator owns git.
+
+PHASE R12 — Dark theme. This is a LARGE, mostly-mechanical refactor: the theme
+is currently STATIC (src/theme/colors.ts exports a plain `colors` const,
+imported directly in ~100 files, with StyleSheet.create({...colors...}) at module
+scope). You will introduce a light/dark palette + a provider + a useColors hook
+and migrate every consumer. NO migration (a settings key only), NO dependency
+(RN Appearance is built in), NO permission.
+
+HARD RULE: keep ALL gates green at the end (tsc, eslint, jest, assembleDebug).
+Do NOT leave the tree half-migrated. If a specific file cannot be migrated
+cleanly, FLAG it in the report rather than leaving it broken. Contrast itself is
+visual and device-only — do not try to unit-test contrast; test the structure
+(token parity, mode resolution) instead.
+
+VERIFIED CODE FACTS (build on these):
+- src/theme/: colors.ts (the static light tokens — Material-style keys:
+  surface*, onSurface*, primary*, outline*, error*, etc.), typography.ts,
+  spacing.ts, radii.ts, shadows.ts, index.ts (exports all + a `theme` object +
+  `Theme` type). ~100 src files do `import { colors, ... } from '...theme'`.
+- Dark token values: docs/DESIGN.md (sourced "Vibrant Pulse Fintech") — read its
+  dark/dark-mode section for the dark palette. If DESIGN.md lacks a dark value
+  for a key, derive a sensible Material dark counterpart and LIST every derived
+  key in the report.
+- RN Appearance / useColorScheme (react-native) gives the system light/dark.
+- Settings UI: src/features/profile/components/ProfileSettingsSheet.tsx (R9a/R9b/
+  R8b rows) + settings.repository.ts + src/features/security/securitySettings.ts
+  key pattern. Audit settings_changed exists.
+- App root: App.tsx (R9a initSecurityOnLaunch + AppLockGate wrap) — the
+  ThemeProvider wraps here, outside/around the existing providers. StatusBar
+  handling lives near the root / navigation.
+
+READ FIRST: CLAUDE.md; docs/DESIGN.md (dark tokens); ROADMAP.md R12; propsal
+(R12 row, KEEP); src/theme/*; App.tsx; a few representative consumers
+(src/shared/ui/Card/Card.tsx, Chip/Chip.tsx, Button/Button.tsx,
+src/features/home/screens/HomeScreen.tsx) to fix the migration pattern.
+
+MIGRATION PATTERN (apply consistently):
+- colors.ts exports `lightColors` and `darkColors` (same keys; the existing
+  object becomes lightColors) + a `ColorTokens` type = typeof lightColors.
+- A ThemeProvider (src/theme/ThemeProvider.tsx) holds the resolved mode and
+  palette; useColors() returns the active ColorTokens; useTheme() returns
+  { colors, spacing, radii, typography, shadows, mode }. spacing/radii/
+  typography/shadows do NOT change by mode (reuse as-is), but expose them through
+  the hook too so files have ONE import.
+- Component that used `import { colors } from theme` + a module-scope
+  `const styles = StyleSheet.create({... colors.x ...})`: convert to a
+  `const makeStyles = (c: ColorTokens) => StyleSheet.create({... c.x ...})`
+  factory (module scope, pure) and inside the component
+  `const c = useColors(); const styles = useMemo(() => makeStyles(c), [c]);`.
+  Files that only use colors inline (no module-scope StyleSheet) just call
+  useColors() in the component. A file that uses colors OUTSIDE any component
+  (pure non-React module, e.g. a token used in a constant) must take the palette
+  as a parameter or move the usage into a component — FLAG any that cannot.
+- Do NOT change spacing/radii/typography values or any non-color styling.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a theme_mode settings key ('system'|'light'|'dark', default 'system'). On
+    launch load it; 'system' follows useColorScheme live. A Settings control
+    (segmented/radio: System / Light / Dark) writes the key + settings_changed
+    audit + applies live. Add theme_mode to the audited-setting allow-list +
+    an Activity sentence.
+D-b darkColors: every key in lightColors has a dark twin (no missing keys). A
+    unit test asserts Object.keys(lightColors) deep-equals Object.keys(darkColors)
+    (token completeness). Values from docs/DESIGN.md dark section; derived ones
+    listed in the report.
+D-c StatusBar + navigation chrome follow the active mode (bar style + background);
+    BottomSheet / Dialog / Snackbar / Slider / Switch / Card / Chip / Button and
+    every reachable screen read colors from the hook so they flip with the theme.
+D-d No hard-coded hex anywhere after this phase (except inside colors.ts). If you
+    find stray hex in a component, move it to a token. Redaction masks, AmountText
+    etc. keep working in both modes.
+D-e NO migration, NO dependency, NO permission. Amounts/privacy unchanged.
+
+TASKS (keep gates green throughout):
+T0 colors.ts -> lightColors + darkColors + ColorTokens type (D-b) + token-parity
+   test. Read docs/DESIGN.md for dark values; list derived keys.
+T1 ThemeProvider + useColors/useTheme (src/theme/) + mode resolution (system via
+   useColorScheme, light, dark) + theme_mode settings key + launch load +
+   Settings control + audit + Activity sentence + StatusBar/nav chrome follow
+   (D-a/D-c). Unit-test the resolution (system->scheme, light, dark) + settings
+   persist/audit.
+T2 Mechanical migration of ALL consumers to useColors()/makeStyles (the bulk).
+   Work feature by feature; after each, run tsc + the cheap jest for touched
+   files; keep eslint clean. No module-scope color usage left (or flagged).
+T3 Tests: token parity (T0), mode resolution + settings (T1), and a handful of
+   representative screens/components render under BOTH light and dark without
+   throwing (Home, Transactions, a BottomSheet, Card, Chip, Button). Do NOT
+   assert pixel contrast.
+T4 Device script scripts/device/r12.sh (lib.sh style; counts/manual only — dark
+   contrast is visual): set System/Light/Dark via the Settings control; relaunch
+   keeps the choice; open a few screens in dark with no crash (0 FATAL/ANR). The
+   per-screen contrast check is a MANUAL step for the owner. Update README.md.
+   bash -n. Do NOT run it.
+
+PRIVACY (unchanged): no SMS content; audits ids/enums/field-names only; synthetic
+fixtures only; reference app is "chitta-ref-app". No dependency/permission/network.
+
+GATES (must ALL pass at the end — this is the acceptance bar for a refactor this
+size): npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx 0
+errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/
+Contents/Home; PATH=$JAVA_HOME/bin:$PATH; ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R12-dark-theme.md (the light/dark token split +
+any derived dark keys; the provider + hook + makeStyles pattern; how many files
+migrated; mode resolution + the setting; StatusBar handling; confirm NO
+migration/dependency/permission + no stray hex left (or list exceptions); tests
+added; any file that could not be migrated + why; known limits (contrast is
+device-verified); how to run r12.sh). Leak-scan report/diff/new files (shell) for
+phone numbers, real UPI ids, non-XX account numbers, personal names. Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T4 done / not done; how many
+files migrated; derived dark keys (count + list if short); the hook/makeStyles
+pattern; the setting + mode resolution; confirm NO migration/dependency/
+permission; any file not migrated + why; tests added; anything surprising. Do not
+paste file contents.

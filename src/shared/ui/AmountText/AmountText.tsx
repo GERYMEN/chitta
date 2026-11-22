@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle } from 'react-native';
-import { colors, typography } from '../../../theme';
+import { typography, useColors } from '../../../theme';
 import { formatRupeesFromMinor } from '../../utils/currency';
 import { TransactionType } from '../../../domain/transactions/transaction.types';
 import { useRedacted } from '../../privacy/redaction';
@@ -27,6 +27,7 @@ export function AmountText({
   variant = 'headlineSm',
   style,
 }: AmountTextProps) {
+  const c = useColors();
   // R4c: re-render when the feedback-screenshot redaction flips; the
   // formatter itself returns "₹ ••••" while it is on.
   useRedacted();
@@ -39,7 +40,7 @@ export function AmountText({
       ? formatRupeesFromMinor(signedMinor, { showPaise, showPositiveSign: true })
       : formatRupeesFromMinor(magnitude, { showPaise });
   const color =
-    type === 'income' ? colors.primary : type === 'transfer' ? colors.secondary : colors.onSurface;
+    type === 'income' ? c.primary : type === 'transfer' ? c.secondary : c.onSurface;
 
   return (
     <Text

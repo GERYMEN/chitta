@@ -5,7 +5,7 @@ import { Circle, Path } from 'react-native-svg';
 import { CategoryDonut, donutItems } from '../CategoryDonut';
 import { WhereItWentCard } from '../WhereItWentCard';
 import { REDACTED_AMOUNT, setRedacted } from '../../../../shared/privacy/redaction';
-import { chartOtherColor, chartSeriesColors } from '../../../../theme';
+import { chartOtherColorFor, chartSeriesColorsFor, darkColors, lightColors } from '../../../../theme';
 import { Category } from '../../../../domain/categories/category.types';
 import { OTHER_BREAKDOWN_KEY } from '../../../../domain/insights/insights.rules';
 
@@ -61,9 +61,13 @@ describe('R4e CategoryDonut', () => {
 
   it('colours by rank from the palette; "Other" uses the muted token', () => {
     const rows = [spend('cat-a', 9000), spend('cat-b', 900), spend('cat-x', 50), spend('cat-y', 50)];
-    const { items } = donutItems(rows, CATEGORIES);
-    expect(items.map(i => i.color)).toEqual([chartSeriesColors[0], chartSeriesColors[1], chartOtherColor]);
-    expect(new Set(chartSeriesColors).size).toBe(chartSeriesColors.length);
+    for (const palette of [lightColors, darkColors]) {
+      const series = chartSeriesColorsFor(palette);
+      const { items } = donutItems(rows, CATEGORIES, palette);
+      expect(items.map(i => i.color)).toEqual([series[0], series[1], chartOtherColorFor(palette)]);
+      expect(new Set(series).size).toBe(series.length);
+    }
+    const { items } = donutItems(rows, CATEGORIES, lightColors);
     expect(items[2]).toMatchObject({ name: 'Other', a11yName: 'Other, 2 categories' });
   });
 

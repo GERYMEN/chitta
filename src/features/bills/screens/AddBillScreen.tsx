@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Button, Chip } from '../../../shared/ui';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { useBillsStore } from '../state/billsStore';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -27,6 +27,8 @@ function minorToRupees(minor: number | null): string {
 }
 
 export function AddBillScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<RootStackParamList, 'EditBill'>>();
   const billId = route.params && 'billId' in route.params ? route.params.billId : undefined;
@@ -113,7 +115,7 @@ export function AddBillScreen() {
           value={payee}
           onChangeText={setPayee}
           placeholder="e.g. QA Electric Board"
-          placeholderTextColor={colors.outline}
+          placeholderTextColor={c.outline}
           testID="bill-payee-input"
         />
 
@@ -155,7 +157,7 @@ export function AddBillScreen() {
           value={amount}
           onChangeText={setAmount}
           placeholder="0"
-          placeholderTextColor={colors.outline}
+          placeholderTextColor={c.outline}
           keyboardType="decimal-pad"
           testID="bill-amount-input"
         />
@@ -166,7 +168,7 @@ export function AddBillScreen() {
           value={minDue}
           onChangeText={setMinDue}
           placeholder=""
-          placeholderTextColor={colors.outline}
+          placeholderTextColor={c.outline}
           keyboardType="decimal-pad"
           testID="bill-min-due-input"
         />
@@ -178,7 +180,7 @@ export function AddBillScreen() {
           accessibilityRole="button"
           accessibilityLabel="Pick due date"
           testID="bill-due-date">
-          <Text style={{ color: dueDate ? colors.onSurface : colors.outline }}>
+          <Text style={{ color: dueDate ? c.onSurface : c.outline }}>
             {dueDate ? dueDate.toLocaleDateString('en-IN') : 'Pick a date'}
           </Text>
         </Pressable>
@@ -209,27 +211,27 @@ export function AddBillScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: c.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.sm, paddingBottom: spacing.xl * 2 },
-  label: { ...typography.labelLg, color: colors.outline, letterSpacing: 0.5, marginTop: spacing.sm },
+  label: { ...typography.labelLg, color: c.outline, letterSpacing: 0.5, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 48,
     justifyContent: 'center',
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   repeatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, minHeight: 48 },
-  repeatHint: { ...typography.bodyMd, color: colors.outline, flex: 1 },
-  error: { ...typography.bodyMd, color: colors.error, marginTop: spacing.sm },
+  repeatHint: { ...typography.bodyMd, color: c.outline, flex: 1 },
+  error: { ...typography.bodyMd, color: c.error, marginTop: spacing.sm },
   save: { marginTop: spacing.md },
 });

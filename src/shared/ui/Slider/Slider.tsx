@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { colors } from '../../../theme';
+import { useColors, ColorTokens } from '../../../theme';
 import { clamp, nudge, positionToValue, valueToFraction } from './sliderMath';
 
 /** Thumb touch target (≥48dp) — also the horizontal inset of the track. */
@@ -46,6 +46,8 @@ export function Slider({
   disabled = false,
   testID,
 }: SliderProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [trackWidth, setTrackWidth] = useState(0);
   const position = useRef(new Animated.Value(0)).current;
   const dragging = useRef(false);
@@ -155,7 +157,7 @@ export function Slider({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   container: {
     height: THUMB_TOUCH,
     paddingHorizontal: INSET,
@@ -167,12 +169,12 @@ const styles = StyleSheet.create({
   track: {
     height: TRACK_HEIGHT,
     borderRadius: TRACK_HEIGHT / 2,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     overflow: 'hidden',
   },
   fill: {
     height: TRACK_HEIGHT,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   thumbTouch: {
     position: 'absolute',
@@ -187,9 +189,9 @@ const styles = StyleSheet.create({
     width: THUMB_SIZE,
     height: THUMB_SIZE,
     borderRadius: THUMB_SIZE / 2,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: c.surfaceContainerLowest,
     borderWidth: 3,
-    borderColor: colors.primary,
+    borderColor: c.primary,
     elevation: 2,
   },
 });

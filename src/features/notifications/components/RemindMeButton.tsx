@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, ToastAndroid } from 'react-native';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { showNotificationsNotAllowed } from '../permissionPrompt';
 import { useRemindersStore } from '../state/remindersStore';
 
@@ -10,6 +10,8 @@ import { useRemindersStore } from '../state/remindersStore';
  * notification permission the first time); tapping again turns it off.
  */
 export function RemindMeButton({ merchantKey, displayName }: { merchantKey: string; displayName: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const keys = useRemindersStore(state => state.keys);
   const toggle = useRemindersStore(state => state.toggle);
   const reminded = keys.includes(merchantKey);
@@ -36,7 +38,7 @@ export function RemindMeButton({ merchantKey, displayName }: { merchantKey: stri
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   action: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: spacing.sm },
-  label: { ...typography.labelLg, color: colors.primary },
+  label: { ...typography.labelLg, color: c.primary },
 });

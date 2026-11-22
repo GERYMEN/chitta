@@ -934,6 +934,15 @@ function describeSettingsChange(
       impact: null,
     };
   }
+  if (metadata.key === 'theme_mode') {
+    return {
+      sentence:
+        metadata.to === 'system'
+          ? 'You set the theme to follow your phone'
+          : `You set the theme to ${metadata.to === 'dark' ? 'dark' : 'light'}`,
+      impact: null,
+    };
+  }
   if (metadata.key === 'app_lock_timeout') {
     return {
       sentence:

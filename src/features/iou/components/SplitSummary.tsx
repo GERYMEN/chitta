@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { Card } from '../../../shared/ui';
-import { colors, typography } from '../../../theme';
+import { typography, useColors, ColorTokens } from '../../../theme';
 import { splitTotalForExpense } from '../../../domain/iou/iou.rules';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { useIouStore } from '../state/iouStore';
@@ -9,6 +9,8 @@ import { splitSummaryLabel } from '../iouLabels';
 
 /** R10 (D-c): the expense detail's "Split: N people owe you ₹X" line. Null when none. */
 export function SplitSummary({ expenseId }: { expenseId: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const shares = useIouStore(state => state.shares);
   const summary = useMemo(() => splitTotalForExpense(shares, expenseId), [shares, expenseId]);
@@ -21,7 +23,7 @@ export function SplitSummary({ expenseId }: { expenseId: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  text: { ...typography.bodyLg, color: colors.onSurface },
-  meta: { ...typography.bodyMd, color: colors.outline },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  text: { ...typography.bodyLg, color: c.onSurface },
+  meta: { ...typography.bodyMd, color: c.outline },
 });

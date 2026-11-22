@@ -1,8 +1,8 @@
-import React, { useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useBillsStore } from '../state/billsStore';
 import { dueBannerModel } from '../../../domain/bills/bill.rules';
 import { formatRupeesFromMinor } from '../../../shared/utils/currency';
@@ -18,6 +18,8 @@ const MASKED = '₹ ••••';
  * (feedback-screenshot) redaction.
  */
 export function DueBillsBanner({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const bills = useBillsStore(state => state.bills);
   const refresh = useBillsStore(state => state.refresh);
   const redacted = useRedacted();
@@ -47,7 +49,7 @@ export function DueBillsBanner({ onPress }: { onPress: () => void }) {
       <Icon
         name="file-document-alert-outline"
         size={20}
-        color={model.hasOverdue ? '#B91C1C' : colors.primary}
+        color={model.hasOverdue ? c.failedFg : c.primary}
       />
       <View style={styles.textWrap}>
         <Text style={[styles.title, model.hasOverdue && styles.overdueText]}>
@@ -55,12 +57,12 @@ export function DueBillsBanner({ onPress }: { onPress: () => void }) {
         </Text>
         {next ? <Text style={styles.subtitle}>{`Next ${next}`}</Text> : null}
       </View>
-      <Icon name="chevron-right" size={22} color={colors.outline} />
+      <Icon name="chevron-right" size={22} color={c.outline} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -69,10 +71,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     minHeight: 48,
   },
-  dueSoon: { backgroundColor: colors.surfaceContainerLow },
-  overdue: { backgroundColor: '#FEE2E2' },
+  dueSoon: { backgroundColor: c.surfaceContainerLow },
+  overdue: { backgroundColor: c.failedBg },
   textWrap: { flex: 1 },
-  title: { ...typography.labelLg, color: colors.onSurface },
-  overdueText: { color: '#B91C1C' },
-  subtitle: { ...typography.bodyMd, color: colors.outline },
+  title: { ...typography.labelLg, color: c.onSurface },
+  overdueText: { color: c.failedFg },
+  subtitle: { ...typography.bodyMd, color: c.outline },
 });

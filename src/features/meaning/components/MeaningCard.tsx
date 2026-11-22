@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Chip, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import type { Transaction } from '../../../domain/transactions/transaction.types';
 import type { MeaningSuggestion } from '../../../domain/meaning/meaning.types';
@@ -37,6 +37,8 @@ export function MeaningCard({
   suggestion: MeaningSuggestion;
   transaction: Transaction;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const accounts = useTransactionsStore(state => state.accounts);
   const rules = useTransactionsStore(state => state.meaningRules);
@@ -119,7 +121,7 @@ export function MeaningCard({
           label={model.chip}
           tone="active"
           icon={
-            <Icon name="swap-horizontal" size={14} color={colors.secondary} />
+            <Icon name="swap-horizontal" size={14} color={c.secondary} />
           }
         />
       </View>
@@ -159,7 +161,7 @@ export function MeaningCard({
           <Icon
             name={remember ? 'checkbox-marked' : 'checkbox-blank-outline'}
             size={22}
-            color={colors.primary}
+            color={c.primary}
           />
           <Text style={styles.checkLabel}>{AUTOMATIC_NEXT_TIME}</Text>
         </Pressable>
@@ -183,19 +185,19 @@ export function MeaningCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
     gap: spacing.sm,
     padding: spacing.md,
     borderRadius: 12,
-    backgroundColor: colors.secondaryContainer,
+    backgroundColor: c.secondaryContainer,
   },
   chipRow: {
     flexDirection: 'row',
   },
   explainer: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   button: {
     minHeight: 48,
@@ -208,7 +210,7 @@ const styles = StyleSheet.create({
   },
   checkLabel: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
 });

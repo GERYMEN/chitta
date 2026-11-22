@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../../shared/ui';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { RecurringSeries } from '../../../domain/recurring/recurring.types';
@@ -23,6 +23,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  * "Not recurring" hides a false positive for this app run only.
  */
 export function UpcomingScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const navigation = useNavigation<Nav>();
   const { now, all } = useUpcoming();
@@ -66,6 +68,8 @@ function SeriesRow({
   now: Date;
   onNotRecurring: () => void;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const due = relativeDueLabel(series.nextDueAt, now);
   return (
     <Card style={styles.row}>
@@ -93,20 +97,20 @@ function SeriesRow({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: c.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.md, paddingBottom: spacing.xl * 2 },
-  note: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  empty: { ...typography.bodyMd, color: colors.outline },
+  note: { ...typography.bodyMd, color: c.onSurfaceVariant },
+  empty: { ...typography.bodyMd, color: c.outline },
   row: { gap: spacing.xs },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  name: { ...typography.labelLg, color: colors.onSurface, flex: 1 },
-  amount: { ...typography.labelLg, color: colors.onSurface },
-  meta: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  due: { ...typography.labelMd, color: colors.primary },
+  name: { ...typography.labelLg, color: c.onSurface, flex: 1 },
+  amount: { ...typography.labelLg, color: c.onSurface },
+  meta: { ...typography.bodyMd, color: c.onSurfaceVariant },
+  due: { ...typography.labelMd, color: c.primary },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   action: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: spacing.sm },
-  actionLabel: { ...typography.labelLg, color: colors.primary },
+  actionLabel: { ...typography.labelLg, color: c.primary },
 });

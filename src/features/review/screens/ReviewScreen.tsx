@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { ReviewSections } from '../components/ReviewSections';
 import { BillPaidSuggestions } from '../../bills/components/BillPaidSuggestions';
 
@@ -12,6 +12,8 @@ import { BillPaidSuggestions } from '../../bills/components/BillPaidSuggestions'
  * possible duplicates in one list (the same sections Pending shows on top).
  */
 export function ReviewScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation();
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
@@ -28,10 +30,10 @@ export function ReviewScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -43,7 +45,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   content: {
     padding: spacing.screen,

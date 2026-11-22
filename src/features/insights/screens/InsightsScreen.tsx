@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, HeaderBackButton, HeaderSpacer } from '../../../shared/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { ChartBars } from '../../../components/charts/ChartBars';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { categoryFilterFor } from '../../transactions/filters/transactionFilters';
@@ -36,16 +36,17 @@ import { useRedacted } from '../../../shared/privacy/redaction';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-/** Trend colours: spend in the expense ink, income in the positive green (DESIGN.md flow). */
-const SPEND_COLOR = colors.onSurface;
-const INCOME_COLOR = colors.primary;
-
 /**
  * R4 Insights (stack screen from Home "Where it went → See all", not a tab):
  * period selector, totals, every category, and month-by-month spend vs
  * income. A category bar opens Transactions filtered to it + the period.
  */
 export function InsightsScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  // Trend colours: spend in the expense ink, income in the positive green (DESIGN.md flow).
+  const SPEND_COLOR = c.onSurface;
+  const INCOME_COLOR = c.primary;
   const navigation = useNavigation<Nav>();
   useRedacted(); // R4c: totals + chart labels masked in the feedback screenshot
   const transactions = useTransactionsStore(state => state.transactions);
@@ -74,7 +75,7 @@ export function InsightsScreen() {
         secondaryValue: bucket.incomeMinor,
         color: SPEND_COLOR,
       })),
-    [trend],
+    [trend, SPEND_COLOR],
   );
   const hasPartialMonth = trend.some(bucket => bucket.partial);
 
@@ -103,14 +104,14 @@ export function InsightsScreen() {
         <Card style={styles.totalsCard} testID="insights-totals">
           <Text style={styles.cardCaption}>{PERIOD_CAPTION[period]}</Text>
           <View style={styles.totalsRow}>
-            <Total label="INCOME" value={formatRupeesFromMinor(totals.incomeMinor)} color={colors.primary} />
+            <Total label="INCOME" value={formatRupeesFromMinor(totals.incomeMinor)} color={c.primary} />
             <View style={styles.divider} />
-            <Total label="SPENT" value={formatRupeesFromMinor(totals.expenseMinor)} color={colors.onSurface} />
+            <Total label="SPENT" value={formatRupeesFromMinor(totals.expenseMinor)} color={c.onSurface} />
             <View style={styles.divider} />
             <Total
               label="NET"
               value={formatRupeesFromMinor(totals.netMinor, { showPositiveSign: true })}
-              color={colors.primary}
+              color={c.primary}
             />
           </View>
         </Card>
@@ -170,6 +171,8 @@ export function InsightsScreen() {
 }
 
 function Total({ label, value, color }: { label: string; value: string; color: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.total}>
       <Text style={styles.totalLabel}>{label}</Text>
@@ -179,6 +182,8 @@ function Total({ label, value, color }: { label: string; value: string; color: s
 }
 
 function LegendSwatch({ color, label }: { color: string; label: string }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.legendItem}>
       <View style={[styles.swatch, { backgroundColor: color }]} />
@@ -187,10 +192,10 @@ function LegendSwatch({ color, label }: { color: string; label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   header: {
     flexDirection: 'row',
@@ -202,7 +207,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   content: {
     padding: spacing.screen,
@@ -224,7 +229,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   totalValue: {
     ...typography.headlineSm,
@@ -233,7 +238,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     width: StyleSheet.hairlineWidth,
-    backgroundColor: colors.outlineVariant,
+    backgroundColor: c.outlineVariant,
     marginHorizontal: spacing.sm,
   },
   card: {
@@ -242,15 +247,15 @@ const styles = StyleSheet.create({
   cardTitle: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   cardCaption: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: c.outline,
   },
   empty: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   legend: {
     flexDirection: 'row',
@@ -268,21 +273,21 @@ const styles = StyleSheet.create({
   },
   legendText: {
     ...typography.labelMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   selectedMonth: {
     gap: 2,
   },
   selectedTitle: {
     ...typography.labelLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   selectedValues: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   footnote: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
   },
 });

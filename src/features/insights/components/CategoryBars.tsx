@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ChartBars, ChartBarsDatum } from '../../../components/charts/ChartBars';
-import { colors } from '../../../theme';
+import { ColorTokens, useColors } from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
 import { categoryLabel } from '../../../domain/categories/category.rules';
 import { CategoryBreakdownRow } from '../../../domain/insights/insights.types';
@@ -27,6 +27,7 @@ interface CategoryBarItem {
 export function categoryBarItems(
   rows: ReadonlyArray<CategoryBreakdownRow>,
   categories: ReadonlyArray<Category>,
+  c: ColorTokens,
 ): CategoryBarItem[] {
   const byId = new Map(categories.map(category => [category.id, category]));
   return rows.map(row => {
@@ -34,7 +35,7 @@ export function categoryBarItems(
       return {
         row,
         a11yName: otherCategoriesA11yName(row.categoryCount),
-        datum: { key: row.key, label: OTHER_LABEL, value: row.spendMinor, color: colors.outline },
+        datum: { key: row.key, label: OTHER_LABEL, value: row.spendMinor, color: c.outline },
       };
     }
     const category = byId.get(row.categoryId);
@@ -46,7 +47,7 @@ export function categoryBarItems(
         key: row.key,
         label: name,
         value: row.spendMinor,
-        color: getCategoryVisual(row.categoryId, category).iconColor,
+        color: getCategoryVisual(row.categoryId, category, c).iconColor,
       },
     };
   });
@@ -62,7 +63,8 @@ export interface CategoryBarsProps {
 
 /** R4: horizontal category bars — ₹ amount, item count and % of spend. */
 export function CategoryBars({ rows, categories, onPressRow, testID }: CategoryBarsProps) {
-  const items = useMemo(() => categoryBarItems(rows, categories), [rows, categories]);
+  const c = useColors();
+  const items = useMemo(() => categoryBarItems(rows, categories, c), [rows, categories, c]);
   const byKey = useMemo(() => new Map(items.map(item => [item.datum.key, item])), [items]);
   const data = useMemo(() => items.map(item => item.datum), [items]);
 

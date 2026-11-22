@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Button, HeaderBackButton, HeaderSpacer, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Category } from '../../../domain/categories/category.types';
 import {
   canModifyCategory,
@@ -27,6 +27,8 @@ const TYPE_LABEL: Record<Category['type'], string> = {
  * merchant rules list (delete only). Reached from the Home settings sheet.
  */
 export function CategoriesScreen() {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const navigation = useNavigation();
   useRedacted(); // R4c: merchant-rule names masked in the feedback screenshot
   const categories = useTransactionsStore(state => state.categories);
@@ -117,7 +119,7 @@ export function CategoriesScreen() {
         <Button
           label="New category"
           variant="brand"
-          icon={<Icon name="plus" size={18} color={colors.obsidian} />}
+          icon={<Icon name="plus" size={18} color={pal.obsidian} />}
           onPress={() => setForm({ editing: null })}
           testID="category-new"
         />
@@ -176,7 +178,7 @@ export function CategoriesScreen() {
                   style={styles.iconButton}
                   accessibilityRole="button"
                   accessibilityLabel={`Remove rule for ${rule.merchantKey}`}>
-                  <Icon name="close-circle-outline" size={22} color={colors.outline} />
+                  <Icon name="close-circle-outline" size={22} color={pal.outline} />
                 </Pressable>
               </View>
             ))
@@ -197,6 +199,8 @@ export function CategoriesScreen() {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
@@ -215,7 +219,9 @@ function CategoryRow({
   /** R5j: archived rows only — "Restore" brings the category back to pickers. */
   onRestore?: () => void;
 }) {
-  const visual = getCategoryVisual(category.id, category);
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
+  const visual = getCategoryVisual(category.id, category, pal);
   const editable = canModifyCategory(category) && category.archivedAt === null && onPress;
   return (
     <Pressable
@@ -235,9 +241,9 @@ function CategoryRow({
         <Text style={styles.rowCaption}>{TYPE_LABEL[category.type]}</Text>
       </View>
       {editable ? (
-        <Icon name="pencil-outline" size={20} color={colors.outline} />
+        <Icon name="pencil-outline" size={20} color={pal.outline} />
       ) : category.isSystem ? (
-        <Icon name="lock-outline" size={18} color={colors.outline} />
+        <Icon name="lock-outline" size={18} color={pal.outline} />
       ) : null}
       {onRestore ? (
         <Button
@@ -252,10 +258,10 @@ function CategoryRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: pal.surface,
   },
   header: {
     flexDirection: 'row',
@@ -269,7 +275,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   content: {
     padding: spacing.screen,
@@ -281,7 +287,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: pal.outline,
     letterSpacing: 0.5,
     marginTop: spacing.sm,
   },
@@ -292,10 +298,10 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderRadius: radii.default,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
   },
   pressed: {
     opacity: 0.7,
@@ -312,11 +318,11 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   rowCaption: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   iconButton: {
     width: 48,
@@ -327,10 +333,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
   },
   footnote: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: pal.outline,
   },
 });

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { confirmDialog, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { meaningRuleLabel } from '../meaningLabels';
@@ -13,6 +13,8 @@ import { meaningRuleLabel } from '../meaningLabels';
  * 'meaning_rule_removed'). Rows already recorded keep what they are.
  */
 export function MeaningRulesSection() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const rules = useTransactionsStore(state => state.meaningRules);
   const accounts = useTransactionsStore(state => state.accounts);
   useRedacted(); // R4c: last-4 masked in the feedback screenshot
@@ -40,7 +42,7 @@ export function MeaningRulesSection() {
     <View style={styles.section} testID="settings-meaning-rules">
       <View style={styles.headerRow}>
         <View style={styles.icon}>
-          <Icon name="swap-horizontal" size={20} color={colors.onSurfaceVariant} />
+          <Icon name="swap-horizontal" size={20} color={c.onSurfaceVariant} />
         </View>
         <View style={styles.text}>
           <Text style={styles.title}>Automatic money rules</Text>
@@ -72,7 +74,7 @@ export function MeaningRulesSection() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   section: {
     gap: spacing.xs,
   },
@@ -86,7 +88,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: c.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -95,11 +97,11 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   caption: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
   },
   ruleRow: {
     flexDirection: 'row',
@@ -109,7 +111,7 @@ const styles = StyleSheet.create({
   },
   ruleLabel: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
   remove: {
@@ -121,7 +123,7 @@ const styles = StyleSheet.create({
   },
   removeText: {
     ...typography.labelLg,
-    color: colors.error,
+    color: c.error,
   },
   pressed: {
     opacity: 0.6,

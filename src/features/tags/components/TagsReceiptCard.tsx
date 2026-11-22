@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet, Button, Card, Chip, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { Transaction } from '../../../domain/transactions/transaction.types';
 import { autoTagsFor, normalizeTagName, validateTagName } from '../../../domain/tags/tag.rules';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -22,6 +22,8 @@ const EMPTY_IDS: string[] = [];
  * plain note and the attach button.
  */
 export function TagsReceiptCard({ transaction }: { transaction: Transaction }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   useRedacted();
   const allTags = useTransactionsStore(state => state.tags);
   const linkIds = useTransactionsStore(state => state.tagLinks[transaction.id]) ?? EMPTY_IDS;
@@ -124,7 +126,7 @@ export function TagsReceiptCard({ transaction }: { transaction: Transaction }) {
             <Chip
               label="Add tag"
               tone="neutral"
-              icon={<Icon name="plus" size={14} color={colors.onSurfaceVariant} />}
+              icon={<Icon name="plus" size={14} color={c.onSurfaceVariant} />}
             />
           </Pressable>
         </View>
@@ -180,7 +182,7 @@ export function TagsReceiptCard({ transaction }: { transaction: Transaction }) {
           value={draft}
           onChangeText={setDraft}
           placeholder="New tag name"
-          placeholderTextColor={colors.outline}
+          placeholderTextColor={c.outline}
           maxLength={32}
           autoCapitalize="none"
           style={styles.input}
@@ -211,26 +213,26 @@ export function TagsReceiptCard({ transaction }: { transaction: Transaction }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: { gap: spacing.sm },
-  title: { ...typography.labelMd, color: colors.onSurfaceVariant },
+  title: { ...typography.labelMd, color: c.onSurfaceVariant },
   receiptTitle: { marginTop: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
-  note: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  note: { ...typography.bodyMd, color: c.onSurfaceVariant },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  thumb: { width: 120, height: 120, borderRadius: radii.md, backgroundColor: colors.surfaceContainerLowest },
-  sheetTitle: { ...typography.headlineSm, color: colors.onSurface, marginBottom: spacing.sm },
-  sheetHeading: { ...typography.labelMd, color: colors.onSurfaceVariant, marginVertical: spacing.sm },
+  thumb: { width: 120, height: 120, borderRadius: radii.md, backgroundColor: c.surfaceContainerLowest },
+  sheetTitle: { ...typography.headlineSm, color: c.onSurface, marginBottom: spacing.sm },
+  sheetHeading: { ...typography.labelMd, color: c.onSurfaceVariant, marginVertical: spacing.sm },
   input: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: c.onSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: c.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
   },
-  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  viewer: { flex: 1, backgroundColor: c.viewerScrim, alignItems: 'center', justifyContent: 'center' },
   full: { width: '100%', height: '100%' },
 });

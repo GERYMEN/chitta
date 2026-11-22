@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { BottomSheet } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { accountDisplayLabel } from '../../../domain/accounts/account.rules';
 import type { AccountType } from '../../../domain/accounts/account.types';
 import {
@@ -35,6 +35,8 @@ export function TransferAccountPickerSheet({
   /** R5e: replaces the default explainer line. */
   body?: string;
 }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const active = useTransactionsStore(useShallow(selectActiveAccounts));
   const options = useMemo(
     () =>
@@ -62,7 +64,7 @@ export function TransferAccountPickerSheet({
             accessibilityRole="button"
             accessibilityLabel={`${direction === 'to' ? 'To' : 'From'} ${accountDisplayLabel(account)}`}
             style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
-            <Icon name="swap-horizontal" size={20} color={colors.secondary} />
+            <Icon name="swap-horizontal" size={20} color={c.secondary} />
             <Text style={styles.optionLabel} numberOfLines={1}>
               {accountDisplayLabel(account)}
             </Text>
@@ -73,15 +75,15 @@ export function TransferAccountPickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   title: {
     ...typography.headlineSm,
     fontSize: 18,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   body: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: c.outline,
     marginBottom: spacing.sm,
   },
   option: {
@@ -95,7 +97,7 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: c.onSurface,
     flex: 1,
   },
 });

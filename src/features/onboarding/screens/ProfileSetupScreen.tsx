@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { ProfileForm } from '../../profile/components/ProfileForm';
 import { ProfileFormValues } from '../../profile/components/profileForm.schema';
@@ -21,6 +21,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  * confidence threshold is opt-in).
  */
 export function ProfileSetupScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   const [saving, setSaving] = useState(false);
 
@@ -65,10 +67,10 @@ export function ProfileSetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   flex: {
     flex: 1,
@@ -83,22 +85,22 @@ const styles = StyleSheet.create({
   },
   brand: {
     ...typography.headlineSm,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   stepRow: {
     marginTop: spacing.sm,
   },
   stepLabel: {
     ...typography.labelMd,
-    color: colors.primary,
+    color: c.primary,
   },
   headline: {
     ...typography.headlineLgMobile,
-    color: colors.onSurface,
+    color: c.onSurface,
   },
   subtext: {
     ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
     marginBottom: spacing.sm,
   },
 });

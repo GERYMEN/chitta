@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Icon } from '../../../shared/icons';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useBudgetsStore } from '../state/budgetsStore';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { useNow } from '../../../shared/hooks/useNow';
@@ -13,7 +13,7 @@ import {
 } from '../../../domain/budgets/budget.rules';
 import { BudgetBar } from './BudgetBar';
 import {
-  BUDGET_STATE_COLORS,
+  budgetStateColors,
   BUDGET_STATE_LABEL,
   leftOrOverLabel,
   spentOfLabel,
@@ -28,6 +28,8 @@ import {
  * masks them.
  */
 export function BudgetCard({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const budgets = useBudgetsStore(state => state.budgets);
   const refresh = useBudgetsStore(state => state.refresh);
   const transactions = useTransactionsStore(state => state.transactions);
@@ -56,7 +58,7 @@ export function BudgetCard({ onPress }: { onPress: () => void }) {
       ? `${summary.nearCount} near limit`
       : null;
   const warningTone = summary.overCount > 0 ? 'over' : 'near';
-  const warningColor = BUDGET_STATE_COLORS[warningTone].fg;
+  const warningColor = budgetStateColors(c)[warningTone].fg;
 
   const a11y = overall
     ? `Budget: ${spentOfLabel(overall.actualMinor, overall.budgetMinor)}, ${leftOrOverLabel(
@@ -73,21 +75,21 @@ export function BudgetCard({ onPress }: { onPress: () => void }) {
       accessibilityLabel={a11y}
       testID="home-budget-card">
       <View style={styles.headerRow}>
-        <Icon name="gauge" size={20} color={colors.primary} />
+        <Icon name="gauge" size={20} color={c.primary} />
         <Text style={styles.title}>Budget</Text>
         {overall ? (
-          <Text style={[styles.stateLabel, { color: BUDGET_STATE_COLORS[overall.state].fg }]}>
+          <Text style={[styles.stateLabel, { color: budgetStateColors(c)[overall.state].fg }]}>
             {BUDGET_STATE_LABEL[overall.state]}
           </Text>
         ) : null}
-        <Icon name="chevron-right" size={22} color={colors.outline} />
+        <Icon name="chevron-right" size={22} color={c.outline} />
       </View>
 
       {overall ? (
         <>
           <View style={styles.amountRow}>
             <Text style={styles.amount}>{spentOfLabel(overall.actualMinor, overall.budgetMinor)}</Text>
-            <Text style={[styles.leftOver, { color: BUDGET_STATE_COLORS[overall.state].fg }]}>
+            <Text style={[styles.leftOver, { color: budgetStateColors(c)[overall.state].fg }]}>
               {leftOrOverLabel(overall.remainingMinor, overall.overMinor)}
             </Text>
           </View>
@@ -104,20 +106,20 @@ export function BudgetCard({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
     minHeight: 48,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { ...typography.labelLg, color: colors.onSurface, flex: 1 },
+  title: { ...typography.labelLg, color: c.onSurface, flex: 1 },
   stateLabel: { ...typography.labelMd },
   amountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  amount: { ...typography.bodyLg, color: colors.onSurface },
+  amount: { ...typography.bodyLg, color: c.onSurface },
   leftOver: { ...typography.labelMd },
-  noOverall: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  noOverall: { ...typography.bodyMd, color: c.onSurfaceVariant },
   warning: { ...typography.labelMd },
 });

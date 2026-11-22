@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, showDialog, showSnackbar } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { useBudgetsStore } from '../state/budgetsStore';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -24,7 +24,7 @@ import {
 } from '../../../domain/budgets/budget.rules';
 import { BudgetBar } from '../components/BudgetBar';
 import {
-  BUDGET_STATE_COLORS,
+  budgetStateColors,
   BUDGET_STATE_LABEL,
   leftOrOverLabel,
   spentOfLabel,
@@ -33,6 +33,8 @@ import {
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function BudgetsScreen() {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const navigation = useNavigation<Nav>();
   const budgets = useBudgetsStore(state => state.budgets);
   const refresh = useBudgetsStore(state => state.refresh);
@@ -109,7 +111,7 @@ export function BudgetsScreen() {
             label="Add budget"
             variant="brand"
             onPress={() => navigation.navigate('SetBudget', { scope: 'category' })}
-            icon={<Icon name="plus" size={18} color={colors.onObsidian} />}
+            icon={<Icon name="plus" size={18} color={pal.onObsidian} />}
           />
         </View>
 
@@ -124,7 +126,7 @@ export function BudgetsScreen() {
           const category = categories.find(c => c.id === budget.categoryId);
           const label = categoryLabel(category);
           if (!progress) return null;
-          const visual = getCategoryVisual(budget.categoryId ?? '', category);
+          const visual = getCategoryVisual(budget.categoryId ?? '', category, pal);
           return (
             <CategoryRow
               key={budget.id}
@@ -157,6 +159,8 @@ function OverallCard({
   onSet: () => void;
   onRemove?: () => void;
 }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   if (!progress) {
     return (
       <Card style={styles.overallCard}>
@@ -166,7 +170,7 @@ function OverallCard({
       </Card>
     );
   }
-  const palette = BUDGET_STATE_COLORS[progress.state];
+  const palette = budgetStateColors(pal)[progress.state];
   return (
     <Card style={styles.overallCard}>
       <View style={styles.overallTopRow}>
@@ -207,7 +211,9 @@ function CategoryRow({
   onEdit: () => void;
   onRemove: () => void;
 }) {
-  const palette = BUDGET_STATE_COLORS[progress.state];
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
+  const palette = budgetStateColors(pal)[progress.state];
   return (
     <Card style={styles.row}>
       <View style={styles.rowTop}>
@@ -235,45 +241,47 @@ function CategoryRow({
 }
 
 function RowAction({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return (
     <Pressable
       onPress={onPress}
       style={styles.action}
       accessibilityRole="button"
       accessibilityLabel={label}>
-      <Icon name={icon} size={16} color={colors.primary} />
+      <Icon name={icon} size={16} color={pal.primary} />
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: pal.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: pal.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.md, paddingBottom: spacing.xl * 2 },
-  monthNote: { ...typography.labelLg, color: colors.outline, letterSpacing: 0.5 },
+  monthNote: { ...typography.labelLg, color: pal.outline, letterSpacing: 0.5 },
   overallCard: { gap: spacing.sm },
   overallTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  overallTitle: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface, flex: 1 },
-  overallAmount: { ...typography.headlineMd, color: colors.onSurface },
+  overallTitle: { ...typography.headlineSm, fontSize: 16, color: pal.onSurface, flex: 1 },
+  overallAmount: { ...typography.headlineMd, color: pal.onSurface },
   setButton: { marginTop: spacing.sm },
-  hint: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  hint: { ...typography.bodyMd, color: pal.onSurfaceVariant },
   statePill: { borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   statePillText: { ...typography.labelMd },
   leftOver: { ...typography.labelLg },
   listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  sectionTitle: { ...typography.headlineSm, fontSize: 16, color: colors.onSurface, flex: 1 },
-  empty: { ...typography.bodyMd, color: colors.outline },
+  sectionTitle: { ...typography.headlineSm, fontSize: 16, color: pal.onSurface, flex: 1 },
+  empty: { ...typography.bodyMd, color: pal.outline },
   row: { gap: spacing.sm },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { ...typography.labelLg, color: colors.onSurface, flex: 1 },
+  rowLabel: { ...typography.labelLg, color: pal.onSurface, flex: 1 },
   rowState: { ...typography.labelMd },
   rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowAmount: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  rowAmount: { ...typography.bodyMd, color: pal.onSurfaceVariant },
   rowLeft: { ...typography.labelMd },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },
   action: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 48, paddingRight: spacing.sm },
-  actionLabel: { ...typography.labelLg, color: colors.primary },
+  actionLabel: { ...typography.labelLg, color: pal.primary },
 });

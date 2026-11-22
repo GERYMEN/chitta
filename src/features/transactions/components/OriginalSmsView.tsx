@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { formatTransactionTimestamp } from '../../../shared/utils/date';
 import { readSmsById } from '../../../native/android/sms/smsReader';
 import {
@@ -29,6 +29,8 @@ export interface OriginalSmsViewProps {
 }
 
 export function OriginalSmsView({ reference }: OriginalSmsViewProps) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [state, setState] = useState<ViewState>({ kind: 'hidden' });
   useRedacted(); // R4c: sender + body masked in the feedback screenshot
   // Incremented on every fetch/hide/unmount so a late native response can
@@ -106,7 +108,7 @@ export function OriginalSmsView({ reference }: OriginalSmsViewProps) {
       </Text>
       {state.kind === 'loading' ? (
         <View style={styles.statusRow}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={c.primary} />
           <Text style={styles.statusText}>Reading from your inbox…</Text>
         </View>
       ) : null}
@@ -145,13 +147,13 @@ export function OriginalSmsView({ reference }: OriginalSmsViewProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
   wrapper: {
     gap: spacing.sm,
   },
   linkText: {
     ...typography.labelLg,
-    color: colors.primary,
+    color: c.primary,
   },
   statusRow: {
     flexDirection: 'row',
@@ -160,25 +162,25 @@ const styles = StyleSheet.create({
   },
   statusText: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
   sourceBox: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: c.surfaceContainer,
     borderRadius: 12,
     padding: spacing.md,
     gap: spacing.xs,
   },
   sourceLabel: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
     letterSpacing: 0.5,
   },
   metaText: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: c.outline,
   },
   bodyText: {
     ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
+    color: c.onSurfaceVariant,
   },
 });

@@ -5,8 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Icon } from '../../../shared/icons';
 import { HeaderBackButton } from '../../../shared/ui';
-import { colors, radii, spacing, typography } from '../../../theme';
-import { transactionStateColors } from '../../../theme/colors';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { useActivityFeed } from '../hooks/useActivityFeed';
@@ -23,13 +22,13 @@ import { useRedacted } from '../../../shared/privacy/redaction';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const TONE_COLOR: Record<ImpactTone, string> = {
-  income: transactionStateColors.approved.fg,
-  expense: colors.onSurface,
-  pending: transactionStateColors.pending.fg,
-  negative: transactionStateColors.failed.fg,
-  neutral: colors.outline,
-};
+const toneColor = (pal: ColorTokens): Record<ImpactTone, string> => ({
+  income: pal.approvedFg,
+  expense: pal.onSurface,
+  pending: pal.pendingFg,
+  negative: pal.failedFg,
+  neutral: pal.outline,
+});
 
 /**
  * Activity (R1): every money-changing action from `audit_events`, newest
@@ -37,6 +36,8 @@ const TONE_COLOR: Record<ImpactTone, string> = {
  * sheet — not a tab (PROJECT.md four-tab rule).
  */
 export function ActivityScreen() {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const navigation = useNavigation<Nav>();
   const transactions = useTransactionsStore(state => state.transactions);
   const accounts = useTransactionsStore(state => state.accounts);
@@ -119,14 +120,14 @@ export function ActivityScreen() {
           <Icon
             name={showAmounts ? 'eye-off-outline' : 'eye-outline'}
             size={22}
-            color={colors.onSurface}
+            color={pal.onSurface}
           />
         </Pressable>
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={pal.primary} />
         </View>
       ) : (
         <SectionList
@@ -155,7 +156,7 @@ export function ActivityScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <View style={styles.emptyIcon}>
-                <Icon name="history" size={28} color={colors.outline} />
+                <Icon name="history" size={28} color={pal.outline} />
               </View>
               <Text style={styles.emptyTitle}>
                 {failed ? 'Could not load activity' : 'No activity yet'}
@@ -168,7 +169,7 @@ export function ActivityScreen() {
             </View>
           }
           ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footer} color={colors.primary} /> : undefined
+            loadingMore ? <ActivityIndicator style={styles.footer} color={pal.primary} /> : undefined
           }
         />
       )}
@@ -177,6 +178,8 @@ export function ActivityScreen() {
 }
 
 function ActivityRow({ item, onPress }: { item: ActivityItem; onPress?: () => void }) {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   return (
     <Pressable
       onPress={onPress}
@@ -184,26 +187,26 @@ function ActivityRow({ item, onPress }: { item: ActivityItem; onPress?: () => vo
       accessibilityRole={onPress ? 'button' : undefined}
       style={({ pressed }) => [styles.row, pressed && onPress ? styles.pressed : null]}>
       <View style={styles.rowIcon}>
-        <Icon name={item.icon} size={20} color={colors.onSurfaceVariant} />
+        <Icon name={item.icon} size={20} color={pal.onSurfaceVariant} />
       </View>
       <View style={styles.rowBody}>
         <Text style={styles.sentence}>{item.sentence}</Text>
         {item.impact ? (
-          <Text style={[styles.impact, { color: TONE_COLOR[item.impact.tone] }]}>
+          <Text style={[styles.impact, { color: toneColor(pal)[item.impact.tone] }]}>
             {item.impact.text}
           </Text>
         ) : null}
         <Text style={styles.time}>{formatRelativeTime(item.eventAt)}</Text>
       </View>
-      {onPress ? <Icon name="chevron-right" size={20} color={colors.outline} /> : null}
+      {onPress ? <Icon name="chevron-right" size={20} color={pal.outline} /> : null}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: pal.surface,
   },
   header: {
     flexDirection: 'row',
@@ -217,7 +220,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   eyeButton: {
     width: 48,
@@ -237,7 +240,7 @@ const styles = StyleSheet.create({
   },
   dayTitle: {
     ...typography.labelLg,
-    color: colors.outline,
+    color: pal.outline,
     letterSpacing: 0.5,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
@@ -250,10 +253,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderRadius: radii.default,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
   },
   pressed: {
     opacity: 0.7,
@@ -262,7 +265,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: pal.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -272,14 +275,14 @@ const styles = StyleSheet.create({
   },
   sentence: {
     ...typography.bodyMd,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   impact: {
     ...typography.labelMd,
   },
   time: {
     ...typography.labelSm,
-    color: colors.outline,
+    color: pal.outline,
   },
   empty: {
     flex: 1,
@@ -292,18 +295,18 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: pal.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
     ...typography.headlineSm,
     fontSize: 16,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   emptyBody: {
     ...typography.bodyMd,
-    color: colors.outline,
+    color: pal.outline,
     textAlign: 'center',
   },
   footer: {

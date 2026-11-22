@@ -5,7 +5,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Chip } from '../../../shared/ui';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { useBudgetsStore } from '../state/budgetsStore';
 import { useTransactionsStore } from '../../transactions/state/transactionsStore';
@@ -33,6 +33,8 @@ function minorToRupees(minor: number | null): string {
  * allowed) then an amount.
  */
 export function SetBudgetScreen() {
+  const pal = useColors();
+  const styles = useMemo(() => makeStyles(pal), [pal]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<RootStackParamList, 'SetBudget'>>();
   const params = route.params;
@@ -140,7 +142,7 @@ export function SetBudgetScreen() {
           value={amount}
           onChangeText={setAmount}
           placeholder="0"
-          placeholderTextColor={colors.outline}
+          placeholderTextColor={pal.outline}
           keyboardType="decimal-pad"
           accessibilityLabel="Monthly budget amount in rupees"
           testID="budget-amount-input"
@@ -160,26 +162,26 @@ export function SetBudgetScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (pal: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: pal.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: pal.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.sm, paddingBottom: spacing.xl * 2 },
-  hint: { ...typography.bodyMd, color: colors.onSurfaceVariant },
-  label: { ...typography.labelLg, color: colors.outline, letterSpacing: 0.5, marginTop: spacing.sm },
+  hint: { ...typography.bodyMd, color: pal.onSurfaceVariant },
+  label: { ...typography.labelLg, color: pal.outline, letterSpacing: 0.5, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: pal.surfaceContainerLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outlineVariant,
+    borderColor: pal.outlineVariant,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 48,
     justifyContent: 'center',
     ...typography.bodyLg,
-    color: colors.onSurface,
+    color: pal.onSurface,
   },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  error: { ...typography.bodyMd, color: colors.error, marginTop: spacing.sm },
+  error: { ...typography.bodyMd, color: pal.error, marginTop: spacing.sm },
   save: { marginTop: spacing.md },
 });

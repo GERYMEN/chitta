@@ -8,6 +8,7 @@ import { useBillsStore } from '../bills/state/billsStore';
 import { useBudgetsStore } from '../budgets/state/budgetsStore';
 import { useChainSuggestions } from '../sms-sync/rules/chaining';
 import { initSecurityOnLaunch } from '../security/securitySettings';
+import { initThemeOnLaunch } from '../../theme/themeMode';
 
 /**
  * R4e: after a restore replaced every row, bring every in-memory store back
@@ -40,4 +41,6 @@ export async function reloadAfterRestore(): Promise<void> {
   await useChainSuggestions.getState().refresh();
   // R9a: the restored Hide amounts / secure screen preferences (or off).
   await initSecurityOnLaunch();
+  // R12: the restored theme preference (or follow-the-phone).
+  await initThemeOnLaunch();
 }

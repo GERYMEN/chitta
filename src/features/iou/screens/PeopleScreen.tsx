@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { HeaderBackButton, HeaderSpacer } from '../../../shared/ui/HeaderBackButton';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { radii, spacing, typography, useColors, ColorTokens } from '../../../theme';
 import { RootStackParamList } from '../../../app/navigation/routes';
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
 import { useNow } from '../../../shared/hooks/useNow';
@@ -24,6 +24,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  * free text and are masked in Private mode.
  */
 export function PeopleScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation = useNavigation<Nav>();
   useRedacted();
   const people = useIouStore(state => state.people);
@@ -69,7 +71,7 @@ export function PeopleScreen() {
           label="Add an IOU"
           variant="brand"
           onPress={() => setAdding(true)}
-          icon={<Icon name="plus" size={18} color={colors.onObsidian} />}
+          icon={<Icon name="plus" size={18} color={c.onObsidian} />}
           testID="people-add"
         />
         {rows.length === 0 ? (
@@ -91,7 +93,7 @@ export function PeopleScreen() {
               </Text>
               <Text style={[styles.net, net > 0 && styles.netGet]}>{netLabel(net)}</Text>
             </View>
-            <Icon name="chevron-right" size={22} color={colors.outline} />
+            <Icon name="chevron-right" size={22} color={c.outline} />
           </Pressable>
         ))}
       </ScrollView>
@@ -100,26 +102,26 @@ export function PeopleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
+const makeStyles = (c: ColorTokens) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
-  headerTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1, textAlign: 'center' },
+  headerTitle: { ...typography.headlineSm, color: c.onSurface, flex: 1, textAlign: 'center' },
   content: { padding: spacing.screen, gap: spacing.md, paddingBottom: spacing.xl * 2 },
   summary: { flexDirection: 'row', justifyContent: 'space-between' },
-  get: { ...typography.bodyLg, color: colors.primary },
-  owe: { ...typography.bodyLg, color: colors.onSurface },
-  empty: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  get: { ...typography.bodyLg, color: c.primary },
+  owe: { ...typography.bodyLg, color: c.onSurface },
+  empty: { ...typography.bodyMd, color: c.onSurfaceVariant },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: c.surfaceContainerLow,
     borderRadius: radii.md,
     padding: spacing.md,
     minHeight: 56,
   },
   pressed: { opacity: 0.6 },
   rowText: { flex: 1 },
-  name: { ...typography.bodyLg, color: colors.onSurface },
-  net: { ...typography.bodyMd, color: colors.outline },
-  netGet: { color: colors.primary },
+  name: { ...typography.bodyLg, color: c.onSurface },
+  net: { ...typography.bodyMd, color: c.outline },
+  netGet: { color: c.primary },
 });

@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card, Chip, TransactionRow } from '../../../shared/ui';
 import { PendingTransactionCard } from '../../pending/components/PendingTransactionCard';
 import { Icon } from '../../../shared/icons';
-import { colors, spacing } from '../../../theme';
+import { spacing, useColors } from '../../../theme';
 import { TourStepId } from '../models/tourSteps';
 import {
   approvedTransactionFixtures,
@@ -19,6 +19,7 @@ import { formatTransactionTimestamp } from '../../../shared/utils/date';
  * the product and free of drift.
  */
 export function TourIllustration({ stepId }: { stepId: TourStepId }) {
+  const c = useColors();
   switch (stepId) {
     case 'welcome':
       return (
@@ -26,7 +27,7 @@ export function TourIllustration({ stepId }: { stepId: TourStepId }) {
           <Card style={styles.card}>
             <Chip label="UPI SMS · Just now" tone="neutral" />
           </Card>
-          <Icon name="arrow-down" size={20} color={colors.outline} style={styles.arrow} />
+          <Icon name="arrow-down" size={20} color={c.outline} style={styles.arrow} />
           <PendingTransactionCard
             transaction={pendingTransactionFixtures[0]}
             onApprove={() => {}}
@@ -42,7 +43,7 @@ export function TourIllustration({ stepId }: { stepId: TourStepId }) {
             <Chip label="Combined Net Worth" tone="active" />
           </Card>
           {approvedTransactionFixtures.slice(0, 2).map(t => {
-            const visual = getCategoryVisual(t.categoryId);
+            const visual = getCategoryVisual(t.categoryId, null, c);
             return (
               <TransactionRow
                 key={t.id}
@@ -62,9 +63,9 @@ export function TourIllustration({ stepId }: { stepId: TourStepId }) {
       return (
         <View style={styles.stack}>
           <Card style={styles.card}>
-            <Chip label="Detected" tone="pending" icon={<Icon name="radar" size={14} color="#B7791F" />} />
+            <Chip label="Detected" tone="pending" icon={<Icon name="radar" size={14} color={c.pendingFg} />} />
           </Card>
-          <Icon name="arrow-down" size={20} color={colors.outline} style={styles.arrow} />
+          <Icon name="arrow-down" size={20} color={c.outline} style={styles.arrow} />
           <Card style={styles.card}>
             <Chip label="Pending — not recorded" tone="neutral" />
           </Card>
@@ -84,7 +85,7 @@ export function TourIllustration({ stepId }: { stepId: TourStepId }) {
       return (
         <View style={styles.stack}>
           {approvedTransactionFixtures.slice(0, 3).map(t => {
-            const visual = getCategoryVisual(t.categoryId);
+            const visual = getCategoryVisual(t.categoryId, null, c);
             return (
               <TransactionRow
                 key={t.id}
