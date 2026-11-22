@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Switch, Text, ToastAndroid, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
+import { NotificationSettingsRows } from '../../notifications/components/NotificationSettingsRows';
 import { BottomSheet, confirmDialog, showDialog } from '../../../shared/ui';
 import { Icon } from '../../../shared/icons';
 import { colors, radii, spacing, typography } from '../../../theme';
@@ -452,6 +453,8 @@ export function ProfileSettingsSheet({
           })}
         </View>
       ) : null}
+      {/* R8b: opt-in notifications (all off by default). */}
+      <NotificationSettingsRows visible={visible} />
       <View style={styles.activityRow} testID="settings-secure-screen-row">
         <View style={styles.activityIcon}>
           <Icon name="shield-lock-outline" size={20} color={colors.onSurfaceVariant} />

@@ -11,6 +11,8 @@ import { RootStackParamList } from '../../../app/navigation/routes';
 import { RecurringSeries } from '../../../domain/recurring/recurring.types';
 import { relativeDueLabel } from '../../../domain/recurring/recurring.rules';
 import { useUpcoming } from '../useUpcoming';
+import { RemindMeButton } from '../../notifications/components/RemindMeButton';
+import { useRemindersStore } from '../../notifications/state/remindersStore';
 import { useDismissedRecurringStore } from '../state/dismissedRecurringStore';
 import { approxAmountLabel, CADENCE_LABEL, shortDateLabel } from '../upcomingLabels';
 
@@ -25,6 +27,10 @@ export function UpcomingScreen() {
   const navigation = useNavigation<Nav>();
   const { now, all } = useUpcoming();
   const dismiss = useDismissedRecurringStore(state => state.dismiss);
+  const loadReminders = useRemindersStore(state => state.load);
+  React.useEffect(() => {
+    loadReminders().catch(() => undefined);
+  }, [loadReminders]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
@@ -73,13 +79,16 @@ function SeriesRow({
         {CADENCE_LABEL[series.cadence]} · last paid {shortDateLabel(series.lastAt)}
       </Text>
       <Text style={styles.due}>Next due {due}</Text>
-      <Pressable
-        onPress={onNotRecurring}
-        style={styles.action}
-        accessibilityRole="button"
-        accessibilityLabel={`Not recurring: ${series.displayName}`}>
-        <Text style={styles.actionLabel}>Not recurring</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <RemindMeButton merchantKey={series.merchantKey} displayName={series.displayName} />
+        <Pressable
+          onPress={onNotRecurring}
+          style={styles.action}
+          accessibilityRole="button"
+          accessibilityLabel={`Not recurring: ${series.displayName}`}>
+          <Text style={styles.actionLabel}>Not recurring</Text>
+        </Pressable>
+      </View>
     </Card>
   );
 }
@@ -97,6 +106,7 @@ const styles = StyleSheet.create({
   amount: { ...typography.labelLg, color: colors.onSurface },
   meta: { ...typography.bodyMd, color: colors.onSurfaceVariant },
   due: { ...typography.labelMd, color: colors.primary },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   action: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: spacing.sm },
   actionLabel: { ...typography.labelLg, color: colors.primary },
 });

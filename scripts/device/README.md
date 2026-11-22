@@ -382,6 +382,33 @@ a lock.
 | R6 | No screen lock (manual, SKIP) | message shown, switch stays OFF |
 | R7 | Crash check since the start | 0 FATAL/ANR |
 
+## R8b — Notifications
+
+```
+scripts/device/r8b.sh [--skip-install]
+```
+
+Owner-assisted, counts of fixed labels only. The script flips **nothing**,
+never taps the system permission dialog and never asserts system UI. It checks
+that Home opens with no notification prompt at launch and that Settings lists
+the three toggles (Bill reminders, Recurring payment reminders, Weekly
+summary). The permission dialog (Android 13+), a QA bill due today, Private
+mode wording, "Remind me?", the weekly Day/Time chips and the reboot re-arm are
+manual steps printed as SKIP. Alarms are inexact, so a reminder can be a few
+minutes late.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Home opens, no prompt at launch | Home labels shown |
+| R3 | **You** open Settings | three notification rows present |
+| R4 | Permission on first toggle (manual, SKIP) | owner follows the printed steps |
+| R5 | QA bill due today (manual, SKIP) | reminder arrives; dropped once paid |
+| R6 | Private mode text (manual, SKIP) | no amount / name in the text |
+| R7 | Remind me? / weekly / reboot (manual, SKIP) | owner follows the printed steps |
+| R8 | Crash check since the start | 0 FATAL/ANR |
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

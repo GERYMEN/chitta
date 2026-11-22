@@ -885,6 +885,28 @@ function describeSettingsChange(
       impact: null,
     };
   }
+  if (
+    metadata.key === 'notif_bills' ||
+    metadata.key === 'notif_recurring' ||
+    metadata.key === 'notif_weekly'
+  ) {
+    const what =
+      metadata.key === 'notif_bills'
+        ? 'bill reminders'
+        : metadata.key === 'notif_recurring'
+        ? 'recurring payment reminders'
+        : 'the weekly summary';
+    return {
+      sentence: `You turned ${metadata.to === 'on' ? 'on' : 'off'} ${what}`,
+      impact: null,
+    };
+  }
+  if (metadata.key === 'notif_weekly_day' || metadata.key === 'notif_weekly_hour') {
+    return { sentence: 'You changed when the weekly summary arrives', impact: null };
+  }
+  if (metadata.key === 'notif_recurring_series') {
+    return { sentence: 'You changed which recurring payments send a reminder', impact: null };
+  }
   if (metadata.key === 'secure_screen') {
     return {
       sentence:

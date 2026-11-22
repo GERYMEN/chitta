@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <!-- R5 auto-read (user-approved 2026-11-03): the only permission R5 adds. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- R8b notifications (user-approved): POST_NOTIFICATIONS (API 33+ runtime) and
+         RECEIVE_BOOT_COMPLETED (re-arm reminders after a reboot). INEXACT alarms only:
+         no SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
       android:name=".MainApplication"
@@ -45,6 +50,17 @@
         android:permission="android.permission.BROADCAST_SMS">
         <intent-filter>
           <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+        </intent-filter>
+      </receiver>
+      <!-- R8b: posts the pre-built notification at alarm time (private to this app). -->
+      <receiver
+        android:name=".NotificationAlarmReceiver"
+        android:exported="false" />
+      <receiver
+        android:name=".NotificationBootReceiver"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.intent.action.BOOT_COMPLETED" />
         </intent-filter>
       </receiver>
       <service

@@ -1,0 +1,141 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R8b-notifications (created from phase/R9b-app-lock; stack tip
+= main + R5c + R6 + R8a + R5j + R9a + R9b; migration 14). Stay on it. Do not
+switch branches, commit or push. Executor = you (a Claude subagent). CODE +
+TESTS + GATES + DEVICE SCRIPT ONLY. NO adb / NO device run. NO commit/push/branch
+switch — the orchestrator owns all git.
+
+OWNER APPROVAL (granted): the POST_NOTIFICATIONS permission and an AlarmManager-
+based notification module are APPROVED. Also approved: RECEIVE_BOOT_COMPLETED
+(to reschedule after reboot). NO new gradle dependency — use the Android
+framework (AlarmManager + NotificationManager); do NOT add notifee or
+androidx.work. Do NOT use exact alarms / SCHEDULE_EXACT_ALARM — INEXACT alarms
+only (no exact-alarm permission).
+
+PHASE R8b — Notifications (the permission half of R8; R8a shipped recurring
+detection + the Upcoming card with the "Remind me?" button DEFERRED to here).
+Scope: (1) bill due-soon / overdue reminders, (2) recurring "Remind me?" for an
+Upcoming series, (3) opt-in weekly summary ("Spent Rs X, N pending"). All opt-in,
+all OFF by default. NO migration (settings keys + a native-owned scheduled-alarm
+registry in SharedPreferences; no new table).
+
+ARCHITECTURE (follow this — it avoids headless JS and any new dependency):
+- JS computes WHAT to notify and WHEN from existing in-memory data whenever it
+  has fresh data (on app foreground and after a sync), then hands native a set
+  of {id, title, body, whenEpochMs, channel} to schedule. Native stores them in
+  SharedPreferences, sets one INEXACT AlarmManager alarm per item, and a
+  BroadcastReceiver POSTS the pre-built notification at fire time (NO JS needed
+  at fire time). A boot receiver reschedules from SharedPreferences.
+- Reconcile each time JS computes: cancel all app-owned scheduled alarms, then
+  reschedule the current set (so nothing goes stale — a paid bill's reminder is
+  dropped on the next reconcile). Past-due "when" fires immediately/next window.
+
+VERIFIED CODE FACTS (build on these):
+- AndroidManifest currently declares INTERNET, USE_BIOMETRIC, READ_SMS,
+  RECEIVE_SMS. Add POST_NOTIFICATIONS + RECEIVE_BOOT_COMPLETED. Nothing else.
+- Runtime-permission pattern: src/native/android/permissions/smsPermission.ts
+  (mirror it for POST_NOTIFICATIONS on Android 13+/API 33; below 33 it is
+  granted at install). The Kotlin side is the SMS permission/module code in
+  android/app/src/main/java/com/tracker/.
+- Native module + package + registration template: SecurityModule/Package +
+  BiometricModule/Package (R9b) + MainApplication.kt. FileProvider/receiver
+  style: SmsReceivedReceiver.kt, SmsAutoReadService.kt.
+- Bills (R5b): src/features/bills/* — billsStore, DueBillsBanner (ALREADY has
+  overdue / due-soon logic — reuse that rule, do not re-derive), BillsScreen.
+  Reuse the existing due/overdue computation for the bill reminders' content.
+- Recurring (R8a): src/domain/recurring/* (detectRecurring / upcomingWithin) +
+  src/features/upcoming/* (UpcomingCard — add the "Remind me?" button here).
+- Pending count + weekly spend: src/domain/insights/insights.rules.ts
+  (periodTotals) + the pending store — for the weekly summary body. Amounts in
+  a notification: respect the Private-mode / redaction rule? NO — a system
+  notification should not leak the amount if Private mode is on; if hide_amounts
+  is on, OMIT the rupee figure from notification text (say "a bill is due" /
+  "weekly summary ready") instead. Decide and document.
+- Settings UI + audit: src/features/profile/components/ProfileSettingsSheet.tsx
+  + settings.repository.ts + src/features/security/securitySettings.ts pattern
+  (R9a/R9b keys). useNow for scheduling times.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Permission: POST_NOTIFICATIONS requested only when the user turns ON the
+    first notification type (not at launch). If denied, keep the toggle OFF and
+    show how to enable in system settings. RECEIVE_BOOT_COMPLETED for reschedule.
+D-b Settings keys (app_settings, no migration), all default 'off':
+    notif_bills ('on'|'off'), notif_recurring ('on'|'off'), notif_weekly
+    ('on'|'off'), notif_weekly_day (0-6, default Sun/0), notif_weekly_hour
+    (default 9). Each toggle writes settings_changed audit.
+D-c Bill reminders (notif_bills): for each open bill that is due-soon or overdue
+    (reuse DueBillsBanner's rule), schedule a reminder on the due date morning
+    (notif_weekly_hour reused or a fixed 9:00 local); overdue bills notify once
+    per day until paid (reconcile handles dedupe). Body: "<payee> bill is due"
+    (+ "~Rs X" only if Private mode OFF). Tapping opens Bills.
+D-d Recurring "Remind me?" (notif_recurring + a per-series opt-in): the R8a
+    Upcoming card/screen gets a "Remind me?" action per series; tapping it (with
+    notifications enabled) schedules a reminder for that series' nextDueAt
+    morning. A session/settings record of which series are reminded (keep it
+    simple: a settings key holding the reminded merchant keys, or session — your
+    call, no migration). Body: "<merchant> is usually due around now".
+D-e Weekly summary (notif_weekly): a reminder every notif_weekly_day at
+    notif_weekly_hour with body "This week: spent <Rs X or hidden>, N pending".
+    Reconcile reschedules the next occurrence each time.
+D-f Channels: one NotificationChannel per category (bills / reminders / summary)
+    created on module init; importance DEFAULT; no sound spam. A stable
+    notification id scheme so reconcile can cancel/replace.
+D-g NEVER put SMS body/sender, account numbers, or (when Private mode is on)
+    amounts into a notification. Notifications carry no sensitive detail beyond
+    what the home screen already shows.
+D-h App lock (R9b) is independent — a notification tap opens the app, which may
+    then show the lock. Do not bypass the lock.
+
+TASKS (each: failing test first where unit-testable, confirm fail, then fix):
+T1 Manifest perms (POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED) + a JS
+   notifications-permission helper (mirror smsPermission.ts): request on first
+   enable (API 33+), report granted/denied/blocked. Unit-test the gating logic.
+T2 Native NotificationModule + Package + MainApplication registration: create
+   channels; scheduleAll(items) stores items in SharedPreferences and sets one
+   inexact AlarmManager alarm each; cancelAll; a BroadcastReceiver that posts the
+   carried notification at fire time; a boot receiver that reschedules from
+   SharedPreferences. assembleDebug must pass. (Native posting is device-only —
+   keep Kotlin minimal + obvious; no unit test for the actual post.)
+T3 Pure JS planner: buildScheduledNotifications({bills, recurring, pending,
+   weekly settings, now, hideAmounts}) -> ScheduledItem[] (D-c..D-e, D-g). Pure,
+   now passed in. Thorough unit tests: due-soon + overdue bills; privacy (no
+   amount when hideAmounts); reminded recurring series only; weekly next-
+   occurrence time; empty when all toggles off; reconcile replaces stale set.
+T4 Reconcile wiring: recompute + scheduleAll on app foreground and after sync
+   (and when a relevant setting/toggle changes). Cancel app-owned alarms first.
+T5 "Remind me?" button on the R8a Upcoming card/screen (D-d) + its opt-in
+   record + Settings rows for the three toggles + weekly day/hour
+   (ProfileSettingsSheet), with audit. Unit/component tests for the button and
+   the toggles.
+T6 Device script scripts/device/r8b.sh (lib.sh style; counts/manual only —
+   notifications + permission dialog are device-only): the Settings toggles
+   exist; enabling the first prompts for POST_NOTIFICATIONS (manual grant note);
+   a synthetic QA bill due today -> a reminder is scheduled (observe via the
+   notification only manually, do not assert system UI); cleanup. Update
+   README.md. bash -n. Do NOT run it.
+
+PRIVACY (absolute): no SMS body/sender ever; no account numbers; no amount when
+Private mode is on; audits ids/enums/field-names only; synthetic fixtures only;
+reference app is "chitta-ref-app". No gradle dependency; only the approved
+POST_NOTIFICATIONS + RECEIVE_BOOT_COMPLETED permissions; INEXACT alarms only.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx 0
+errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/
+Contents/Home; PATH=$JAVA_HOME/bin:$PATH; ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R8b-notifications.md (permissions added; the
+schedule/reconcile architecture; channels + id scheme; the three notification
+types + privacy handling of amounts; "Remind me?" wiring; confirm NO migration,
+NO gradle dependency, INEXACT alarms only; tests added; decisions; known limits
+incl. device-only parts + inexact-timing caveat; how to run r8b.sh). Leak-scan
+report/diff/new files (shell) for phone numbers, real UPI ids, non-XX account
+numbers, personal names. Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T1-T6 done / not done;
+permissions added; confirm NO migration + NO gradle dependency + inexact alarms;
+the planner's privacy rule for amounts; the reconcile trigger points; tests
+added; decisions; anything surprising. Do not paste file contents.

@@ -13,6 +13,7 @@ import { useSmsReaderStore } from '../features/sms-sync/smsReaderStore';
 import { startForegroundAutoRead } from '../features/sms-sync/autoRead/autoReadRunner';
 import { initSecurityOnLaunch } from '../features/security/securitySettings';
 import { AppLockGate } from '../features/security/components/AppLockGate';
+import { startNotificationReconciler } from '../features/notifications/reconcile';
 import { useChainSuggestions } from '../features/sms-sync/rules/chaining';
 
 export function App() {
@@ -46,6 +47,10 @@ export function App() {
 
   // R5: a new SMS arrived while the app is in front → coalesced incremental sync.
   useEffect(() => startForegroundAutoRead(), []);
+
+  // R8b: keep the scheduled notifications in step with bills / transactions / settings
+  // (launch, foreground, after a sync, Private mode flip). Opt-in; a no-op while all are off.
+  useEffect(() => startNotificationReconciler(), []);
 
   return (
     <AppProviders>

@@ -20,6 +20,7 @@ class MainApplication : Application(), ReactApplication {
           add(FeedbackPackage())
           add(BackupPackage())
           add(BiometricPackage())
+          add(NotificationPackage())
         },
     )
   }

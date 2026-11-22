@@ -106,7 +106,14 @@ export type AuditedSettingKey =
   | 'secure_screen'
   /** R9b: 'on' / 'off' and 'immediate' / '1' / '5' only. */
   | 'app_lock_enabled'
-  | 'app_lock_timeout';
+  | 'app_lock_timeout'
+  /** R8b: 'on' / 'off', weekday 0-6, hour 0-23, and a COUNT of reminded series only. */
+  | 'notif_bills'
+  | 'notif_recurring'
+  | 'notif_weekly'
+  | 'notif_weekly_day'
+  | 'notif_weekly_hour'
+  | 'notif_recurring_series';
 
 /**
  * Small typed payloads only. NEVER SMS text, SMS sender, or
