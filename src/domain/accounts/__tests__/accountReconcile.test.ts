@@ -63,20 +63,79 @@ describe('reconcileBalance', () => {
     expect(differenceDirection(0)).toBe('none');
   });
 
-  it('uses calculateBalance (anchor included) for the tracked side', () => {
-    const anchored: Snap = { ...base, balanceAnchorMinor: 90000, balanceAnchorAt: '2026-11-11T00:00:00.000Z' };
+  it('uses calculateBalance (anchor included) for the tracked side, cut off at the snapshot time', () => {
+    const anchored: Snap = { ...base, balanceAnchorMinor: 90000, balanceAnchorAt: '2026-11-05T00:00:00.000Z' };
     const txns = [approved('expense', 5000, '2026-11-01T00:00:00.000Z'), approved('income', 700, '2026-11-12T00:00:00.000Z')];
     const r = reconcileBalance(anchored, txns, 'acc-1');
-    expect(r!.trackedMinor).toBe(calculateBalance(anchored, txns, 'acc-1'));
-    expect(r!.trackedMinor).toBe(90700);
+    expect(r!.trackedMinor).toBe(calculateBalance(anchored, txns, 'acc-1', Date.parse(SMS_AT)));
+    expect(r!.trackedMinor).toBe(90000); // anchor 90000 (row 11-01 is pre-anchor history; 11-12 is after the SMS)
   });
 
-  it('after "Use bank balance" (anchor = bank, at now) the difference is zero', () => {
+  it('after "Use bank balance" (anchor = bank, at the snapshot time) the difference is zero', () => {
     const txns = [approved('expense', 2000)];
     const before = reconcileBalance(base, txns, 'acc-1')!;
     expect(before.diffMinor).not.toBe(0);
-    const anchored: Snap = { ...base, balanceAnchorMinor: before.bankMinor, balanceAnchorAt: '2026-11-15T00:00:00.000Z' };
+    const anchored: Snap = { ...base, balanceAnchorMinor: before.bankMinor, balanceAnchorAt: SMS_AT };
     expect(reconcileBalance(anchored, txns, 'acc-1')!.diffMinor).toBe(0);
+    // Activity after the snapshot then counts toward the CURRENT balance only.
+    const later = [...txns, approved('expense', 700, '2026-11-12T00:00:00.000Z')];
+    expect(reconcileBalance(anchored, later, 'acc-1')!.diffMinor).toBe(0);
+    expect(calculateBalance(anchored, later, 'acc-1')).toBe(90000 - 700);
+  });
+
+  describe('like-for-like at the snapshot instant (no phantom difference)', () => {
+    it('a transaction dated AFTER the snapshot does not create a difference', () => {
+      // opening 100000, SMS says 90000 at SMS_AT after a 10000 expense (before it).
+      const txns = [approved('expense', 10000, '2026-11-09T00:00:00.000Z'), approved('expense', 4000, '2026-11-12T00:00:00.000Z')];
+      const r = reconcileBalance(base, txns, 'acc-1')!;
+      expect(r.trackedMinor).toBe(90000);
+      expect(r.diffMinor).toBe(0);
+      // The current balance (now) still includes the later row.
+      expect(calculateBalance(base, txns, 'acc-1')).toBe(86000);
+    });
+
+    it('a missing transaction dated BEFORE the snapshot still shows the real gap', () => {
+      const txns = [approved('expense', 4000, '2026-11-12T00:00:00.000Z')];
+      const r = reconcileBalance(base, txns, 'acc-1')!;
+      expect(r.trackedMinor).toBe(100000);
+      expect(r.diffMinor).toBe(10000);
+    });
+
+    it('a row at exactly the snapshot time is included (the SMS row itself)', () => {
+      const r = reconcileBalance(base, [approved('expense', 10000, SMS_AT)], 'acc-1')!;
+      expect(r.diffMinor).toBe(0);
+    });
+
+    it('pending / rejected rows never count', () => {
+      const pending = { ...approved('expense', 10000), status: 'pending' as const };
+      expect(reconcileBalance(base, [pending], 'acc-1')!.diffMinor).toBe(10000);
+    });
+
+    it('anchor BEFORE the snapshot: anchor + rows after the anchor up to the snapshot', () => {
+      const anchored: Snap = { ...base, balanceAnchorMinor: 95000, balanceAnchorAt: '2026-11-05T00:00:00.000Z' };
+      const txns = [
+        approved('expense', 99999, '2026-11-01T00:00:00.000Z'), // before anchor: history only
+        approved('expense', 5000, '2026-11-08T00:00:00.000Z'), // after anchor, before SMS
+        approved('expense', 3000, '2026-11-11T00:00:00.000Z'), // after SMS: ignored here
+      ];
+      const r = reconcileBalance(anchored, txns, 'acc-1')!;
+      expect(r.trackedMinor).toBe(90000);
+      expect(r.diffMinor).toBe(0);
+    });
+
+    it('anchor AFTER the snapshot: compared from the pre-anchor baseline up to the snapshot', () => {
+      const anchored: Snap = { ...base, balanceAnchorMinor: 12345, balanceAnchorAt: '2026-11-14T00:00:00.000Z' };
+      const txns = [approved('expense', 10000, '2026-11-09T00:00:00.000Z'), approved('expense', 700, '2026-11-12T00:00:00.000Z')];
+      const r = reconcileBalance(anchored, txns, 'acc-1')!;
+      expect(r.trackedMinor).toBe(90000); // opening 100000 - 10000, anchor ignored
+      expect(r.diffMinor).toBe(0);
+    });
+
+    it('calculateBalance without a cutoff is unchanged by an anchor/cutoff-free call', () => {
+      const txns = [approved('expense', 10000, '2026-11-12T00:00:00.000Z')];
+      expect(calculateBalance(base, txns, 'acc-1')).toBe(90000);
+      expect(calculateBalance(base, txns, 'acc-1', Date.parse('2026-11-11T00:00:00.000Z'))).toBe(100000);
+    });
   });
 
   it('liability accounts are not reconciled (an SMS "balance" there is not the ledger)', () => {

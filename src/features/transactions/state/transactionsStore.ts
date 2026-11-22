@@ -240,7 +240,7 @@ interface TransactionsState {
   removeAccount: (id: string) => Promise<void>;
   /**
    * R6 (D-e1) "Use bank balance": set the EXISTING user anchor to the latest
-   * SMS-reported balance, as of now. Audited by updateAccount ('account_updated',
+   * SMS-reported balance, as of that SMS's time. Audited by updateAccount ('account_updated',
    * fields balanceAnchorMinor + balanceAnchorAt — names only). false when the
    * account has no snapshot.
    */
@@ -951,7 +951,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
     if (!account || account.smsBalanceMinor == null) return false;
     await get().updateAccount(id, {
       balanceAnchorMinor: account.smsBalanceMinor,
-      balanceAnchorAt: new Date().toISOString(),
+      // The bank figure is true AS OF the SMS: anchor there, so rows dated
+      // after it keep counting toward the current balance.
+      balanceAnchorAt: account.smsBalanceAt ?? new Date().toISOString(),
     });
     return true;
   },

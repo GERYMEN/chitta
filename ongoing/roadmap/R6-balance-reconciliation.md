@@ -52,17 +52,22 @@ pay-later account = no write.
 
 ## Reconcile helper + anchor reuse
 
-`trackedMinor = calculateBalance(account, transactions, id)` (including the user
-anchor, nothing re-summed); `bankMinor = smsBalanceMinor`;
+`trackedMinor = calculateBalance(account, transactions, id, asOfMs = smsBalanceAt)`:
+like-for-like AT THE SNAPSHOT INSTANT (nothing re-summed; `calculateBalance` gained an
+optional `asOfMs` cutoff). Rows dated after the SMS never create a phantom difference; a
+missing row dated before it still shows. Anchor handling: an anchor at or before the
+snapshot applies (anchor + approved rows after the anchor, up to the snapshot); an anchor
+newer than the snapshot is ignored (pre-anchor baseline: opening balance + rows up to the
+snapshot); `bankMinor = smsBalanceMinor`;
 `diffMinor = tracked - bank`; `asOf = smsBalanceAt`. `null` with no snapshot and
 for liability accounts. "Use bank balance" sets the **existing**
-`balance_anchor_minor = bankMinor`, `balance_anchor_at = now`, so
-`calculateBalance` then equals the bank balance (diff 0, tested).
+`balance_anchor_minor = bankMinor`, `balance_anchor_at = sms_balance_at` (the bank figure is
+true as of the SMS, so rows after it keep counting toward the current balance; diff 0, tested).
 
 ## The three difference actions (only when diff != 0 and not dismissed)
 
-1. **Use bank balance** — confirm dialog with the effect line ("will show X from
-   now; earlier transactions stay in history but stop counting"); only the
+1. **Use bank balance** — confirm dialog with the effect line ("will show X as of the
+   SMS time, later transactions keep adding; earlier ones stay in history but stop counting"); only the
    confirm writes the anchor (audited `account_updated`).
 2. **Add missing transaction** — opens Add Record pre-filled: amount = |diff|,
    this account, kind from the sign (tracked < bank = income, tracked > bank =
@@ -115,9 +120,6 @@ carry the snapshot columns). All needed because the schema/version moved.
 ## Known limits
 
 - A balance-only SMS needs a last-4 (a 3-digit mask is not matched).
-- Tracked balance is "now", the bank figure is "as of the SMS": an approved
-  manual item dated after the last balance SMS shows as a difference until the
-  next balance SMS (spec D-c, kept simple).
 - A difference does not say WHICH transaction is missing (could be several, a
   fee or an unparsed SMS) — no detection claim.
 - New-account suggestion imports (R2b "Add account" with waiting SMS) do not
@@ -133,6 +135,6 @@ see `scripts/device/README.md`, section R6).
 
 ## Gates
 
-tsc clean; eslint 0 errors (2 pre-existing warnings); jest 149 suites / 2570 tests pass
+tsc clean; eslint 0 errors (2 pre-existing warnings); jest 151 suites / 2590 tests pass
 pass; `validate_v2.js` ALL OK (rules.json unchanged); `./gradlew assembleDebug`
 BUILD SUCCESSFUL.

@@ -1,6 +1,7 @@
 /** R6 T0 — SMS-balance snapshot columns, latest-wins writer, dismiss, old-row compat. REAL sqlite. */
 import { accountRepository, buildAccount } from '../account.repository';
 import { getDatabase } from '../../db/connection';
+import { reconcileBalance } from '../../../domain/accounts/accountReconcile';
 import { rowToAccount } from '../../mappers/account.mapper';
 import { migrateTo, openTestSqlite, sqliteAvailable, TestSqlite } from '../../../test/sqliteDb';
 
@@ -99,5 +100,18 @@ describeSql('accountRepository sms balance snapshot', () => {
     expect(a.smsBalanceAt).toBeNull();
     expect(a.smsBalanceDismissedAt).toBeNull();
     expect(buildAccount).toBeDefined();
+  });
+
+  it('reconciles like-for-like at the snapshot time (stored snapshot, later row = no phantom diff)', async () => {
+    await accountRepository.update(id, { openingBalanceMinor: 100000 });
+    await accountRepository.setSmsBalanceSnapshot(id, 90000, Date.parse('2026-11-10T10:00:00.000Z'));
+    const a = (await accountRepository.getById(id))!;
+    const row = (type: 'expense' | 'income', amountMinor: number, occurredAt: string) => ({
+      status: 'approved' as const, type, amountMinor, accountId: id, occurredAt,
+    });
+    const txns = [row('expense', 10000, '2026-11-09T00:00:00.000Z'), row('expense', 4000, '2026-11-12T00:00:00.000Z')];
+    expect(reconcileBalance(a, txns, id)!.diffMinor).toBe(0);
+    // A genuinely missing row before the SMS still shows.
+    expect(reconcileBalance(a, [txns[1]], id)!.diffMinor).toBe(10000);
   });
 });

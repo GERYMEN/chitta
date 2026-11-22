@@ -131,17 +131,17 @@ describe('BalanceReconcile', () => {
     );
     const dialog = useDialogStore.getState().current!;
     expect(dialog).toBeTruthy();
-    expect(dialog.message ?? '').toMatch(/will show ₹900\.00 from now/);
+    expect(dialog.message ?? '').toMatch(/will show ₹900\.00 as of 2 h ago/);
+    expect(dialog.message ?? '').toMatch(/later transactions keep adding/);
     expect(dialog.message ?? '').toMatch(/stay in history/);
     expect(db.calls.filter(c => /UPDATE accounts/.test(c.sql))).toHaveLength(0);
     expect(account().balanceAnchorMinor).toBeNull();
 
-    const before = Date.now();
     await ReactTestRenderer.act(async () => {
       await dialog.actions[1].onPress?.();
     });
     expect(account().balanceAnchorMinor).toBe(90000);
-    expect(Date.parse(account().balanceAnchorAt!)).toBeGreaterThanOrEqual(before);
+    expect(account().balanceAnchorAt).toBe(account().smsBalanceAt); // anchored AT the SMS time
     // The existing anchor now reconciles: tracked == bank.
     expect(calculateBalance(account(), [], 'acc-1')).toBe(90000);
     expect(reconcileBalance(account(), [], 'acc-1')!.diffMinor).toBe(0);

@@ -3,7 +3,8 @@ import { calculateBalance, isLiabilityAccount } from './account.rules';
 
 /**
  * R6 (D-c): where Tracker's balance and the bank's SMS-reported balance stand.
- * Pure — no I/O, no clock. `diffMinor = trackedMinor - bankMinor`:
+ * Pure — no I/O, no clock. `trackedMinor` is the balance Tracker believed the
+ * account held AT `asOf`; `diffMinor = trackedMinor - bankMinor`:
  *   > 0  Tracker shows MORE than the bank  (an expense is likely missing)
  *   < 0  Tracker shows LESS than the bank  (an income is likely missing)
  *   = 0  reconciled
@@ -25,7 +26,10 @@ type ReconcileAccount = Pick<
  * null when there is no snapshot. Also null for liability accounts (credit
  * card / pay later): an SMS "balance" there may be available credit, not the
  * ledger, so a difference would be meaningless. The tracked side REUSES
- * `calculateBalance` (including the user anchor) — nothing is re-summed.
+ * `calculateBalance` — nothing is re-summed — evaluated AT THE SNAPSHOT
+ * INSTANT (`smsBalanceAt`), so activity dated after the SMS never creates a
+ * phantom difference; a user anchor newer than the snapshot is ignored (see
+ * calculateBalance's `asOfMs`).
  */
 export function reconcileBalance(
   account: ReconcileAccount,
@@ -34,7 +38,13 @@ export function reconcileBalance(
 ): BalanceReconciliation | null {
   if (account.smsBalanceMinor == null || account.smsBalanceAt == null) return null;
   if (isLiabilityAccount(account.type) || account.type === 'pay_later') return null;
-  const trackedMinor = calculateBalance(account, transactions, accountId);
+  const asOfMs = Date.parse(account.smsBalanceAt);
+  const trackedMinor = calculateBalance(
+    account,
+    transactions,
+    accountId,
+    Number.isNaN(asOfMs) ? undefined : asOfMs,
+  );
   return {
     trackedMinor,
     bankMinor: account.smsBalanceMinor,

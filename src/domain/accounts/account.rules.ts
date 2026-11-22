@@ -34,13 +34,27 @@ export function calculateBalance(
       Partial<Pick<Transaction, 'transferAccountId'>>
   >,
   accountId: string,
+  /**
+   * R6: balance AS OF this instant (epoch ms) — only rows with
+   * `occurredAt <= asOfMs` count. A user anchor newer than `asOfMs` did not
+   * exist yet at that instant, so it is ignored and the pre-anchor baseline
+   * (opening balance + every counted row up to `asOfMs`) is used. Omitted =
+   * the current balance (unchanged behaviour).
+   */
+  asOfMs?: number,
 ): number {
-  const anchorMinor = account.balanceAnchorMinor ?? account.openingBalanceMinor;
-  const anchorAtMs = account.balanceAnchorAt ? Date.parse(account.balanceAnchorAt) : -Infinity;
+  const rawAnchorAtMs = account.balanceAnchorAt ? Date.parse(account.balanceAnchorAt) : -Infinity;
+  const anchorInEffect = asOfMs === undefined || rawAnchorAtMs <= asOfMs;
+  const anchorMinor = anchorInEffect
+    ? account.balanceAnchorMinor ?? account.openingBalanceMinor
+    : account.openingBalanceMinor;
+  const anchorAtMs = anchorInEffect ? rawAnchorAtMs : -Infinity;
+  const cutoffMs = asOfMs ?? Infinity;
 
   let balance = anchorMinor;
   for (const t of transactions) {
-    if (!affectsBalance(t) || !(Date.parse(t.occurredAt) > anchorAtMs)) continue;
+    const at = Date.parse(t.occurredAt);
+    if (!affectsBalance(t) || !(at > anchorAtMs) || at > cutoffMs) continue;
     if (t.type === 'transfer') {
       // A transfer onto the same account is a no-op (never created; guarded anyway).
       if (t.accountId === accountId && t.transferAccountId !== accountId) {

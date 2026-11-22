@@ -47,7 +47,7 @@ export function BalanceReconcile({
       title: 'Use bank balance?',
       message: `${account.name} will show ${formatRupeesFromMinor(bankMinor, {
         showPaise: true,
-      })} from now. Earlier transactions stay in history but stop counting toward the balance. You can set it again any time.`,
+      })} as of ${formatAsOf(asOf, now)}, and later transactions keep adding to it. Earlier ones stay in history but stop counting toward the balance. You can set it again any time.`,
       icon: 'bank-check',
       actions: [
         { label: 'Cancel', variant: 'ghost' },
