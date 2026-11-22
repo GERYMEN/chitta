@@ -409,6 +409,33 @@ minutes late.
 | R7 | Remind me? / weekly / reboot (manual, SKIP) | owner follows the printed steps |
 | R8 | Crash check since the start | 0 FATAL/ANR |
 
+## R10 — Personal IOUs
+
+```
+scripts/device/r10.sh [--skip-install]
+```
+
+Owner-assisted, counts of fixed labels only. The script never types or saves
+anything; it asks **you** to create SYNTHETIC QA data (a made-up person name, a
+small QA expense) and checks the Split action, the split summary on the
+expense, the Home "IOUs: You get ..." tile, the People screen row, and that the
+tile goes away after you record a repayment. Cleanup (delete the QA shares and
+the QA expense) is also yours. It never prints a name or an amount.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | No IOU tile on a clean start | tile absent (SKIP if you have your own) |
+| R3 | **You** open Settings | "People & IOUs" row present |
+| R4 | **You** split a QA expense | Split action + summary line shown |
+| R5 | Go to Home | IOU tile appears |
+| R6 | Open People | a row "owes you" exists |
+| R7 | **You** record a repayment | Undo snackbar (SKIP if missed) |
+| R8 | Go to Home | tile gone when nothing is unsettled |
+| R9 | **You** delete the QA data | no IOU tile left |
+| R10 | Crash check since the start | 0 FATAL/ANR |
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

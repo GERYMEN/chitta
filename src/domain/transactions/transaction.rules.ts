@@ -61,6 +61,15 @@ export function isLinkedRefund(transaction: IncomeExpenseSubject): boolean {
 }
 
 /**
+ * R10: an income row linked as someone repaying an IOU. Money coming back, not
+ * earned: it never counts as income. (It does NOT touch spend — the original
+ * expense keeps its full amount; the IOU ledger is a parallel layer.)
+ */
+export function isIouRepayment(transaction: IncomeExpenseSubject): boolean {
+  return transaction.type === 'income' && transaction.linkKind === 'iou_repayment';
+}
+
+/**
  * R3a — the SINGLE rule every income/expense total goes through (Home
  * income/expense, Transactions Inflow/Spent/Net + day nets, the
  * Uncategorised count, Activity impact lines, any per-category sum).
@@ -98,7 +107,8 @@ export function incomeContributionMinor(
   transaction: IncomeExpenseSubject & Pick<Transaction, 'amountMinor'>,
 ): number {
   if (!countsTowardIncomeExpense(transaction)) return 0;
-  return transaction.type === 'income' && !isLinkedRefund(transaction) ? transaction.amountMinor : 0;
+  if (transaction.type !== 'income' || isLinkedRefund(transaction) || isIouRepayment(transaction)) return 0;
+  return transaction.amountMinor;
 }
 
 export interface IncomeExpenseTotals {

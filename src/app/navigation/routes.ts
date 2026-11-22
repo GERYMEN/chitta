@@ -30,6 +30,8 @@ export const Routes = {
   EditBill: 'EditBill',
   Budgets: 'Budgets',
   SetBudget: 'SetBudget',
+  People: 'People',
+  PersonIous: 'PersonIous',
   Upcoming: 'Upcoming',
 } as const;
 
@@ -118,6 +120,10 @@ export type RootStackParamList = {
    * (category then amount). Ids only — never a name.
    */
   SetBudget: { scope: 'overall' } | { scope: 'category'; categoryId?: string };
+  /** R10: People & IOUs (Home tile + Settings entry). */
+  People: undefined;
+  /** R10: one person's shares / history (person id only — never a name). */
+  PersonIous: { personId: string };
   /** R8a: Upcoming recurring payments (Home card). */
   Upcoming: undefined;
 };

@@ -358,7 +358,7 @@ describe('runMigrations versioning', () => {
     expect(NUMBERED_MIGRATIONS.some((m: { version: number }) => m.version === 13)).toBe(true);
   });
 
-  it('R6: migration 14 adds three nullable accounts snapshot columns (numbers/timestamps only), rewrites nothing, and is the last migration', () => {
+  it('R6: migration 14 adds three nullable accounts snapshot columns (numbers/timestamps only), rewrites nothing', () => {
     const { NUMBERED_MIGRATIONS } = require('../migrations');
     const m14 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 14);
     expect(m14).toBeDefined();
@@ -370,7 +370,38 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/ALTER TABLE accounts ADD COLUMN sms_balance_dismissed_at INTEGER/);
     expect(joined).not.toMatch(/NOT NULL|\bUPDATE\b|\bDELETE\b|\bDROP\b|\bCREATE\b/);
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b/i);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(14);
+    expect(NUMBERED_MIGRATIONS.some((m: { version: number }) => m.version === 14)).toBe(true);
+  });
+
+  it('R10: migration 15 adds people + iou_shares (additive, no SMS columns) and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m15 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 15);
+    expect(m15).toBeDefined();
+    const joined = m15.statements
+      .map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql))
+      .join('\n');
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS people/);
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS iou_shares/);
+    expect(joined).toMatch(/direction TEXT NOT NULL/);
+    expect(joined).toMatch(/amount_minor INTEGER NOT NULL/);
+    expect(joined).toMatch(/settled_at TEXT/);
+    expect(joined).toMatch(/repayment_transaction_id TEXT/);
+    expect(joined).toMatch(/ix_iou_shares_person/);
+    expect(joined).toMatch(/ix_iou_shares_settled/);
+    expect(joined).not.toMatch(/\bUPDATE\b|\bALTER\b|\bDELETE\b|\bDROP\b/);
+    expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b|\bphone\b|\bcontact/i);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(15);
+  });
+
+  it('R10: runs migration 15 exactly once and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+    const { runMigrations } = require('../connection');
+    await runMigrations();
+    await runMigrations();
+    expect(executed.filter(sql => /CREATE TABLE IF NOT EXISTS iou_shares/.test(sql))).toHaveLength(1);
+    expect(appliedVersions.has(15)).toBe(true);
   });
 
   it('R6: runs migration 14 exactly once and records it', async () => {

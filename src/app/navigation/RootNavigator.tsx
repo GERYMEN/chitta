@@ -24,6 +24,8 @@ import { AddBillScreen } from '../../features/bills/screens/AddBillScreen';
 import { UpcomingScreen } from '../../features/upcoming/screens/UpcomingScreen';
 import { BudgetsScreen } from '../../features/budgets/screens/BudgetsScreen';
 import { SetBudgetScreen } from '../../features/budgets/screens/SetBudgetScreen';
+import { PeopleScreen } from '../../features/iou/screens/PeopleScreen';
+import { PersonIousScreen } from '../../features/iou/screens/PersonIousScreen';
 import { RootStackParamList } from './routes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -107,6 +109,8 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
       <Stack.Screen name="EditBill" component={AddBillScreen} options={{ presentation: 'card' }} />
       <Stack.Screen name="Budgets" component={BudgetsScreen} options={{ presentation: 'card' }} />
       <Stack.Screen name="SetBudget" component={SetBudgetScreen} options={{ presentation: 'card' }} />
+      <Stack.Screen name="People" component={PeopleScreen} options={{ presentation: 'card' }} />
+      <Stack.Screen name="PersonIous" component={PersonIousScreen} options={{ presentation: 'card' }} />
       <Stack.Screen name="Upcoming" component={UpcomingScreen} options={{ presentation: 'card' }} />
     </Stack.Navigator>
   );

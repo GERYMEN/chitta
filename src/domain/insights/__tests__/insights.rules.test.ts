@@ -429,3 +429,23 @@ describe('partial-data notice and pending hint inputs', () => {
     );
   });
 });
+
+describe('R10: IOU repayment is not income; the lent expense stays full spend', () => {
+  const range = periodRange('1M', local(2026, 10, 20));
+  it('periodTotals drops a credit linked as an IOU repayment from income, spend unchanged', () => {
+    const rows = [
+      tx('exp', { type: 'expense', amountMinor: 100000 }),
+      tx('salary', { type: 'income', amountMinor: 500000 }),
+      tx('repay', { type: 'income', amountMinor: 75000, linkKind: 'iou_repayment', linkedTransactionId: 'exp' }),
+    ];
+    const totals = periodTotals(rows, range);
+    expect(totals.incomeMinor).toBe(500000);
+    // The split expense keeps its FULL amount in spend (parallel ledger).
+    expect(totals.expenseMinor).toBe(100000);
+  });
+
+  it('an unlinked credit of the same amount still counts as income', () => {
+    const rows = [tx('plain', { type: 'income', amountMinor: 75000 })];
+    expect(periodTotals(rows, range).incomeMinor).toBe(75000);
+  });
+});

@@ -659,3 +659,40 @@ describe('R5e money meaning sentences', () => {
     expect(undo.impact?.text).toBe('Matching alert restored as it was');
   });
 });
+
+describe('R10 IOU events (D-i)', () => {
+  const iou = (partial: Partial<AuditFeedEvent>) => event({ transactionId: null, ...partial });
+  it('describes person / share / repayment / delete with masked amounts and no name', () => {
+    expect(describeActivity(iou({ eventType: 'iou_person_added', metadata: { kind: 'iou_person_added', personId: 'p1' } })).sentence).toBe(
+      'You added a person to your IOU list',
+    );
+    const lent = describeRaw(
+      iou({
+        eventType: 'iou_share_added',
+        metadata: { kind: 'iou_share_added', shareId: 's1', personId: 'p1', direction: 'lent', amountMinor: 75000, sourceTransactionId: 't1' },
+      }),
+      {},
+      { showAmounts: true },
+    );
+    expect(lent.sentence).toBe('You noted someone owes you ₹750.00');
+    const masked = describeRaw(
+      iou({
+        eventType: 'iou_share_added',
+        metadata: { kind: 'iou_share_added', shareId: 's1', personId: 'p1', direction: 'borrowed', amountMinor: 75000, sourceTransactionId: null },
+      }),
+      {},
+      { showAmounts: false },
+    );
+    expect(masked.sentence).not.toContain('750');
+    expect(masked.sentence).toContain('you owe');
+    const repaid = describeActivity(
+      iou({
+        eventType: 'iou_repayment_recorded',
+        metadata: { kind: 'iou_repayment_recorded', shareId: 's1', personId: 'p1', direction: 'lent', amountMinor: 500, transactionId: 'c1' },
+      }),
+    );
+    expect(repaid.impact?.text).toBe('Linked credit is not income');
+    expect(describeActivity(iou({ eventType: 'iou_repayment_undone', metadata: { kind: 'iou_repayment_undone', shareId: 's1', personId: 'p1', direction: 'lent', amountMinor: 500, transactionId: null } })).sentence).toBe('You undid an IOU repayment');
+    expect(describeActivity(iou({ eventType: 'iou_share_deleted', metadata: { kind: 'iou_share_deleted', shareId: 's1', personId: 'p1', direction: 'lent', amountMinor: 500 } })).sentence).toContain('removed an IOU');
+  });
+});

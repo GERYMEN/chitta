@@ -50,6 +50,8 @@ export interface ProfileSettingsSheetProps {
   onOpenBills?: () => void;
   /** R5c: open Budgets. */
   onOpenBudgets?: () => void;
+  /** R10: open People & IOUs. */
+  onOpenPeople?: () => void;
   /**
    * R4b: start moved earlier and confirmed — scan only the gap, then call
    * `onCompleted` (saves the new start) if the scan finished.
@@ -81,6 +83,7 @@ export function ProfileSettingsSheet({
   onOpenCategories,
   onOpenBills,
   onOpenBudgets,
+  onOpenPeople,
   onScanGap,
   onReplayTour,
   onOpenBackup,
@@ -344,6 +347,23 @@ export function ProfileSettingsSheet({
           <View style={styles.activityText}>
             <Text style={styles.activityTitle}>Budgets</Text>
             <Text style={styles.activityCaption}>Monthly spending caps, overall and by category</Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      {onOpenPeople ? (
+        <Pressable
+          onPress={onOpenPeople}
+          accessibilityRole="button"
+          accessibilityLabel="People and IOUs"
+          testID="settings-people-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="account-cash-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>People & IOUs</Text>
+            <Text style={styles.activityCaption}>Who owes you, and who you owe</Text>
           </View>
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>

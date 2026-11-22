@@ -347,6 +347,37 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'ALTER TABLE accounts ADD COLUMN sms_balance_dismissed_at INTEGER',
     ],
   },
+  {
+    // R10 Personal IOUs. A personal lent/borrowed ledger kept ALONGSIDE
+    // transactions (a parallel layer; it never changes an expense's amount).
+    // Additive: two new tables. Names are the user's own free text; no SMS
+    // content, sender, or contact data is stored. `iou_shares.person_id`
+    // references `people`; source / repayment transaction ids reference
+    // `transactions` (nullable). Both tables are backed up (sinceVersion 15);
+    // an older backup without them restores with both empty.
+    version: 15,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS people (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+      `CREATE TABLE IF NOT EXISTS iou_shares (
+    id TEXT PRIMARY KEY,
+    person_id TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    source_transaction_id TEXT,
+    amount_minor INTEGER NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    settled_at TEXT,
+    repayment_transaction_id TEXT
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_iou_shares_person ON iou_shares(person_id)',
+      'CREATE INDEX IF NOT EXISTS ix_iou_shares_settled ON iou_shares(settled_at)',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {

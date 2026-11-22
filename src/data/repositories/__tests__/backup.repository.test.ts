@@ -272,8 +272,8 @@ describeSql('backup repository (real SQLite)', () => {
   });
 
   it('N-1 → N specifically (R6): a v13 backup has no sms_balance columns; it restores with a null snapshot, other columns intact', async () => {
-    const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(13);
+    // Pinned to v13 (the schema before R6) — still must restore after R10.
+    const version = 13;
     const tables = rowsAt(version);
     expect(Object.keys(tables.accounts[0])).not.toContain('sms_balance_minor');
     const payload = parseBackupJson(
@@ -306,6 +306,38 @@ describeSql('backup repository (real SQLite)', () => {
     expect(restored[0].sms_balance_minor).toBe(120000);
     expect(restored[0].sms_balance_at).toBe(1759500000000);
     expect(restored[0].sms_balance_dismissed_at).toBe(1759500000000);
+  });
+
+  it('N-1 → N specifically (R10): a v14 backup has no people / iou_shares; both restore empty, other tables intact', async () => {
+    const version = CURRENT_SCHEMA_VERSION - 1;
+    expect(version).toBe(14);
+    const tables = rowsAt(version);
+    expect(tables.people).toBeUndefined();
+    expect(tables.iou_shares).toBeUndefined();
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
+    expect(target.rows('people')).toEqual([]);
+    expect(target.rows('iou_shares')).toEqual([]);
+    expect(target.rows('budgets')).toEqual(FULL_BACKUP_ROWS.budgets);
+  });
+
+  it('R10: a current backup carries people + iou_shares rows exactly', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    expect(tables.people.length).toBeGreaterThan(0);
+    expect(tables.iou_shares.length).toBeGreaterThan(0);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('people')).toEqual(FULL_BACKUP_ROWS.people);
+    expect(target.rows('iou_shares')).toEqual(FULL_BACKUP_ROWS.iou_shares);
   });
 
   it('R5c: a current backup carries the budgets rows exactly', async () => {

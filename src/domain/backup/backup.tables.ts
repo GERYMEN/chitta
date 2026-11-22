@@ -260,6 +260,30 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       updated_at: 13,
     },
   },
+  {
+    // R10: people (free-text names the user typed; no contacts, no SMS). Restores
+    // before `iou_shares`. An older backup without it restores empty.
+    name: 'people',
+    sinceVersion: 15,
+    columns: { id: 15, name: 15, created_at: 15, updated_at: 15 },
+  },
+  {
+    // R10: lent/borrowed shares. References people + (nullable) transactions, so
+    // it restores after both. Ids, an enum direction, amounts, a free-text note.
+    name: 'iou_shares',
+    sinceVersion: 15,
+    columns: {
+      id: 15,
+      person_id: 15,
+      direction: 15,
+      source_transaction_id: 15,
+      amount_minor: 15,
+      note: 15,
+      created_at: 15,
+      settled_at: 15,
+      repayment_transaction_id: 15,
+    },
+  },
 ];
 
 /**

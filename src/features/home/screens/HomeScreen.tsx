@@ -33,6 +33,7 @@ import { UncategorisedCard } from '../../categories/components/UncategorisedCard
 import { DueBillsBanner } from '../../bills/components/DueBillsBanner';
 import { UpcomingCard } from '../../upcoming/components/UpcomingCard';
 import { BudgetCard } from '../../budgets/components/BudgetCard';
+import { IouCard } from '../../iou/components/IouCard';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
 import {
   periodTotals,
@@ -377,6 +378,8 @@ export function HomeScreen() {
 
       <BudgetCard onPress={() => navigation.navigate('Budgets')} />
 
+      <IouCard onPress={() => navigation.navigate('People')} />
+
       <WhereItWentCard
         rows={breakdown}
         categories={categories}
@@ -438,6 +441,10 @@ export function HomeScreen() {
         onOpenBudgets={() => {
           setSettingsOpen(false);
           navigation.navigate('Budgets');
+        }}
+        onOpenPeople={() => {
+          setSettingsOpen(false);
+          navigation.navigate('People');
         }}
         onScanGap={(window, onCompleted) => {
           setSettingsOpen(false);

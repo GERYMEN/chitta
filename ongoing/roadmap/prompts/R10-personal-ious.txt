@@ -1,0 +1,140 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R10-personal-ious (created from phase/R8b-notifications; stack
+tip = main + R5c + R6 + R8a + R5j + R9a + R9b + R8b; migration 14). Stay on it.
+Do not switch branches, commit or push. Executor = you (a Claude subagent).
+CODE + TESTS + GATES + DEVICE SCRIPT ONLY. NO adb / NO device run. NO
+commit/push/branch switch — the orchestrator owns all git.
+
+PHASE R10 — Personal IOUs (KEEP as planned). A personal lent/borrowed ledger on
+top of existing transactions. PERSONAL LEDGER ONLY: no accounts, no SMS/sync, no
+sharing, no contacts permission (names are free text). In-app only, NO new
+permission, NO dependency, NO network.
+
+VERIFIED CODE FACTS (build on these):
+- Highest migration version is 14. Append migration 15 (additive, CREATE TABLE/
+  INDEX IF NOT EXISTS). data/db/__tests__/migrations.test.ts asserts the last
+  version — update it. backup.tables.ts (BACKUP_TABLES + sinceVersion) with a
+  test that fails if a new table is missing — add both new tables sinceVersion 15.
+- Transaction link fields already exist: transaction.types.ts linkedTransactionId
+  + linkKind (LinkKind enum, values refund/duplicate/transfer). The R3 link
+  machinery lives in src/domain/transfers/transfer.rules.ts, src/domain/refunds/
+  refund.rules.ts, and src/data/repositories/link.repository.ts — REUSE these for
+  the repayment link; do not fork linking.
+- Netting / what counts as spend/income: src/domain/transactions/
+  transaction.rules.ts (spendContributionMinor / incomeContributionMinor) and
+  src/domain/insights/insights.rules.ts. Transfers already count as neither.
+- Detail actions ("Split" goes here): src/features/transactions/components/
+  TransactionDetailContent.tsx (+ TransactionDetailScreen.tsx).
+- Home tiles: src/features/home/screens/HomeScreen.tsx + components/StatTile.tsx.
+- Repository + store patterns: src/data/repositories/*.repository.ts (e.g.
+  bill.repository.ts, link.repository.ts), feature stores under
+  src/features/*/state/*Store.ts. Amounts via AmountText/formatRupeesFromMinor
+  (redaction-masked). Audit: audit.types.ts (ids/enums/numbers/field-names only).
+
+READ FIRST: CLAUDE.md; ongoing/roadmap/STATE.md (R3a/R3b link decisions);
+ROADMAP.md R10; propsal new version with gap.md (R10 row, KEEP); the files named
+above.
+
+SCOPE DECISIONS (orchestrator — flag for owner):
+- The IOU ledger is a PARALLEL layer. It does NOT change the original expense's
+  amount in spend/insights (you paid 1000; your spend stays 1000; the ledger
+  separately tracks that friends owe you 750). The ONLY insights change: a
+  credit linked as an IOU repayment is EXCLUDED from income (it is money coming
+  back, not earned). This keeps insights math otherwise untouched. (Alternative
+  "shares reduce my spend" is more complex and double-count-prone — NOT done
+  here; note it as a possible future option.)
+- Directions: BOTH "lent" and "borrowed" are supported via a direction column,
+  but only LENT is created from Split (you paid, others owe you). BORROWED is a
+  manual entry (someone paid, you owe them). Keep borrowed minimal (manual add +
+  settle); no Split-the-other-way.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Migration 15 (additive): tables
+    people(id TEXT PK, name TEXT NOT NULL, created_at TEXT, updated_at TEXT) and
+    iou_shares(id TEXT PK, person_id TEXT NOT NULL, direction TEXT NOT NULL
+    ('lent'|'borrowed'), source_transaction_id TEXT (nullable; the split expense
+    for lent, null for manual), amount_minor INTEGER NOT NULL, note TEXT,
+    created_at TEXT, settled_at TEXT (nullable), repayment_transaction_id TEXT
+    (nullable)). Index iou_shares(person_id), iou_shares(settled_at). Both in
+    BACKUP_TABLES sinceVersion 15; old-backup restore works.
+D-b LinkKind gains 'iou_repayment'. A credit linked as a repayment gets
+    linkKind='iou_repayment' + linkedTransactionId (the source expense if any)
+    via link.repository, AND is excluded from incomeContributionMinor. Add a
+    unit test that income totals drop the repayment. Nothing else about the
+    credit changes (it stays an approved row, still shows in the list).
+D-c Split (lent): from an APPROVED expense's detail, "Split" opens a sheet to add
+    one or more shares: pick an existing person or type a new name (free text;
+    create the person if new), amount per person. Validation: each amount > 0 and
+    the sum of shares <= the expense amount. Saving writes people (new) +
+    iou_shares (direction 'lent', source_transaction_id = the expense) + audit.
+    The expense row shows "Split: N people owe you Rs X".
+D-d Record repayment: on an unsettled 'lent' share, "Record repayment" either
+    (a) marks it settled with no transaction, or (b) links an existing incoming
+    credit (sets repayment_transaction_id + the credit's linkKind='iou_repayment'
+    per D-b) and marks settled_at. Partial repayment: allow settling part by
+    splitting the share (reduce amount, create a settled child) OR a simple
+    "settle in full" only — pick the simpler and document. Undo via the shared
+    5 s Snackbar. Audited.
+D-e Manual borrowed: a "You owe someone" entry (person + amount + note),
+    direction 'borrowed'; settle = "Mark paid" (optionally link an outgoing
+    expense as the repayment, excluded from nothing — an expense you make to repay
+    is still your spend; do NOT exclude it). Keep this path simple.
+D-f People screen: list of people with per-person NET (lent unsettled minus
+    borrowed unsettled), tap -> that person's shares/history; "you lent / you
+    borrowed" shown. Settled shares hidden after 30 days with "Show settled".
+D-g Home tile: "You get Rs X / You owe Rs Y" where X = sum of unsettled 'lent'
+    amounts, Y = sum of unsettled 'borrowed' amounts. Shown only when there is
+    at least one unsettled share. Amounts via AmountText (Private-mode masks).
+    Tap -> People screen. Slots among the Home cards.
+D-h Pure ledger math in src/domain/iou/: personNet(shares), totals(shares) ->
+    {youGetMinor, youOweMinor}, activeShares (unsettled or settled < 30 days
+    ago). No side effects; now passed in for the 30-day rule (useNow on screen).
+D-i Audit: iou_person_added, iou_share_added (direction, amount, person id),
+    iou_repayment_recorded, iou_share_deleted (ids/enums/numbers only). Add to
+    AuditEventType + AuditMetadata + activityFeed labels.
+
+TASKS (each: failing test first, confirm fail, then fix):
+T0 Migration 15 + src/domain/iou/ (types + rules: personNet, totals,
+   activeShares, validation) + people.repository + iouShare.repository + a
+   useIouStore slice + backup coverage + old-backup restore test +
+   migrations.test.ts version bump. LinkKind 'iou_repayment' + income exclusion
+   (D-b) with tests.
+T1 Split flow (D-c): detail "Split" sheet, person pick/create, share amounts,
+   validation (sum <= expense), persistence + audit, expense-row summary.
+T2 Repayment (D-d) + manual borrowed (D-e): settle (with/without credit link),
+   Undo, audits.
+T3 People screen (D-f) + Home tile (D-g) + ledger math (D-h): net, you get/owe,
+   settled-after-30-days hide/show, masking, a11y, navigation + route.
+T4 Audit types + Activity copy (D-i).
+T5 Device script scripts/device/r10.sh (lib.sh style; counts only; read lib.sh +
+   a recent script + README first): install -r keeps data; create a synthetic QA
+   person + split a QA expense -> Home "You get" tile appears; People screen row;
+   record repayment -> tile updates; cleanup (delete QA shares/person); 0 FATAL/
+   ANR. Update README.md. bash -n. Do NOT run it.
+
+PRIVACY (absolute): names are user free text (no contacts, no SMS). No SMS
+content anywhere. Audits ids/enums/numbers/field-names only (a person NAME is
+user content, not SMS — but still keep it out of audit metadata; reference people
+by id). Fixtures SYNTHETIC only (QA person names, QA amounts). Reference app is
+"chitta-ref-app". No permission/dependency/network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx 0
+errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/
+Contents/Home; PATH=$JAVA_HOME/bin:$PATH; ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R10-personal-ious.md (migration 15 + tables; the
+parallel-ledger decision + the single insights change (repayment excluded from
+income); split + repayment + borrowed flows; people/home math + 30-day rule;
+LinkKind addition; tests added; decisions beyond D-a..D-i; known limits; how to
+run r10.sh). Leak-scan report/diff/new files (shell) for phone numbers, real UPI
+ids, non-XX account numbers, personal names. Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T5 done / not done; migration
+number; the insights change (what is excluded) + confirm the expense amount is
+unchanged; split validation rule; repayment partial handling chosen; LinkKind
+added; tests added; decisions beyond D-a..D-i; anything surprising. Do not paste
+file contents.

@@ -172,6 +172,32 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       updated_at: T1,
     },
   ],
+  // R10: a synthetic person + one settled-by-credit lent share + one open borrowed share.
+  people: [{ id: 'qa-person-1', name: 'QA Person One', created_at: T1, updated_at: T1 }],
+  iou_shares: [
+    {
+      id: 'qa-iou-1',
+      person_id: 'qa-person-1',
+      direction: 'lent',
+      source_transaction_id: 'qa-t1',
+      amount_minor: 25000,
+      note: null,
+      created_at: T1,
+      settled_at: T1,
+      repayment_transaction_id: 'qa-t2',
+    },
+    {
+      id: 'qa-iou-2',
+      person_id: 'qa-person-1',
+      direction: 'borrowed',
+      source_transaction_id: null,
+      amount_minor: 4000,
+      note: 'QA note',
+      created_at: T1,
+      settled_at: null,
+      repayment_transaction_id: null,
+    },
+  ],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

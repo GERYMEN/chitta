@@ -35,6 +35,7 @@ import {
 import { hiddenDuplicatesLabel } from '../../duplicates/duplicateLabels';
 import { MerchantHistoryChip } from '../../insights/components/MerchantHistoryChip';
 import { redactText, useRedacted } from '../../../shared/privacy/redaction';
+import { SplitSummary } from '../../iou/components/SplitSummary';
 
 export interface TransactionDetailContentProps {
   transaction: Transaction;
@@ -109,6 +110,8 @@ export interface TransactionDetailActionsProps {
   onMarkDuplicate?: (transaction: Transaction) => void;
   /** R3b: hidden duplicate → "Not a duplicate". */
   onRestoreDuplicate?: (transaction: Transaction) => void;
+  /** R10: approved expense → "Split" (who owes you). */
+  onSplit?: (transaction: Transaction) => void;
 }
 
 /**
@@ -128,6 +131,7 @@ export function TransactionDetailActions({
   onUnlinkRefund,
   onMarkDuplicate,
   onRestoreDuplicate,
+  onSplit,
 }: TransactionDetailActionsProps) {
   const isPending = transaction.status === 'pending';
   const transactions = useTransactionsStore(state => state.transactions);
@@ -175,8 +179,24 @@ export function TransactionDetailActions({
     onMarkDuplicate &&
     duplicatePickerOptions(transaction, transactions).length > 0;
 
+  // R10: only an approved, unlinked expense can be split.
+  const canSplit =
+    onSplit &&
+    transaction.type === 'expense' &&
+    transaction.status === 'approved' &&
+    transaction.linkKind == null;
+
   return (
     <View style={styles.actions}>
+      {canSplit ? (
+        <Button
+          label="Split"
+          variant="ghost"
+          onPress={() => onSplit(transaction)}
+          icon={<Icon name="account-multiple-outline" size={18} color={colors.onSurface} />}
+          testID="detail-split"
+        />
+      ) : null}
       {canLinkRefund ? (
         <Button
           label="Link to original expense"
@@ -396,6 +416,17 @@ export function TransactionDetailContent({
               View transfer ›
             </Text>
           ) : null}
+        </Card>
+      ) : null}
+
+      {transaction.type === 'expense' ? <SplitSummary expenseId={transaction.id} /> : null}
+
+      {transaction.type === 'income' && transaction.linkKind === 'iou_repayment' ? (
+        <Card style={styles.fieldsCard} testID="iou-repayment-notice">
+          <Text style={styles.cardTitle}>IOU repayment</Text>
+          <Text style={styles.transparencyMeta}>
+            Someone paid you back. It is not counted as income. Your balance still includes it.
+          </Text>
         </Card>
       ) : null}
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,6 +38,8 @@ import { merchantFilterFor } from '../filters/transactionFilters';
 import { useSelectedPeriod } from '../../insights/hooks/usePeriod';
 import { merchantChipLabel } from '../../insights/insightLabels';
 import { useRedacted } from '../../../shared/privacy/redaction';
+import { SplitSheet } from '../../iou/components/SplitSheet';
+import { useIouStore } from '../../iou/state/iouStore';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -58,6 +60,11 @@ export function TransactionDetailScreen() {
   const [transferPickerOpen, setTransferPickerOpen] = useState(false);
   const [refundPickerOpen, setRefundPickerOpen] = useState(false);
   const [duplicatePickerOpen, setDuplicatePickerOpen] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const refreshIou = useIouStore(state => state.refresh);
+  useEffect(() => {
+    refreshIou().catch(() => undefined);
+  }, [refreshIou]);
   const allTransactions = useTransactionsStore(state => state.transactions);
   const { period, range } = useSelectedPeriod();
 
@@ -343,6 +350,7 @@ export function TransactionDetailScreen() {
           onUnlinkRefund={t => handleUnlinkRefund(t.id)}
           onMarkDuplicate={() => setDuplicatePickerOpen(true)}
           onRestoreDuplicate={t => handleRestoreDuplicate(t.id)}
+          onSplit={() => setSplitOpen(true)}
         />
       </View>
       <TransferAccountPickerSheet
@@ -358,6 +366,7 @@ export function TransactionDetailScreen() {
         refund={transaction}
         onSelect={handleLinkRefund}
       />
+      <SplitSheet visible={splitOpen} onClose={() => setSplitOpen(false)} expense={transaction} />
       <DuplicatePickerSheet
         visible={duplicatePickerOpen}
         onClose={() => setDuplicatePickerOpen(false)}

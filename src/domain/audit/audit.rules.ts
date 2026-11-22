@@ -207,6 +207,35 @@ export function sanitizeAuditMetadata(
         childId: String(metadata.childId),
         chainKind: chainKindOrDefault(metadata.chainKind),
       };
+    case 'iou_person_added':
+      return { kind: 'iou_person_added', personId: String(metadata.personId) };
+    case 'iou_share_added':
+      return {
+        kind: 'iou_share_added',
+        shareId: String(metadata.shareId),
+        personId: String(metadata.personId),
+        direction: metadata.direction === 'borrowed' ? 'borrowed' : 'lent',
+        amountMinor: Number(metadata.amountMinor) || 0,
+        sourceTransactionId: idOrNull(metadata.sourceTransactionId),
+      };
+    case 'iou_repayment_recorded':
+    case 'iou_repayment_undone':
+      return {
+        kind: metadata.kind,
+        shareId: String(metadata.shareId),
+        personId: String(metadata.personId),
+        direction: metadata.direction === 'borrowed' ? 'borrowed' : 'lent',
+        amountMinor: Number(metadata.amountMinor) || 0,
+        transactionId: idOrNull(metadata.transactionId),
+      };
+    case 'iou_share_deleted':
+      return {
+        kind: 'iou_share_deleted',
+        shareId: String(metadata.shareId),
+        personId: String(metadata.personId),
+        direction: metadata.direction === 'borrowed' ? 'borrowed' : 'lent',
+        amountMinor: Number(metadata.amountMinor) || 0,
+      };
     default:
       return null;
   }

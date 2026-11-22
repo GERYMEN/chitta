@@ -127,6 +127,11 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   budget_set: 'gauge',
   budget_updated: 'gauge',
   budget_deleted: 'gauge-empty',
+  iou_person_added: 'account-plus-outline',
+  iou_share_added: 'account-cash-outline',
+  iou_repayment_recorded: 'check-circle-outline',
+  iou_repayment_undone: 'undo-variant',
+  iou_share_deleted: 'account-remove-outline',
 };
 
 /** R5i (G3): the relation a chain suggestion proposes (for Activity sentences). */
@@ -787,6 +792,39 @@ export function describeActivity(
         sentence = `You set ${scope} budget to ${amount}`;
         impact = { text: 'Monthly spending cap', tone: 'neutral' };
       }
+      break;
+    }
+    case 'iou_person_added':
+      // R10: the person's name is user content and is not in the audit.
+      sentence = 'You added a person to your IOU list';
+      impact = { text: 'Personal ledger only', tone: 'neutral' };
+      break;
+    case 'iou_share_added': {
+      const md = event.metadata?.kind === 'iou_share_added' ? event.metadata : null;
+      const amount = md ? amountLabel(md.amountMinor, show) : MASKED_AMOUNT;
+      sentence =
+        md?.direction === 'borrowed'
+          ? `You noted you owe ${amount}`
+          : `You noted someone owes you ${amount}`;
+      impact = { text: 'Spend unchanged · tracked in IOUs', tone: 'neutral' };
+      break;
+    }
+    case 'iou_repayment_recorded': {
+      const md = event.metadata?.kind === 'iou_repayment_recorded' ? event.metadata : null;
+      const amount = md ? amountLabel(md.amountMinor, show) : MASKED_AMOUNT;
+      sentence =
+        md?.direction === 'borrowed' ? `You marked ${amount} as paid back` : `You recorded ${amount} paid back to you`;
+      impact = { text: md?.transactionId ? 'Linked credit is not income' : 'Settled', tone: 'neutral' };
+      break;
+    }
+    case 'iou_repayment_undone':
+      sentence = 'You undid an IOU repayment';
+      impact = { text: 'Open again', tone: 'pending' };
+      break;
+    case 'iou_share_deleted': {
+      const md = event.metadata?.kind === 'iou_share_deleted' ? event.metadata : null;
+      sentence = `You removed an IOU of ${md ? amountLabel(md.amountMinor, show) : MASKED_AMOUNT}`;
+      impact = { text: 'No longer tracked', tone: 'neutral' };
       break;
     }
     default:

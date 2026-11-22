@@ -10,9 +10,11 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
  * confirmed transfer pair (kept, rejected, for dedup). R3b: 'refund' = an
  * income linked to the expense it gives money back for (not income; reduces
  * spend); 'duplicate' = a row hidden as a duplicate of the linked (kept) row
- * (rejected, kept for dedup).
+ * (rejected, kept for dedup). R10: 'iou_repayment' = an income that is
+ * someone paying back an IOU share (money coming back, not earned: excluded
+ * from income; linkedTransactionId = the split expense, if any).
  */
-export type LinkKind = 'transfer_twin' | 'refund' | 'duplicate';
+export type LinkKind = 'transfer_twin' | 'refund' | 'duplicate' | 'iou_repayment';
 
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'invalid';
 

@@ -53,7 +53,7 @@ Private-key release needs `~/.gradle/gradle.properties` TRACKER_RELEASE_*.
 
 - `src/data/db/` — SQLite. `schema.ts`, `migrations.ts`. Migrations are
   **additive, `CREATE IF NOT EXISTS`**, next number continues from the last
-  (currently 13 used by R5c; next = 14). Every new table added to BACKUP_TABLES
+  (currently 15 used by R10; next = 16). Every new table added to BACKUP_TABLES
   with `sinceVersion = <its migration>` (old-backup safe).
 - `src/features/<name>/` — one folder per feature (accounts, transactions,
   bills, budgets, sms-sync, insights, review, chains, meaning, refunds,

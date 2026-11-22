@@ -88,7 +88,17 @@ export type AuditEventType =
    */
   | 'budget_set'
   | 'budget_updated'
-  | 'budget_deleted';
+  | 'budget_deleted'
+  /**
+   * R10 (D-i): personal IOU ledger events — a person added, a lent/borrowed
+   * share added, a repayment recorded (or undone), a share deleted. Ids, enums
+   * and amounts only; a person's NAME is user content and is never audited.
+   */
+  | 'iou_person_added'
+  | 'iou_share_added'
+  | 'iou_repayment_recorded'
+  | 'iou_repayment_undone'
+  | 'iou_share_deleted';
 
 export type AuditActor = 'system' | 'user';
 
@@ -276,7 +286,36 @@ export type AuditMetadata =
    */
   | { kind: 'budget_set'; categoryId: string | null; amountMinor: number }
   | { kind: 'budget_updated'; categoryId: string | null; amountMinor: number; fields: string[] }
-  | { kind: 'budget_deleted'; categoryId: string | null; amountMinor: number };
+  | { kind: 'budget_deleted'; categoryId: string | null; amountMinor: number }
+  /**
+   * R10 (D-i): IOU events — person / share / transaction ids, the enum
+   * direction and amounts in paise. `transactionId` on a repayment is the
+   * linked credit (null = settled without one). Never a person name or note.
+   */
+  | { kind: 'iou_person_added'; personId: string }
+  | {
+      kind: 'iou_share_added';
+      shareId: string;
+      personId: string;
+      direction: 'lent' | 'borrowed';
+      amountMinor: number;
+      sourceTransactionId: string | null;
+    }
+  | {
+      kind: 'iou_repayment_recorded' | 'iou_repayment_undone';
+      shareId: string;
+      personId: string;
+      direction: 'lent' | 'borrowed';
+      amountMinor: number;
+      transactionId: string | null;
+    }
+  | {
+      kind: 'iou_share_deleted';
+      shareId: string;
+      personId: string;
+      direction: 'lent' | 'borrowed';
+      amountMinor: number;
+    };
 
 /** R5: counts of one reader run. */
 export interface SmsRunCounts {

@@ -103,3 +103,20 @@ describe('R4 incomeContributionMinor (per-row form of incomeExpenseTotals)', () 
     expect(spend).toBe(1300);
   });
 });
+
+describe('R10: iou_repayment', () => {
+  const base = { amountMinor: 5000, type: 'income' as const };
+  it('income contribution of an IOU repayment is 0; a plain credit counts', () => {
+    expect(incomeContributionMinor({ ...base, linkKind: 'iou_repayment', linkedTransactionId: 'x' })).toBe(0);
+    expect(incomeContributionMinor({ ...base, linkKind: 'iou_repayment', linkedTransactionId: null })).toBe(0);
+    expect(incomeContributionMinor({ ...base })).toBe(5000);
+  });
+  it('an IOU repayment adds nothing to spend and drops out of incomeExpenseTotals income', () => {
+    expect(spendContributionMinor({ ...base, linkKind: 'iou_repayment', linkedTransactionId: 'x' })).toBe(0);
+    const totals = incomeExpenseTotals([
+      { ...base, linkKind: 'iou_repayment', linkedTransactionId: 'x' },
+      { type: 'expense', amountMinor: 1000 },
+    ]);
+    expect(totals).toEqual({ incomeMinor: 0, expenseMinor: 1000, netMinor: -1000 });
+  });
+});
