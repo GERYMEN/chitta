@@ -29,6 +29,7 @@ export const Routes = {
   EditBill: 'EditBill',
   Budgets: 'Budgets',
   SetBudget: 'SetBudget',
+  Upcoming: 'Upcoming',
 } as const;
 
 /**
@@ -109,4 +110,6 @@ export type RootStackParamList = {
    * (category then amount). Ids only — never a name.
    */
   SetBudget: { scope: 'overall' } | { scope: 'category'; categoryId?: string };
+  /** R8a: Upcoming recurring payments (Home card). */
+  Upcoming: undefined;
 };

@@ -266,6 +266,30 @@ snapshot that disagrees with Tracker's balance.
   balance anchor (an audited, explicit change). Dismiss and Add missing
   (never saved here) do not change a balance.
 
+## R8a — Recurring detection + Upcoming card
+
+```
+scripts/device/r8a.sh [--skip-install]
+```
+
+Read-only. The script never taps "Not recurring" and creates no QA rows: a
+history of three or more dated, regularly spaced payments cannot be made
+reliably over adb, so the detector is covered by unit tests and this pass only
+checks card presence/absence, that the Upcoming screen opens, and that nothing
+crashes. Counts of fixed labels only; no amounts, names or screenshots.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Home opens | Home labels shown |
+| R3 | Count the Home "Upcoming" card | absent, or exactly one |
+| R4 | Open the Upcoming screen from the card | screen shown (SKIP when no card) |
+| R5 | Crash check since the start | 0 FATAL/ANR |
+
+Known limit: a phone with no regular payments (or under 3 occurrences each)
+correctly shows no card, so R4 SKIPs.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

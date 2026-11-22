@@ -31,6 +31,7 @@ import { greetingFor } from '../../profile/utils/greeting';
 import { ProfileSettingsSheet } from '../../profile/components/ProfileSettingsSheet';
 import { UncategorisedCard } from '../../categories/components/UncategorisedCard';
 import { DueBillsBanner } from '../../bills/components/DueBillsBanner';
+import { UpcomingCard } from '../../upcoming/components/UpcomingCard';
 import { BudgetCard } from '../../budgets/components/BudgetCard';
 import { MainTabParamList, RootStackParamList } from '../../../app/navigation/routes';
 import {
@@ -347,6 +348,8 @@ export function HomeScreen() {
           />
         ))}
       </View>
+
+      <UpcomingCard onPress={() => navigation.navigate('Upcoming')} />
 
       <BudgetCard onPress={() => navigation.navigate('Budgets')} />
 

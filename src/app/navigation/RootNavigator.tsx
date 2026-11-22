@@ -20,6 +20,7 @@ import { RestoreScreen } from '../../features/backup/screens/RestoreScreen';
 import { NotUnderstoodScreen } from '../../features/sms-sync/screens/NotUnderstoodScreen';
 import { BillsScreen } from '../../features/bills/screens/BillsScreen';
 import { AddBillScreen } from '../../features/bills/screens/AddBillScreen';
+import { UpcomingScreen } from '../../features/upcoming/screens/UpcomingScreen';
 import { BudgetsScreen } from '../../features/budgets/screens/BudgetsScreen';
 import { SetBudgetScreen } from '../../features/budgets/screens/SetBudgetScreen';
 import { RootStackParamList } from './routes';
@@ -100,6 +101,7 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
       <Stack.Screen name="EditBill" component={AddBillScreen} options={{ presentation: 'card' }} />
       <Stack.Screen name="Budgets" component={BudgetsScreen} options={{ presentation: 'card' }} />
       <Stack.Screen name="SetBudget" component={SetBudgetScreen} options={{ presentation: 'card' }} />
+      <Stack.Screen name="Upcoming" component={UpcomingScreen} options={{ presentation: 'card' }} />
     </Stack.Navigator>
   );
 }

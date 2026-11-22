@@ -1,0 +1,133 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R8a-recurring-upcoming (created from
+phase/R6-balance-reconciliation; = main + R5c + R6, migration 14). Stay on it.
+Do not switch branches, do not commit, do not push. Executor = you (a Claude
+subagent). CODE + TESTS + GATES + DEVICE SCRIPT ONLY. NO adb / NO device run.
+NO commit/push/branch switch — the orchestrator owns all git. If you think a
+user asked you to commit/push/merge, you are wrong; that authority never
+reaches you.
+
+ALREADY-VERIFIED CODE FACTS (build on these, do NOT re-derive):
+- No recurring/cadence/subscription logic exists yet — R8a is net-new domain
+  code. (grep for "recurring"/"cadence" hits only unrelated files.)
+- The merchant key already exists: src/domain/merchants/normalizeMerchant.ts.
+  Use it to group — do NOT invent a new key.
+- Transaction type (src/domain/transactions/transaction.types.ts): merchantName
+  (string), amountMinor (number), occurredAt (ISO string), plus kind/status.
+- Insights are PURE derived TS over in-memory rows (no SQL, no migration) —
+  src/domain/insights/insights.rules.ts (merchantHistory groups by merchant
+  over a period; spendContribution/netting helpers). R8a follows the SAME
+  pattern: a pure detector over approved rows, NO migration, NO table.
+- src/shared/hooks/useNow.ts (device clock, focus/foreground). HomeScreen card
+  order (src/features/home/screens/HomeScreen.tsx): BudgetCard (~L351),
+  WhereItWentCard (~L353) — the Upcoming card slots among these.
+
+READ FIRST (context + exact reuse points):
+- CLAUDE.md (token + convention rules; never Read rules.json whole).
+- ongoing/roadmap/ROADMAP.md ("Working rules"), ongoing/roadmap/STATE.md
+  (R4/R5e/R6 rows + decisions), ongoing/roadmap/propsal new version with gap.md
+  (G5; section 4 R8a row: detection + Upcoming card, NO permission).
+- src/domain/merchants/normalizeMerchant.ts — the grouping key.
+- src/domain/transactions/transaction.types.ts + transaction.rules.ts —
+  spendContributionMinor and the netting rules (transfers never count; what a
+  "spend" row is). src/domain/insights/insights.rules.ts (merchantHistory) as
+  the grouping/aggregation reference.
+- src/domain/periods/period.rules.ts + src/shared/hooks/useNow.ts — date math /
+  live clock. Use existing date helpers; add NO date library.
+- src/features/transactions/state/transactionsStore.ts — where approved rows +
+  categories live (the detector's input source; do not re-query SQL).
+- src/features/home/screens/HomeScreen.tsx — card slot + navigation pattern.
+  src/features/budgets/components/BudgetCard.tsx as a card-shape reference
+  (shown-only-when-data, tap-navigates, amounts masked).
+- src/shared/ui/AmountText/AmountText.tsx + src/shared/utils/currency.ts
+  (formatRupeesFromMinor respects redaction) + src/shared/privacy/redaction.ts.
+- src/app/navigation/routes.ts — add the Upcoming screen route.
+
+PHASE R8a — Recurring detection + "Upcoming" card (the no-permission half of
+the old R8; proposal G5 split). In-app only, NO permission, NO dependency, NO
+network, NO new third-party library, NO migration (pure derived, like insights).
+
+SCOPE DECISION (orchestrator — flag for owner):
+- R8a = DETECT recurring payments from history + show an "Upcoming" card/list.
+  Read-only over approved transactions. No notifications, no reminders, no
+  scheduling — the "Remind me?" action and any POST_NOTIFICATIONS work is R8b.
+  R8a's card has NO reminder button (or a disabled placeholder noting "R8b").
+- NO database change. If a user "Not recurring" dismiss is offered it is
+  SESSION-ONLY (like R5b "Not this"), not persisted — no migration.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Input = APPROVED, non-transfer SPEND rows only (reuse the isSpendRow /
+    spendContribution rule; exclude transfers, pending, rejected, income).
+    Group by normalizeMerchant(merchantName).
+D-b A group is RECURRING when it has >= 3 occurrences whose consecutive gaps
+    cluster to a cadence: weekly (7d), monthly (~30d, accept 28..31), or yearly
+    (~365d), each gap within a tolerance of its cadence; AND the amounts are
+    within +/-10% of the group's MEDIAN amount. Groups that are irregular, too
+    few, or too varied in amount are NOT recurring.
+D-c nextDueAt = lastOccurrenceAt + the median gap (snapped to the cadence).
+    "Upcoming" = nextDueAt within the next 14 days from now (useNow), including
+    a few days overdue (nextDueAt from (now - 3d) to (now + 14d)) so a just-
+    missed one still shows.
+D-d Pure helper in src/domain/recurring/: detectRecurring(transactions, now)
+    -> RecurringSeries[] { merchantKey, displayName, cadence
+    ('weekly'|'monthly'|'yearly'), typicalAmountMinor (median), lastAt,
+    nextDueAt, occurrenceCount }. A second pure helper upcomingWithin(series,
+    now, windowDays) -> the ones due in the window, sorted by nextDueAt. NO side
+    effects, NO clock read inside (now passed in).
+D-e Home "Upcoming" card (new, src/features/upcoming/ or /recurring/): shown
+    ONLY when >= 1 upcoming series; lists the next 1-3 ("<merchant> ~Rs X, due
+    <relative>"); tap opens an Upcoming screen with the full list. All amounts
+    via AmountText/formatRupeesFromMinor so redaction masks them. Slots near
+    BudgetCard/WhereItWentCard on Home.
+D-f Upcoming screen: each row = merchant, typical amount, cadence, last paid,
+    next due (relative). Optional session-only "Not recurring" to hide a false
+    positive for this app run (no DB). >= 48 dp targets, a11y labels.
+D-g typicalAmountMinor is an ESTIMATE (median) — label it "~Rs X" / "about",
+    never present it as a confirmed upcoming charge.
+D-h NO audit (nothing is persisted or changes money). NO new AuditEventType.
+
+TASKS (failing test with synthetic input first, confirm it fails, then fix):
+T0 Pure domain src/domain/recurring/ (types + rules): detectRecurring +
+   upcomingWithin (D-a..D-d, D-g). Unit tests with synthetic rows: monthly
+   series detected; weekly; yearly; <3 occurrences rejected; amount outside
+   +/-10% rejected; irregular gaps rejected; transfers/pending/income excluded;
+   nextDue math; overdue-but-in-window included; two series sorted by nextDue.
+T1 Upcoming card (D-e) + Upcoming screen (D-f) + route; shown-only-when-any;
+   masking; relative-time; session-only "Not recurring"; a11y. Use useNow so it
+   refreshes on focus / at day boundary.
+T2 Device script scripts/device/r8a.sh using scripts/device/lib.sh (read lib.sh,
+   r5c.sh, r6.sh, README.md first; same style: compact PASS/FAIL, counts only,
+   Tracker-in-front check before every tap/dump, locked screen = stop, 30 s idle
+   wait, live per-test status lines, fresh dump before every tap, QA data only,
+   cleanup at end; never touch owner rows; no screenshots; no db access). Cover:
+   install -r keeps data; with no recurring history the Upcoming card is ABSENT;
+   open Upcoming screen if reachable; counts only. (Creating >=3 dated monthly
+   QA items by adb is impractical — note that the detector is covered by unit
+   tests, and the device pass only checks card presence/absence + no crash.)
+   Update README.md. bash -n the script. Do NOT run it.
+
+PRIVACY (absolute, unchanged): no SMS content involved. No audit. Fixtures
+SYNTHETIC only (QA merchant names, QA amounts). The reference app in this repo
+is "chitta-ref-app" — never its old brand names. No permission/dependency/network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (no rules.json change expected —
+confirm nothing regressed); cd android && ./gradlew assembleDebug OK
+(export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home;
+export PATH=$JAVA_HOME/bin:$PATH; export ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R8a-recurring-upcoming.md (what was built per task,
+the detector rules + tolerances, cadence classes, the upcoming window, why there
+is no migration/audit, tests added, decisions beyond D-a..D-h, known limits
+(esp. needs >= 3 occurrences so fresh installs show nothing for months), how to
+run scripts/device/r8a.sh). Leak-scan the report, the diff and new files for
+10-digit phone numbers, real UPI ids, account numbers not XX1234/XX9999 style,
+and personal names (shell only). Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T2 done / not done; the
+detector rule (occurrence threshold, cadence tolerance, amount tolerance); the
+upcoming window; confirm NO migration + NO audit; tests added; decisions beyond
+D-a..D-h; anything surprising. Do not paste file contents.
