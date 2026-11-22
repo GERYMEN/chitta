@@ -246,6 +246,20 @@ export function sanitizeAuditMetadata(
     case 'receipt_added':
     case 'receipt_removed':
       return { kind: metadata.kind, transactionId: String(metadata.transactionId) };
+    case 'budget_set':
+    case 'budget_deleted':
+      return {
+        kind: metadata.kind,
+        categoryId: idOrNull(metadata.categoryId),
+        amountMinor: Number(metadata.amountMinor) || 0,
+      };
+    case 'budget_updated':
+      return {
+        kind: 'budget_updated',
+        categoryId: idOrNull(metadata.categoryId),
+        amountMinor: Number(metadata.amountMinor) || 0,
+        fields: metadata.fields.map(String),
+      };
     default:
       return null;
   }
