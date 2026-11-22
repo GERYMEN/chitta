@@ -19,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
           add(SmsReaderPackage())
           add(FeedbackPackage())
           add(BackupPackage())
+          add(BiometricPackage())
         },
     )
   }

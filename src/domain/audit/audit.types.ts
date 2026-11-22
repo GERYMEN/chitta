@@ -103,7 +103,10 @@ export type AuditedSettingKey =
   | 'sms_auto_read'
   /** R9a: 'on' / 'off' only. */
   | 'hide_amounts'
-  | 'secure_screen';
+  | 'secure_screen'
+  /** R9b: 'on' / 'off' and 'immediate' / '1' / '5' only. */
+  | 'app_lock_enabled'
+  | 'app_lock_timeout';
 
 /**
  * Small typed payloads only. NEVER SMS text, SMS sender, or

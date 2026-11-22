@@ -146,7 +146,7 @@ describe('R9a audit + Activity wording', () => {
       });
       expect(item.sentence).not.toMatch(/threshold/);
       expect(item.sentence).toBe(
-        key === 'hide_amounts' ? 'You turned on Hide amounts' : 'You turned on Hide in recents and block screenshots',
+        key === 'hide_amounts' ? 'You turned on Private mode' : 'You turned on Hide in recents and block screenshots',
       );
     }
   });

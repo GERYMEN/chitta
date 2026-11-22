@@ -25,7 +25,13 @@ import { effectiveAutoRead } from '../../sms-sync/autoRead/autoReadRules';
 import { rulesAboutLabel } from '../../sms-sync/rules/rulesLoader';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import {
+  APP_LOCK_TIMEOUTS,
+  AppLockTimeout,
+  disableAppLock,
+  enableAppLock,
+  getAppLockConfig,
   readSecuritySettings,
+  setAppLockTimeout,
   setHideAmounts,
   setSecureScreen,
 } from '../../security/securitySettings';
@@ -90,14 +96,52 @@ export function ProfileSettingsSheet({
   const allTransactions = useTransactionsStore(state => state.transactions);
   const notUnderstoodCount = visibleUnparsed(unparsedRows, allTransactions).length;
   const [togglingAutoRead, setTogglingAutoRead] = useState(false);
-  // R9a: Hide amounts (live truth = the redaction flag), secure screen, CSV export.
+  // R9a: Private mode (key hide_amounts; live truth = the redaction flag), secure screen, CSV export.
   const hideAmounts = useRedacted();
   const [secureScreen, setSecureScreenState] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // R9b: app lock (live truth = the loaded app-lock config).
+  const [appLockOn, setAppLockOn] = useState(false);
+  const [appLockTimeout, setAppLockTimeoutState] = useState<AppLockTimeout>('immediate');
 
   async function handleHideAmounts(on: boolean) {
     try {
       await setHideAmounts(on);
+    } catch {
+      ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
+    }
+  }
+
+  async function handleAppLock(on: boolean) {
+    try {
+      if (!on) {
+        await disableAppLock();
+        setAppLockOn(false);
+        return;
+      }
+      const result = await enableAppLock();
+      if (result.ok) {
+        setAppLockOn(true);
+      } else {
+        showDialog({
+          title: 'Set up a screen lock first',
+          message:
+            result.reason === 'unavailable'
+              ? 'App lock is not available right now. Try again in a moment.'
+              : 'App lock uses your fingerprint, face or screen lock. Set one up in your phone Settings, then turn App lock on.',
+          icon: 'lock-alert-outline',
+          actions: [{ label: 'OK', variant: 'primary' }],
+        });
+      }
+    } catch {
+      ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
+    }
+  }
+
+  async function handleAppLockTimeout(timeout: AppLockTimeout) {
+    try {
+      await setAppLockTimeout(timeout);
+      setAppLockTimeoutState(timeout);
     } catch {
       ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
     }
@@ -171,6 +215,8 @@ export function ProfileSettingsSheet({
       readSecuritySettings()
         .then(s => setSecureScreenState(s.secureScreen))
         .catch(() => undefined);
+      setAppLockOn(getAppLockConfig().enabled);
+      setAppLockTimeoutState(getAppLockConfig().timeout);
       // R5: the grant may have changed in system settings.
       useSmsReaderStore.getState().load().catch(() => undefined);
     }
@@ -359,16 +405,53 @@ export function ProfileSettingsSheet({
           <Icon name="eye-off-outline" size={20} color={colors.onSurfaceVariant} />
         </View>
         <View style={styles.activityText}>
-          <Text style={styles.activityTitle}>Hide amounts</Text>
-          <Text style={styles.activityCaption}>Mask every amount until you turn this off</Text>
+          <Text style={styles.activityTitle}>Private mode</Text>
+          <Text style={styles.activityCaption}>Hides amounts, names, notes and card numbers</Text>
         </View>
         <Switch
           value={hideAmounts}
           onValueChange={handleHideAmounts}
-          accessibilityLabel={`Hide amounts. ${hideAmounts ? 'On' : 'Off. Turn on'}`}
+          accessibilityLabel={`Private mode. ${hideAmounts ? 'On' : 'Off. Turn on'}`}
           testID="settings-hide-amounts-switch"
         />
       </View>
+      <View style={styles.activityRow} testID="settings-app-lock-row">
+        <View style={styles.activityIcon}>
+          <Icon name="lock-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>App lock</Text>
+          <Text style={styles.activityCaption}>Ask for fingerprint, face or screen lock to open</Text>
+        </View>
+        <Switch
+          value={appLockOn}
+          onValueChange={handleAppLock}
+          accessibilityLabel={`App lock. ${appLockOn ? 'On' : 'Off. Turn on'}`}
+          testID="settings-app-lock-switch"
+        />
+      </View>
+      {appLockOn ? (
+        <View style={styles.lockTimeoutRow} testID="settings-app-lock-timeout-row">
+          <Text style={styles.activityCaption}>Lock again</Text>
+          {APP_LOCK_TIMEOUTS.map(option => {
+            const selected = option === appLockTimeout;
+            const label =
+              option === 'immediate' ? 'Right away' : option === '1' ? 'After 1 min' : 'After 5 min';
+            return (
+              <Pressable
+                key={option}
+                onPress={() => handleAppLockTimeout(option)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Lock ${label.toLowerCase()}`}
+                testID={`settings-app-lock-timeout-${option}`}
+                style={[styles.lockTimeoutChip, selected && styles.lockTimeoutChipOn]}>
+                <Text style={[styles.lockTimeoutText, selected && styles.lockTimeoutTextOn]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
       <View style={styles.activityRow} testID="settings-secure-screen-row">
         <View style={styles.activityIcon}>
           <Icon name="shield-lock-outline" size={20} color={colors.onSurfaceVariant} />
@@ -565,6 +648,25 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.onSurfaceVariant,
   },
+  lockTimeoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  lockTimeoutChip: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  lockTimeoutChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  lockTimeoutText: { ...typography.labelLg, color: colors.onSurface },
+  lockTimeoutTextOn: { color: colors.onPrimary },
   title: {
     ...typography.headlineMd,
     color: colors.onSurface,

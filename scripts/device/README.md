@@ -337,7 +337,7 @@ scripts/device/r9a.sh [--skip-install]
 ```
 
 Owner-assisted, counts of fixed labels only; no amounts, names or screenshots;
-no database access. The only setting the script flips is **Hide amounts** (and
+no database access. The only setting the script flips is **Private mode** (and
 **you** turn it back OFF when asked). It never touches the "Hide in recents"
 switch. Export CSV is opened and **cancelled** in the system save sheet
 (back is pressed only while DocumentsUI is the focused window).
@@ -347,8 +347,8 @@ switch. Export CSV is opened and **cancelled** in the system save sheet
 | R0 | Install the update (data kept) | install `Success` |
 | R1 | Wait 30 s idle, open Tracker | Tracker in front |
 | R2 | Home opens | Home labels shown |
-| R3 | **You** open Settings | Hide amounts, Hide in recents and Export (CSV) entries present |
-| R4 | Script turns Hide amounts ON | the `₹ ••••` mask is on Home |
+| R3 | **You** open Settings | Private mode, Hide in recents and Export (CSV) entries present |
+| R4 | Script turns Private mode ON | the `₹ ••••` mask is on Home |
 | R5 | Force-stop + relaunch; **you** turn it OFF | still masked after restart; unmasked after OFF |
 | R6 | Script taps Export transactions (CSV), then cancels the sheet | system save sheet appeared; Tracker back in front; nothing written |
 | R7 | FLAG_SECURE (manual, SKIP) | owner: switch on, recents card blank + screenshot blocked, then off |
@@ -356,6 +356,31 @@ switch. Export CSV is opened and **cancelled** in the system save sheet
 
 FLAG_SECURE is only observable by attempting a screenshot or opening recents;
 the script never takes a screenshot.
+
+## R9b — App lock
+
+```
+scripts/device/r9b.sh [--skip-install]
+```
+
+Owner-assisted, counts of fixed labels only. The script flips **nothing** and
+never touches the system biometric / PIN prompt (adb cannot and must not drive
+it). It checks that Settings lists the **App lock** switch and the relabelled
+**Private mode** row (the old "Hide amounts" label is gone). The real lock and
+unlock are manual steps printed at R5 (turn on, leave and return, cancel and
+retry, timeouts, force-stop); R6 (no screen lock set up) needs a phone without
+a lock.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Home opens (App lock OFF by default) | Home labels shown |
+| R3 | **You** open Settings | App lock + Private mode present, old label gone |
+| R4 | App lock state label | `App lock. On/Off` exposed |
+| R5 | Lock / unlock (manual, SKIP) | owner follows the printed steps |
+| R6 | No screen lock (manual, SKIP) | message shown, switch stays OFF |
+| R7 | Crash check since the start | 0 FATAL/ANR |
 
 ## Writing a script for a new phase
 

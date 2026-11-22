@@ -12,6 +12,7 @@ import { clearFeedbackScreenshots } from '../native/android/feedback/feedbackNat
 import { useSmsReaderStore } from '../features/sms-sync/smsReaderStore';
 import { startForegroundAutoRead } from '../features/sms-sync/autoRead/autoReadRunner';
 import { initSecurityOnLaunch } from '../features/security/securitySettings';
+import { AppLockGate } from '../features/security/components/AppLockGate';
 import { useChainSuggestions } from '../features/sms-sync/rules/chaining';
 
 export function App() {
@@ -48,21 +49,24 @@ export function App() {
 
   return (
     <AppProviders>
-      <StatusBar barStyle="dark-content" />
-      {isHydrated && securityReady ? (
-        <>
-          <RootNavigator initialRouteName={hasOnboarded ? 'Tabs' : 'Onboarding'} />
-          {/* R4c: one floating feedback button + the first-run tour, above every screen. */}
-          <FeedbackWidget />
-          <TourOverlay />
-        </>
-      ) : (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      )}
-      <SnackbarHost />
-      <DialogHost />
+      {/* R9b: opaque lock overlay above everything while the app lock is engaged. */}
+      <AppLockGate ready={isHydrated && securityReady}>
+        <StatusBar barStyle="dark-content" />
+        {isHydrated && securityReady ? (
+          <>
+            <RootNavigator initialRouteName={hasOnboarded ? 'Tabs' : 'Onboarding'} />
+            {/* R4c: one floating feedback button + the first-run tour, above every screen. */}
+            <FeedbackWidget />
+            <TourOverlay />
+          </>
+        ) : (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        )}
+        <SnackbarHost />
+        <DialogHost />
+      </AppLockGate>
     </AppProviders>
   );
 }

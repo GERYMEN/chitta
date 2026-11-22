@@ -1,0 +1,132 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R9b-app-lock (created from phase/R9a-security-nodep; stack tip
+= main + R5c + R6 + R8a + R5j + R9a; migration 14). Stay on it. Do not switch
+branches, do not commit, do not push. Executor = you (a Claude subagent). CODE +
+TESTS + GATES + DEVICE SCRIPT ONLY. NO adb / NO device run. NO commit/push/branch
+switch — the orchestrator owns all git.
+
+OWNER APPROVAL (granted): androidx.biometric gradle dependency is APPROVED for
+this phase. USE_BIOMETRIC (normal permission) in the manifest if the library
+needs it is also approved. NO OTHER new dependency or permission.
+
+PHASE R9b — App lock (the biometric half of R9; R9a shipped Hide-amounts /
+FLAG_SECURE / CSV). Two parts:
+  (A) App lock: BiometricPrompt (biometric OR device credential) on launch and
+      on resume after a timeout; a lock overlay until the user authenticates.
+  (B) FOLD-IN FIX from R9a review: the global "Hide amounts" toggle actually
+      drives the shared redaction flag, which ALSO masks merchant names, notes,
+      last-4 and the user name — not just amounts. Relabel it honestly.
+
+VERIFIED CODE FACTS (build on these):
+- app/build.gradle dependencies block starts at line ~125
+  (android/app/build.gradle). Add androidx.biometric there
+  (androidx.biometric:biometric:1.1.0 — stable).
+- Native module pattern: android/app/src/main/java/com/tracker/
+  {SecurityModule (R9a), BackupModule, BackupPackage, MainActivity.kt,
+  MainApplication.kt (package registration)}. Follow SecurityModule + its
+  Package as the template for a new BiometricModule. BiometricPrompt must run on
+  the UI thread against the current Activity (FragmentActivity — check
+  MainActivity's base class; ReactActivity extends it).
+- RN AppState is already used (src/features/feedback/feedbackFlow.ts) — use it
+  for background/foreground + a timestamp to drive the resume timeout.
+- Settings UI: src/features/profile/components/ProfileSettingsSheet.tsx (R9a
+  added Hide amounts at ~L362, secure screen, CSV there). Add the app-lock rows
+  there in the same style.
+- Settings + audit: src/data/repositories/settings.repository.ts (setMany with
+  settings_changed audit in one tx). src/features/security/securitySettings.ts
+  (R9a keys HIDE_AMOUNTS_KEY etc.) — add the app-lock keys beside them.
+- Redaction: src/shared/privacy/redaction.ts (the one shared flag).
+- The "Hide amounts" label + audit sentence to change:
+  ProfileSettingsSheet.tsx (~L362 title, ~L368 a11y label) and
+  src/features/activity/activityFeed.ts (~L869 "You turned on/off Hide amounts").
+  DO NOT touch ActivityScreen.tsx:117 ("Hide/Show amounts" eye) — that transient
+  control is genuinely amounts-scoped; leave it.
+
+READ FIRST: CLAUDE.md; ongoing/roadmap/STATE.md (R4e/R9a rows); ROADMAP.md R9;
+propsal G6; src/features/security/* (R9a); ProfileSettingsSheet.tsx;
+MainActivity.kt + MainApplication.kt + SecurityModule/Package; redaction.ts.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a androidx.biometric:biometric:1.1.0 in app/build.gradle. If the library needs
+    USE_BIOMETRIC in AndroidManifest, add it (approved). No other manifest or
+    gradle change.
+D-b BiometricModule (Kotlin) exposing to JS:
+    - canUseAppLock(): resolves an enum/string — 'available' |
+      'none_enrolled' | 'no_hardware' | 'unavailable' (map
+      BiometricManager.canAuthenticate(BIOMETRIC_STRONG | DEVICE_CREDENTIAL)).
+    - authenticate(title, subtitle): shows BiometricPrompt with
+      setAllowedAuthenticators(BIOMETRIC_STRONG or BIOMETRIC_WEAK as available,
+      OR DEVICE_CREDENTIAL) so a device PIN/pattern works as fallback (do NOT
+      set a negative button when DEVICE_CREDENTIAL is allowed). Resolve on
+      success; reject with a stable error code on error/cancel/lockout. Run on
+      the UI thread against the current FragmentActivity.
+    No secrets, no crypto keys, no logging of results.
+D-c Settings keys (app_settings, no migration): app_lock_enabled ('on'|'off',
+    default off) and app_lock_timeout (minutes: 'immediate'|'1'|'5', default
+    'immediate'). Toggling writes the key + settings_changed audit. Enabling app
+    lock first calls canUseAppLock(); if none_enrolled/no_hardware, do NOT enable
+    — show a message telling the user to set up a screen lock. Add both keys to
+    the audited-setting allow-list with Activity sentences.
+D-d Lock gate (JS): a top-level lock state. The app is LOCKED when app_lock is
+    enabled AND (cold launch, OR it was backgrounded and the elapsed time since
+    background >= timeout). While locked, render a lock overlay (app content not
+    visible / not interactive) with an "Unlock" action that calls authenticate();
+    on success, unlock. Use AppState to record a background timestamp and to
+    re-evaluate on foreground. 'immediate' locks on any background. Keep the
+    unlock attempt re-triggerable (no dead-end if the user cancels).
+D-e App lock NEVER stores or weakens any data; it is a UI gate only. It does not
+    change redaction, balances, or sync. FLAG_SECURE (R9a) is independent.
+D-f FIX (relabel): change the GLOBAL toggle's title from "Hide amounts" to a
+    name that matches what it does — use "Private mode" with a one-line
+    subtitle "Hides amounts, names, notes and card numbers" (and update the
+    a11y label + the Activity sentence to match, e.g. "You turned on Private
+    mode"). Keep the internal key hide_amounts unchanged (no migration, no
+    audit-enum rename). Leave the Activity-screen eye untouched.
+
+TASKS (each: failing test first where unit-testable, confirm fail, then fix):
+T1 Gradle dep + BiometricModule + Package + registration in MainApplication
+   (D-a/D-b). assembleDebug must still pass. (The native prompt is device-only;
+   keep Kotlin minimal + obvious; no unit test for the native call itself.)
+T2 JS bridge + canUseAppLock/authenticate typings + settings keys (D-c) +
+   enable-guard. Unit-test: enabling checks availability; none_enrolled blocks
+   enable with a message; keys persist + audit.
+T3 Lock gate + overlay (D-d): LOCKED logic (cold launch, background-elapsed vs
+   timeout, 'immediate'); overlay hides content; unlock on success; cancel keeps
+   it locked + re-triggerable. Unit-test the pure lock-decision
+   (shouldLock(enabled, timeout, backgroundedAtMs, nowMs, coldLaunch)) across
+   cases; component test the overlay shows when locked and calls authenticate.
+T4 Relabel fix (D-f): title/subtitle/a11y + Activity sentence; update the R9a
+   securitySettings test wording; leave ActivityScreen eye + the key as-is.
+T5 Device script scripts/device/r9b.sh (lib.sh style; counts/manual only — app
+   lock + biometric cannot be automated by adb). Checks: the app-lock Settings
+   rows exist; enabling with no enrolled lock shows the setup message (if
+   observable); otherwise mark the actual lock/unlock as a MANUAL step with
+   instructions for the owner. The relabeled "Private mode" row is present.
+   Update README.md. bash -n. Do NOT run it.
+
+PRIVACY (absolute): no auth result or biometric data logged or stored; audits
+ids/enums/field-names only; synthetic fixtures only; reference app is
+"chitta-ref-app". No dependency/permission beyond the approved androidx.biometric
+(+ USE_BIOMETRIC if required).
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx 0
+errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/
+Contents/Home; PATH=$JAVA_HOME/bin:$PATH; ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease. (assembleDebug now also
+proves the androidx.biometric dependency resolves.)
+
+OUTPUT: write ongoing/roadmap/R9b-app-lock.md (dep added + version; the
+BiometricModule API + authenticator/fallback choice; the settings keys + enable
+guard; the shouldLock rule + overlay; the relabel; confirm no migration and no
+permission beyond USE_BIOMETRIC; tests added; decisions; known limits incl.
+device-only parts; how to run r9b.sh). Leak-scan report/diff/new files (shell)
+for phone numbers, real UPI ids, non-XX account numbers, personal names. Do not
+commit.
+
+REPLY ONLY with: gates yes/no with test counts; T1-T5 done / not done; dep +
+version added; manifest permission added (if any); the authenticator/fallback
+choice; the shouldLock rule; the relabel wording; tests added; decisions;
+anything surprising. Do not paste file contents.

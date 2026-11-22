@@ -866,8 +866,23 @@ function describeSettingsChange(
   }
   if (metadata.key === 'hide_amounts') {
     return {
-      sentence: metadata.to === 'on' ? 'You turned on Hide amounts' : 'You turned off Hide amounts',
-      impact: { text: 'Amounts are masked across the app', tone: 'neutral' },
+      sentence: metadata.to === 'on' ? 'You turned on Private mode' : 'You turned off Private mode',
+      impact: { text: 'Amounts, names, notes and card numbers are masked', tone: 'neutral' },
+    };
+  }
+  if (metadata.key === 'app_lock_enabled') {
+    return {
+      sentence: metadata.to === 'on' ? 'You turned on App lock' : 'You turned off App lock',
+      impact: null,
+    };
+  }
+  if (metadata.key === 'app_lock_timeout') {
+    return {
+      sentence:
+        metadata.to === 'immediate'
+          ? 'You set App lock to ask every time you leave the app'
+          : `You set App lock to ask after ${metadata.to} ${metadata.to === '1' ? 'minute' : 'minutes'} away`,
+      impact: null,
     };
   }
   if (metadata.key === 'secure_screen') {
