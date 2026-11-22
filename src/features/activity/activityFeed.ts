@@ -864,6 +864,21 @@ function describeSettingsChange(
       impact: { text: 'Sync SMS still works by hand', tone: 'neutral' },
     };
   }
+  if (metadata.key === 'hide_amounts') {
+    return {
+      sentence: metadata.to === 'on' ? 'You turned on Hide amounts' : 'You turned off Hide amounts',
+      impact: { text: 'Amounts are masked across the app', tone: 'neutral' },
+    };
+  }
+  if (metadata.key === 'secure_screen') {
+    return {
+      sentence:
+        metadata.to === 'on'
+          ? 'You turned on Hide in recents and block screenshots'
+          : 'You turned off Hide in recents and block screenshots',
+      impact: null,
+    };
+  }
   if (metadata.key === 'approval_mode') {
     return {
       sentence:

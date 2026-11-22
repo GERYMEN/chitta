@@ -330,6 +330,33 @@ instead of disturbing it.
 - The saved filters hold the type, account, category and period only — the
   search text and the merchant chip are never saved.
 
+## R9a — Security (no dependency)
+
+```
+scripts/device/r9a.sh [--skip-install]
+```
+
+Owner-assisted, counts of fixed labels only; no amounts, names or screenshots;
+no database access. The only setting the script flips is **Hide amounts** (and
+**you** turn it back OFF when asked). It never touches the "Hide in recents"
+switch. Export CSV is opened and **cancelled** in the system save sheet
+(back is pressed only while DocumentsUI is the focused window).
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Home opens | Home labels shown |
+| R3 | **You** open Settings | Hide amounts, Hide in recents and Export (CSV) entries present |
+| R4 | Script turns Hide amounts ON | the `₹ ••••` mask is on Home |
+| R5 | Force-stop + relaunch; **you** turn it OFF | still masked after restart; unmasked after OFF |
+| R6 | Script taps Export transactions (CSV), then cancels the sheet | system save sheet appeared; Tracker back in front; nothing written |
+| R7 | FLAG_SECURE (manual, SKIP) | owner: switch on, recents card blank + screenshot blocked, then off |
+| R8 | Crash check since the start | 0 FATAL/ANR |
+
+FLAG_SECURE is only observable by attempting a screenshot or opening recents;
+the script never takes a screenshot.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

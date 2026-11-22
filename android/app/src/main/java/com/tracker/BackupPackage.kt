@@ -7,7 +7,7 @@ import com.facebook.react.uimanager.ViewManager
 
 class BackupPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(BackupModule(reactContext))
+    listOf(BackupModule(reactContext), SecurityModule(reactContext))
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
     emptyList()

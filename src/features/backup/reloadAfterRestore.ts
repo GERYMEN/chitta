@@ -7,6 +7,7 @@ import { useNewAccountsStore } from '../sms-sync/newAccountsStore';
 import { useBillsStore } from '../bills/state/billsStore';
 import { useBudgetsStore } from '../budgets/state/budgetsStore';
 import { useChainSuggestions } from '../sms-sync/rules/chaining';
+import { initSecurityOnLaunch } from '../security/securitySettings';
 
 /**
  * R4e: after a restore replaced every row, bring every in-memory store back
@@ -37,4 +38,6 @@ export async function reloadAfterRestore(): Promise<void> {
   await useBudgetsStore.getState().refresh();
   // R5i (G3): the restored chain suggestions (or none, for an older backup).
   await useChainSuggestions.getState().refresh();
+  // R9a: the restored Hide amounts / secure screen preferences (or off).
+  await initSecurityOnLaunch();
 }

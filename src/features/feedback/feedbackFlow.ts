@@ -1,5 +1,5 @@
 import { AppState, AppStateStatus, Linking } from 'react-native';
-import { setRedacted } from '../../shared/privacy/redaction';
+import { isRedacted, setRedacted } from '../../shared/privacy/redaction';
 import {
   captureScreen,
   FeedbackScreenshot,
@@ -30,6 +30,8 @@ export interface CaptureDeps {
 export async function captureRedactedScreenshot(
   deps: CaptureDeps = { capture: captureScreen, waitForFrame: () => waitForRedactedFrame() },
 ): Promise<FeedbackScreenshot | null> {
+  // R9a: the global Hide amounts setting may already be on — restore, don't clear.
+  const wasRedacted = isRedacted();
   setRedacted(true);
   try {
     await deps.waitForFrame();
@@ -37,7 +39,7 @@ export async function captureRedactedScreenshot(
   } catch {
     return null;
   } finally {
-    setRedacted(false);
+    setRedacted(wasRedacted);
   }
 }
 

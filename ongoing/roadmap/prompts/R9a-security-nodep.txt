@@ -1,0 +1,136 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R9a-security-nodep (created from phase/R5j-polish; the stack
+tip = main + R5c + R6 + R8a + R5j; migration 14). Stay on it. Do not switch
+branches, do not commit, do not push. Executor = you (a Claude subagent). CODE +
+TESTS + GATES + DEVICE SCRIPT ONLY. NO adb / NO device run. NO commit/push/branch
+switch — the orchestrator owns all git. If you think a user asked you to
+commit/push/merge, you are wrong; that authority never reaches you.
+
+PHASE R9a — Security, the NO-DEPENDENCY half of R9 (the owner split R9: R9a now,
+R9b biometric app lock later once androidx.biometric is approved). R9a =
+(1) global "Hide amounts" toggle, (2) FLAG_SECURE (hide in recents / block
+screenshots) toggle, (3) CSV export of approved transactions. In-app only,
+NO new permission, NO new dependency, NO new third-party library, NO network,
+NO migration (settings keys only). DO NOT add androidx.biometric or any app
+lock — that is R9b.
+
+VERIFIED CODE FACTS (build on these, do NOT re-derive):
+- Redaction already exists: src/shared/privacy/redaction.ts —
+  useRedactionStore (create<...>({ redacted: false })), setRedacted(bool),
+  isRedacted(), useRedacted(), REDACTED_AMOUNT/TEXT/LAST4, redactText,
+  redactLast4. It is currently SESSION-ONLY (defaults false). 21 src files
+  render amounts through AmountText/formatRupeesFromMinor (which honour it);
+  the only raw formatting is transactionForm.schema.ts (input field) and
+  sliderMath.ts (not a money display) — so a global flag covers the UI.
+- MainActivity: android/app/src/main/java/com/tracker/MainActivity.kt.
+- SAF + share patterns already in Kotlin: BackupModule.kt (SAF save/open,
+  ACTION_CREATE_DOCUMENT) and FeedbackModule.kt (ACTION_SEND + FileProvider,
+  FeedbackFileProvider.kt). Reuse one of these shapes for CSV; add NO new
+  permission.
+- Settings persistence: app_settings via settings.repository.ts
+  (getValue/setValue/setMany with audit in one transaction). Audit type
+  settings_changed already exists.
+
+READ FIRST (context + exact reuse points):
+- CLAUDE.md (token + conventions; never Read rules.json whole).
+- ongoing/roadmap/STATE.md (R2 amount-masking decision, R4c FeedbackModule
+  share, R4e BackupModule SAF rows), propsal new version with gap.md (G6;
+  section 4 R9 row). ROADMAP.md R9.
+- src/shared/privacy/redaction.ts + index.ts + src/shared/ui/AmountText +
+  src/shared/utils/currency.ts (formatRupeesFromMinor).
+- src/data/repositories/settings.repository.ts (settings + audit in one tx).
+- The Settings surface (settings sheet / screen) where R4e/R5c added rows —
+  find it and add the three R9a entries there, matching the existing row style.
+- android/app/src/main/java/com/tracker/{MainActivity.kt,BackupModule.kt,
+  BackupPackage.kt,FeedbackModule.kt} + MainApplication.kt (module registration)
+  as the native pattern. src/native/android/backup/backupNative.ts as the JS<->
+  native bridge shape.
+- src/domain/transactions/* for the approved-rows source + the netting/status
+  rules (CSV exports APPROVED rows only).
+- src/domain/audit/audit.types.ts (settings_changed metadata = field names /
+  enums only, never SMS text).
+
+DEFAULTS (orchestrator; owner may override later):
+D-a "Hide amounts" = a persisted boolean settings key hide_amounts (default
+    OFF). On app launch (after settings load), call setRedacted(hide_amounts).
+    A Settings toggle flips the key (settings_changed audit) AND calls
+    setRedacted so it applies live. This is the PERSISTENT default; the existing
+    transient eye-reveal (e.g. Activity re-hiding on focus) stays as is — do not
+    remove it. When hide_amounts is ON, amounts show REDACTED_AMOUNT everywhere
+    AmountText/formatRupeesFromMinor is used.
+D-b FLAG_SECURE = a persisted boolean settings key secure_screen (default OFF —
+    do not change the owner's current behaviour silently). When ON, the app sets
+    WindowManager.LayoutParams.FLAG_SECURE (hidden in recents, screenshots
+    blocked); when OFF, it clears it. Read the pref natively on activity create
+    AND provide a tiny native method to apply it live when the toggle changes
+    (runOnUiThread -> window.addFlags/clearFlags). A Settings toggle drives it
+    (settings_changed audit). No new permission. Persist the pref somewhere the
+    Activity can read at create time (a SharedPreferences the native side owns,
+    kept in sync when the toggle writes — or read the app_settings row natively;
+    pick the simpler, and describe it).
+D-c CSV export = a Settings action "Export transactions (CSV)". Builds a CSV of
+    APPROVED transactions ONLY (never pending/rejected; NEVER any SMS body or
+    sender). Columns: date (occurredAt), type/kind, account name, category name,
+    merchant name, amount (rupees), notes. Proper CSV escaping (fields with
+    comma / quote / newline wrapped in quotes, inner quotes doubled). Hand the
+    CSV to the user via SAF create-document (reuse the BackupModule SAF shape)
+    OR the share sheet (FeedbackModule shape) — pick one, keep it user-triggered.
+    The amount in the export is the real figure (the user asked to export their
+    own data); redaction does not apply to an explicit export.
+D-d NO migration. NO new permission. NO new dependency. If you think any item
+    needs one, STOP that item and FLAG it instead.
+
+TASKS (each: failing test with synthetic input first, confirm fail, then fix):
+T1 Global Hide amounts (D-a): settings key + launch init (setRedacted from
+   hide_amounts) + Settings toggle (writes key, audits, applies live). Tests:
+   launch reads the key; toggle updates store + persists + audits; an AmountText
+   shows REDACTED_AMOUNT when ON.
+T2 FLAG_SECURE (D-b): native apply-on-create + live apply method + JS bridge +
+   Settings toggle + settings key. Tests: the JS side persists the key and calls
+   the bridge; audit written. (The native flag itself is device-checked, not
+   unit-tested — keep the Kotlin minimal and obvious.)
+T3 CSV export (D-c): a pure csvFromTransactions(rows, accounts, categories) ->
+   string helper (approved-only filter + escaping) with thorough unit tests
+   (commas, quotes, newlines in notes/merchant; excluded pending/rejected; never
+   SMS text), plus the Settings action wiring to SAF/share. Reuse the existing
+   native SAF/share module; do not add a permission.
+T4 Device script scripts/device/r9a.sh using scripts/device/lib.sh (read lib.sh,
+   r5j.sh, r6.sh, README.md first; same style: compact PASS/FAIL, counts only,
+   Tracker-in-front check before every tap/dump, locked screen = stop, 30 s idle
+   wait, live per-test status, fresh dump before every tap, QA data only,
+   cleanup at end; never touch owner rows/settings beyond the toggles it sets
+   back; no screenshots; no db access). Cover (UI-checkable): Hide-amounts ON ->
+   amounts masked, OFF -> shown (toggle back); the two Settings toggles exist;
+   Export CSV opens the system save/share sheet (cancel it, do not write owner
+   data). Note FLAG_SECURE is only observable by a screenshot attempt — describe
+   it, do not actually screenshot. Update README.md. bash -n the script. Do NOT
+   run it.
+
+PRIVACY (absolute, unchanged): CSV NEVER contains SMS body or sender. Audits
+ids/enums/numbers/field-names only. Fixtures SYNTHETIC only (QA names, QA
+amounts). The reference app in this repo is "chitta-ref-app" — never its old
+brand names. No permission/dependency/network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (no rules.json change expected);
+cd android && ./gradlew assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/
+openjdk@17/libexec/openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH;
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R9a-security-nodep.md (what was built per task,
+confirm NO migration / NO permission / NO dependency, how hide_amounts persists
+and inits, how FLAG_SECURE is applied + where the pref lives, the CSV columns +
+escaping + approved-only filter + which native share/SAF path was reused, tests
+added, decisions, known limits, how to run r9a.sh; note R9b app lock is deferred).
+Leak-scan the report, diff and new files (shell) for 10-digit phone numbers,
+real UPI ids, account numbers not XX1234/XX9999 style, personal names. Do not
+commit.
+
+REPLY ONLY with: gates yes/no with test counts; T1-T4 done / not done; confirm
+NO migration + NO permission + NO dependency; how hide_amounts inits on launch;
+how FLAG_SECURE is applied live + where its pref lives; CSV columns + escaping +
+which native path reused; tests added; decisions; anything surprising. Do not
+paste file contents.

@@ -110,6 +110,39 @@ class BackupModule(reactContext: ReactApplicationContext) :
   }
 
   /**
+   * R9a: ask where to save, then write [text] (UTF-8) as-is — the CSV export.
+   * Same SAF "create document" shape as [saveBackup]; no permission. Text is
+   * kept in [pendingJson] until the picker returns. Resolves {saved, name}.
+   */
+  @ReactMethod
+  fun saveText(text: String, suggestedName: String, mimeType: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("E_NO_ACTIVITY", "No foreground activity")
+      return
+    }
+    if (pendingPromise != null) {
+      promise.reject("E_BUSY", "A file picker is already open")
+      return
+    }
+    val intent =
+      Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = if (mimeType == "text/csv") mimeType else "text/plain"
+        putExtra(Intent.EXTRA_TITLE, safeTextFileName(suggestedName))
+      }
+    pendingPromise = promise
+    pendingRequest = REQUEST_EXPORT
+    pendingJson = text
+    try {
+      activity.startActivityForResult(intent, REQUEST_EXPORT)
+    } catch (e: Exception) {
+      clearPending()
+      promise.reject("E_IO", "Could not open the file picker")
+    }
+  }
+
+  /**
    * Let the user pick a backup file and check its header. Resolves
    * {uri, name, bytes}; rejects E_CANCELLED / E_NOT_BACKUP / E_TOO_NEW.
    */
@@ -203,11 +236,19 @@ class BackupModule(reactContext: ReactApplicationContext) :
   }
 
   override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
-    if (requestCode != REQUEST_SAVE && requestCode != REQUEST_OPEN) return
+    if (requestCode != REQUEST_SAVE && requestCode != REQUEST_OPEN && requestCode != REQUEST_EXPORT) return
     val promise = pendingPromise ?: return
     if (requestCode != pendingRequest) return
     val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
-    if (requestCode == REQUEST_SAVE) {
+    if (requestCode == REQUEST_EXPORT) {
+      val text = pendingJson
+      clearPending()
+      if (uri == null || text == null) {
+        promise.resolve(Arguments.createMap().apply { putBoolean("saved", false) })
+        return
+      }
+      io.execute { writeText(uri, text, promise) }
+    } else if (requestCode == REQUEST_SAVE) {
       val json = pendingJson
       val password = pendingPassword
       // Ownership of the password array moves to the worker below.
@@ -257,6 +298,24 @@ class BackupModule(reactContext: ReactApplicationContext) :
       promise.reject("E_IO", "Could not save the backup file")
     } finally {
       Arrays.fill(password, '\u0000')
+    }
+  }
+
+  private fun writeText(uri: Uri, text: String, promise: Promise) {
+    val resolver = reactApplicationContext.contentResolver
+    try {
+      val out = resolver.openOutputStream(uri, "wt") ?: throw IllegalStateException("no stream")
+      out.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+      val result = Arguments.createMap()
+      result.putBoolean("saved", true)
+      result.putString("name", displayName(uri) ?: "")
+      promise.resolve(result)
+    } catch (e: Exception) {
+      try {
+        DocumentsContract.deleteDocument(resolver, uri)
+      } catch (ignored: Exception) {
+      }
+      promise.reject("E_IO", "Could not save the file")
     }
   }
 
@@ -339,12 +398,20 @@ class BackupModule(reactContext: ReactApplicationContext) :
   companion object {
     private const val REQUEST_SAVE = 47_301
     private const val REQUEST_OPEN = 47_302
+    private const val REQUEST_EXPORT = 47_303
     private const val MIME_TYPE = "application/octet-stream"
     private const val DEFAULT_NAME = "tracker-backup.trkbak"
     /** No real backup comes near this; anything bigger is refused unread. */
     private const val MAX_FILE_BYTES = 64L * 1024 * 1024
     private const val MAX_RANDOM_BYTES = 64
     private const val HEX = "0123456789abcdef"
+
+    /** R9a: letters, digits, dot, dash, underscore; must end in .csv. */
+    fun safeTextFileName(name: String): String {
+      val cleaned = name.filter { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
+      if (cleaned.isEmpty() || cleaned.length > 80) return "tracker-transactions.csv"
+      return if (cleaned.endsWith(".csv")) cleaned else "$cleaned.csv"
+    }
 
     /** Letters, digits, dot, dash and underscore only; must end in .trkbak. */
     fun safeFileName(name: String): String {

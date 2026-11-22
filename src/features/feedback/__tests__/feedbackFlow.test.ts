@@ -1,5 +1,5 @@
 import { captureRedactedScreenshot, shareFeedback, ShareDeps } from '../feedbackFlow';
-import { isRedacted } from '../../../shared/privacy/redaction';
+import { isRedacted, setRedacted } from '../../../shared/privacy/redaction';
 import { FEEDBACK_WHATSAPP_JID } from '../feedback.constants';
 
 const SHOT = { uri: 'file:///cache/feedback/f.png', path: '/cache/feedback/f.png', width: 10, height: 20, bytes: 99 };
@@ -30,6 +30,13 @@ describe('captureRedactedScreenshot (R4c)', () => {
     });
     expect(shot).toBeNull();
     expect(isRedacted()).toBe(false);
+  });
+
+  it('R9a: restores to the persistent Hide amounts value (stays on when it was on)', async () => {
+    setRedacted(true);
+    await captureRedactedScreenshot({ waitForFrame: async () => undefined, capture: async () => SHOT });
+    expect(isRedacted()).toBe(true);
+    setRedacted(false);
   });
 });
 

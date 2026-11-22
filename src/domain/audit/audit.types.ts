@@ -100,7 +100,10 @@ export type AuditedSettingKey =
   | 'sms_sync_start_mode'
   | 'sms_sync_start_at'
   /** R5: 'on' / 'off' only. */
-  | 'sms_auto_read';
+  | 'sms_auto_read'
+  /** R9a: 'on' / 'off' only. */
+  | 'hide_amounts'
+  | 'secure_screen';
 
 /**
  * Small typed payloads only. NEVER SMS text, SMS sender, or

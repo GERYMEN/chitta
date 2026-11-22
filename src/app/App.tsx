@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { AppProviders } from './providers/AppProviders';
 import { RootNavigator } from './navigation/RootNavigator';
@@ -11,12 +11,15 @@ import { initTourOnLaunch } from '../features/tour/tourStore';
 import { clearFeedbackScreenshots } from '../native/android/feedback/feedbackNative';
 import { useSmsReaderStore } from '../features/sms-sync/smsReaderStore';
 import { startForegroundAutoRead } from '../features/sms-sync/autoRead/autoReadRunner';
+import { initSecurityOnLaunch } from '../features/security/securitySettings';
 import { useChainSuggestions } from '../features/sms-sync/rules/chaining';
 
 export function App() {
   const isHydrated = useTransactionsStore(state => state.isHydrated);
   const hasOnboarded = useTransactionsStore(state => state.hasOnboarded);
   const hydrate = useTransactionsStore(state => state.hydrate);
+  // R9a: no screen is drawn until Hide amounts / secure screen are applied.
+  const [securityReady, setSecurityReady] = useState(false);
 
   useEffect(() => {
     // R4c: delete any feedback screenshot left from a previous run.
@@ -24,6 +27,11 @@ export function App() {
     // R5-fix C10: a headless auto-read may already have hydrated (or be
     // hydrating — hydrate is single-flight); never reload under a running sync.
     const ready = useTransactionsStore.getState().isHydrated ? Promise.resolve() : hydrate();
+    // R9a: apply saved Hide amounts + secure screen as soon as the DB is open.
+    ready
+      .then(() => initSecurityOnLaunch())
+      .catch(() => undefined)
+      .then(() => setSecurityReady(true));
     ready.then(() => {
       // R5: auto-read setting + grant (mirrored to the native receiver flag),
       // reader version, "not understood" rows. Never blocks the app.
@@ -41,7 +49,7 @@ export function App() {
   return (
     <AppProviders>
       <StatusBar barStyle="dark-content" />
-      {isHydrated ? (
+      {isHydrated && securityReady ? (
         <>
           <RootNavigator initialRouteName={hasOnboarded ? 'Tabs' : 'Onboarding'} />
           {/* R4c: one floating feedback button + the first-run tour, above every screen. */}

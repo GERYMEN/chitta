@@ -23,6 +23,13 @@ import { lastBackupLabel } from '../../backup/backupLabels';
 import { useSmsReaderStore, visibleUnparsed } from '../../sms-sync/smsReaderStore';
 import { effectiveAutoRead } from '../../sms-sync/autoRead/autoReadRules';
 import { rulesAboutLabel } from '../../sms-sync/rules/rulesLoader';
+import { useRedacted } from '../../../shared/privacy/redaction';
+import {
+  readSecuritySettings,
+  setHideAmounts,
+  setSecureScreen,
+} from '../../security/securitySettings';
+import { exportApprovedTransactionsCsv } from '../../security/exportService';
 import { MeaningRulesSection } from '../../meaning/components/MeaningRulesSection';
 
 export interface ProfileSettingsSheetProps {
@@ -83,6 +90,42 @@ export function ProfileSettingsSheet({
   const allTransactions = useTransactionsStore(state => state.transactions);
   const notUnderstoodCount = visibleUnparsed(unparsedRows, allTransactions).length;
   const [togglingAutoRead, setTogglingAutoRead] = useState(false);
+  // R9a: Hide amounts (live truth = the redaction flag), secure screen, CSV export.
+  const hideAmounts = useRedacted();
+  const [secureScreen, setSecureScreenState] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleHideAmounts(on: boolean) {
+    try {
+      await setHideAmounts(on);
+    } catch {
+      ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
+    }
+  }
+
+  async function handleSecureScreen(on: boolean) {
+    try {
+      await setSecureScreen(on);
+      setSecureScreenState(on);
+    } catch {
+      ToastAndroid.show('Could not save settings — please try again.', ToastAndroid.LONG);
+    }
+  }
+
+  async function handleExportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const outcome = await exportApprovedTransactionsCsv();
+      if (outcome.saved) {
+        ToastAndroid.show(`Exported ${outcome.rows} transactions`, ToastAndroid.SHORT);
+      }
+    } catch {
+      ToastAndroid.show('Could not export — please try again.', ToastAndroid.LONG);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleAutoRead(on: boolean) {
     setTogglingAutoRead(true);
@@ -125,6 +168,9 @@ export function ProfileSettingsSheet({
   useEffect(() => {
     if (visible) {
       useBackupStore.getState().load();
+      readSecuritySettings()
+        .then(s => setSecureScreenState(s.secureScreen))
+        .catch(() => undefined);
       // R5: the grant may have changed in system settings.
       useSmsReaderStore.getState().load().catch(() => undefined);
     }
@@ -308,6 +354,52 @@ export function ProfileSettingsSheet({
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>
       ) : null}
+      <View style={styles.activityRow} testID="settings-hide-amounts-row">
+        <View style={styles.activityIcon}>
+          <Icon name="eye-off-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>Hide amounts</Text>
+          <Text style={styles.activityCaption}>Mask every amount until you turn this off</Text>
+        </View>
+        <Switch
+          value={hideAmounts}
+          onValueChange={handleHideAmounts}
+          accessibilityLabel={`Hide amounts. ${hideAmounts ? 'On' : 'Off. Turn on'}`}
+          testID="settings-hide-amounts-switch"
+        />
+      </View>
+      <View style={styles.activityRow} testID="settings-secure-screen-row">
+        <View style={styles.activityIcon}>
+          <Icon name="shield-lock-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>Hide in recents and block screenshots</Text>
+          <Text style={styles.activityCaption}>Takes effect right away</Text>
+        </View>
+        <Switch
+          value={secureScreen}
+          onValueChange={handleSecureScreen}
+          accessibilityLabel={`Hide in recents and block screenshots. ${secureScreen ? 'On' : 'Off. Turn on'}`}
+          testID="settings-secure-screen-switch"
+        />
+      </View>
+      <Pressable
+        onPress={handleExportCsv}
+        disabled={exporting}
+        accessibilityRole="button"
+        accessibilityLabel="Export transactions (CSV)"
+        testID="settings-export-csv-row"
+        style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+        <View style={styles.activityIcon}>
+          <Icon name="file-document-outline" size={20} color={colors.onSurfaceVariant} />
+        </View>
+        <View style={styles.activityText}>
+          <Text style={styles.activityTitle}>Export transactions (CSV)</Text>
+          <Text style={styles.activityCaption}>Approved transactions, saved where you choose</Text>
+        </View>
+        <Icon name="chevron-right" size={22} color={colors.outline} />
+      </Pressable>
       <View style={styles.activityRow} testID="settings-auto-read-row">
         <View style={styles.activityIcon}>
           <Icon name="message-badge-outline" size={20} color={colors.onSurfaceVariant} />
