@@ -42,6 +42,16 @@
           android:name="android.support.FILE_PROVIDER_PATHS"
           android:resource="@xml/feedback_paths" />
       </provider>
+      <!-- R11: private in-app serving of receipt images (files/receipts/ only). Not exported, no grants, not a permission. -->
+      <provider
+        android:name=".ReceiptFileProvider"
+        android:authorities="${applicationId}.receiptprovider"
+        android:exported="false"
+        android:grantUriPermissions="false">
+        <meta-data
+          android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/receipt_paths" />
+      </provider>
       <!-- R5 auto-read: only the system can deliver SMS_RECEIVED (BROADCAST_SMS). The receiver
            never reads the message; it starts SmsAutoReadService, which runs the normal sync. -->
       <receiver

@@ -40,6 +40,7 @@ import { merchantChipLabel } from '../../insights/insightLabels';
 import { useRedacted } from '../../../shared/privacy/redaction';
 import { SplitSheet } from '../../iou/components/SplitSheet';
 import { useIouStore } from '../../iou/state/iouStore';
+import { TagsReceiptCard } from '../../tags/components/TagsReceiptCard';
 
 type DetailRoute = RouteProp<RootStackParamList, 'TransactionDetail'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -328,6 +329,11 @@ export function TransactionDetailScreen() {
           }
           merchantChip={merchantChip}
         />
+        {transaction.status !== 'pending' ? (
+          <View style={styles.tagsBlock}>
+            <TagsReceiptCard transaction={transaction} />
+          </View>
+        ) : null}
       </ScrollView>
       <View style={styles.footer}>
         <TransactionDetailActions
@@ -392,6 +398,9 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.screen,
     paddingBottom: spacing.xl * 2,
+  },
+  tagsBlock: {
+    marginTop: spacing.md,
   },
   footer: {
     paddingHorizontal: spacing.screen,

@@ -132,6 +132,10 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   iou_repayment_recorded: 'check-circle-outline',
   iou_repayment_undone: 'undo-variant',
   iou_share_deleted: 'account-remove-outline',
+  tag_added: 'tag-plus-outline',
+  tag_removed: 'tag-remove-outline',
+  receipt_added: 'receipt',
+  receipt_removed: 'receipt-text-remove-outline',
 };
 
 /** R5i (G3): the relation a chain suggestion proposes (for Activity sentences). */
@@ -827,6 +831,22 @@ export function describeActivity(
       impact = { text: 'No longer tracked', tone: 'neutral' };
       break;
     }
+    case 'tag_added':
+      sentence = 'You added a tag';
+      impact = { text: 'Amounts unchanged', tone: 'neutral' };
+      break;
+    case 'tag_removed':
+      sentence = 'You removed a tag';
+      impact = { text: 'Amounts unchanged', tone: 'neutral' };
+      break;
+    case 'receipt_added':
+      sentence = 'You attached a receipt';
+      impact = { text: 'Stays on this phone', tone: 'neutral' };
+      break;
+    case 'receipt_removed':
+      sentence = 'You removed a receipt';
+      impact = { text: 'Amounts unchanged', tone: 'neutral' };
+      break;
     default:
       sentence = 'Something changed';
   }

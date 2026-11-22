@@ -64,6 +64,7 @@ function txRow(id: string, patch: Record<string, unknown>) {
     link_kind: null,
     sms_content_hash: null,
     ref_digest: null,
+    receipt_path: null,
     created_at: '2026-10-20T10:00:00.000Z',
     updated_at: '2026-10-20T10:00:00.000Z',
     ...patch,

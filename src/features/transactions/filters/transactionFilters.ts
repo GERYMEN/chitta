@@ -4,6 +4,7 @@ import { touchesAccount } from '../../../domain/transfers/transfer.rules';
 import { normalizeMerchant } from '../../../domain/merchants/normalizeMerchant';
 import { Period, PeriodRange } from '../../../domain/periods/period.types';
 import { DEFAULT_PERIOD, isWithinRange } from '../../../domain/periods/period.rules';
+import { tagsMatchingFilter } from '../../../domain/tags/tag.rules';
 
 /** R3a adds 'transfer' (the "Transfers" chip). */
 export type TypeFilter = 'all' | 'expense' | 'income' | 'transfer';
@@ -23,6 +24,14 @@ export interface TransactionFilters {
   merchantKey: string | null;
   /** R4: display name for the merchant chip only — never matched on. */
   merchantLabel: string | null;
+  /**
+   * R11: selected tag. A custom tag's normalized key, or an auto tag
+   * ('#UPI' / '#Card' / '#Cash' / '#Bank', derived from the payment method).
+   * null = any. Persisted with the other R5j filters.
+   */
+  tagKey: string | null;
+  /** R11: display label for the tag chip only — never matched on. */
+  tagLabel: string | null;
 }
 
 export const DEFAULT_TRANSACTION_FILTERS: TransactionFilters = {
@@ -32,13 +41,18 @@ export const DEFAULT_TRANSACTION_FILTERS: TransactionFilters = {
   query: '',
   merchantKey: null,
   merchantLabel: null,
+  tagKey: null,
+  tagLabel: null,
 };
 
 type Filterable = Pick<
   Transaction,
   'type' | 'accountId' | 'categoryId' | 'merchantName' | 'note' | 'occurredAt'
 > &
-  Partial<Pick<Transaction, 'transferAccountId' | 'linkKind'>>;
+  Partial<Pick<Transaction, 'transferAccountId' | 'linkKind' | 'paymentMethod'>> & {
+    /** R11: normalized keys of the custom tags on the row (caller-supplied). */
+    customTagKeys?: ReadonlyArray<string>;
+  };
 
 /**
  * The single predicate every Transactions-list filter goes through. R4: it
@@ -59,6 +73,18 @@ export function matchesTransactionFilters(
   if (
     filters.merchantKey !== null &&
     normalizeMerchant(transaction.merchantName) !== filters.merchantKey
+  ) {
+    return false;
+  }
+
+  // R11: a custom tag on the row OR an auto tag derived from its payment method.
+  if (
+    filters.tagKey !== null &&
+    !tagsMatchingFilter(
+      { paymentMethod: transaction.paymentMethod ?? 'other' },
+      transaction.customTagKeys ?? [],
+      filters.tagKey,
+    )
   ) {
     return false;
   }
@@ -86,7 +112,8 @@ export function hasActiveFilters(filters: TransactionFilters): boolean {
     filters.accountId !== null ||
     filters.categoryId !== null ||
     filters.query.trim() !== '' ||
-    filters.merchantKey !== null
+    filters.merchantKey !== null ||
+    filters.tagKey !== null
   );
 }
 

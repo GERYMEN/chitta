@@ -123,3 +123,22 @@ describe('store wiring', () => {
     expect(useTransactionsStore.getState().transactionFilters).toMatchObject({ type: 'expense', accountId: null });
   });
 });
+
+describe('R11 tag filter persistence', () => {
+  const known = { accountIds: [], categoryIds: [], tagKeys: ['qa trip'] };
+  it('round-trips a custom tag and an auto tag; drops a custom tag that no longer exists', () => {
+    const custom = { ...DEFAULT_TRANSACTION_FILTERS, tagKey: 'qa trip', tagLabel: 'QA Trip' };
+    expect(
+      parsePersistedFilters(serializeFilters(custom, DEFAULT_PERIOD), known)?.filters,
+    ).toMatchObject({ tagKey: 'qa trip', tagLabel: 'QA Trip' });
+    const auto = { ...DEFAULT_TRANSACTION_FILTERS, tagKey: '#UPI', tagLabel: '#UPI' };
+    expect(parsePersistedFilters(serializeFilters(auto, DEFAULT_PERIOD), known)?.filters.tagKey).toBe('#UPI');
+    expect(
+      parsePersistedFilters(serializeFilters(custom, DEFAULT_PERIOD), { ...known, tagKeys: [] })?.filters.tagKey,
+    ).toBeNull();
+  });
+  it('an old stored value without a tag loads with none', () => {
+    const old = JSON.stringify({ v: 1, type: 'all', accountId: null, categoryId: null, period: DEFAULT_PERIOD });
+    expect(parsePersistedFilters(old, known)?.filters.tagKey).toBeNull();
+  });
+});

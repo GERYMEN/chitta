@@ -30,6 +30,7 @@ const transaction: Transaction = {
   linkKind: null,
   smsContentHash: null,
   refDigest: null,
+  receiptPath: null,
   createdAt: '2026-10-01T19:32:05.000Z',
   updatedAt: '2026-10-01T19:32:05.000Z',
 };
@@ -204,5 +205,17 @@ describe('R5d identity columns', () => {
     const mapped = rowToTransaction(old as never);
     expect(mapped.smsContentHash).toBeNull();
     expect(mapped.refDigest).toBeNull();
+  });
+});
+
+describe('R11 receipt_path column', () => {
+  it('round-trips the sandbox file name; an old row without the column maps to null', () => {
+    const withReceipt = { ...transaction, receiptPath: 'qa-1.jpg' };
+    const row = transactionToRow(withReceipt);
+    expect(row.receipt_path).toBe('qa-1.jpg');
+    expect(rowToTransaction(row)).toEqual(withReceipt);
+    const old = { ...row } as Record<string, unknown>;
+    delete old.receipt_path;
+    expect(rowToTransaction(old as never).receiptPath).toBeNull();
   });
 });

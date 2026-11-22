@@ -1,0 +1,125 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R11-tags-receipts (created from phase/R10-personal-ious; stack
+tip; highest migration = 15). Stay on it. Do not switch branches, commit or push.
+Executor = you (a Claude subagent). CODE + TESTS + GATES + DEVICE SCRIPT ONLY.
+NO adb / NO device run. NO commit/push/branch switch — the orchestrator owns git.
+
+PHASE R11 — Tags & receipts. In-app only, NO network, and (by the design below)
+NO new permission and NO new dependency.
+
+RECEIPT DESIGN (no permission, no dependency): attach a receipt via the ANDROID
+SYSTEM PHOTO PICKER (MediaStore.ACTION_PICK_IMAGES on API 33+, fallback
+Intent.ACTION_OPEN_DOCUMENT / GET_CONTENT image/* on older), implemented as a
+small Kotlin module like BackupModule — the picker needs NO runtime permission
+and NO gradle dependency. Copy the picked image's bytes into the app sandbox
+(files/receipts/<id>.jpg) and serve it via a FileProvider (reuse the
+FeedbackFileProvider pattern). IN-APP CAMERA CAPTURE (taking a new photo) is the
+only part that would need the CAMERA permission — it is DEFERRED (flag it; owner
+can approve later). Users can shoot with their camera app and pick from the
+gallery.
+
+VERIFIED CODE FACTS (build on these):
+- Highest migration is 15. Append migration 16 (additive, CREATE TABLE/INDEX IF
+  NOT EXISTS + ALTER TABLE ADD COLUMN). Update migrations.test.ts last-version
+  assertion + backup.tables.ts (new tables/column sinceVersion 16) + its test.
+- PaymentMethod enum (transaction.types.ts): 'bank'|'upi'|'cash'|'card'|'other'.
+  AUTO tags derive from this (see D-b).
+- Filters: src/features/transactions/filters/transactionFilters.ts (predicate) +
+  filterPersistence.ts (R5j persisted filter) — add a tag filter + persist it.
+- FileProvider: android/app/src/main/java/com/tracker/FeedbackFileProvider.kt +
+  its file_paths xml — mirror for receipts (its own cache/files subdir, not
+  exported beyond the provider). Native module/package/registration template:
+  BackupModule/Package, MainApplication.kt.
+- CSV export (R9a) columns are fixed (date,type,account,category,merchant,amount,
+  notes). Receipts are EXCLUDED from export by design — just do not add them.
+- Detail screen: src/features/transactions/components/TransactionDetailContent.tsx
+  (+ TransactionDetailScreen.tsx) — tag chips + receipt thumbnail go here.
+- Transaction delete path (so a receipt file is removed with its transaction):
+  src/features/transactions/state/transactionsStore.ts.
+- Amounts/redaction, Snackbar Undo, audit.types.ts (ids/enums/field-names only),
+  useNow as usual. CLAUDE.md token rules.
+
+READ FIRST: CLAUDE.md; ongoing/roadmap/STATE.md; ROADMAP.md R11; propsal (R11
+row, KEEP); the files named above.
+
+DEFAULTS (orchestrator; owner may override later):
+D-a Migration 16: tags(id TEXT PK, name TEXT NOT NULL, name_key TEXT NOT NULL
+    UNIQUE (normalized lower/trim), created_at TEXT) + transaction_tags(
+    transaction_id TEXT, tag_id TEXT, PRIMARY KEY(transaction_id, tag_id)) +
+    ALTER TABLE transactions ADD COLUMN receipt_path TEXT (nullable; the sandbox
+    file name only, never a content:// uri). Index transaction_tags(tag_id).
+    Backup covers tags + transaction_tags + the new column, sinceVersion 16.
+    (receipt FILES are NOT in the DB backup — note that restoring a DB backup on
+    a new device leaves receipt_path pointing at a missing file; handle a missing
+    file gracefully in the UI.)
+D-b AUTO tags are DERIVED (virtual), NOT stored: from paymentMethod ->
+    '#UPI' (upi), '#Card' (card), '#Cash' (cash), '#Bank' (bank); 'other' -> no
+    auto tag. A pure helper autoTagsFor(transaction) -> string[]. They show as
+    non-removable chips and are filterable. CUSTOM tags are user-created, stored
+    in tags/transaction_tags, add/remove on the detail screen. Tag names
+    normalized (trim + lower for the key) so '#Food' and 'food' do not duplicate;
+    display keeps the user's casing.
+D-c Detail: a tags row showing auto chips (muted, non-removable) + custom chips
+    (removable) + an "Add tag" affordance (pick existing or type new). A receipt
+    section: if receipt_path set + file exists, show a thumbnail (tap -> full
+    view); else an "Attach receipt" button opening the system photo picker.
+    "Remove receipt" deletes the sandbox file + clears receipt_path (5 s Undo
+    restores the path only if the file still exists).
+D-d Filter by tag: add a tag chip/section to the Transactions filters
+    (transactionFilters predicate: a transaction matches a selected tag if it is
+    a custom tag on it OR an auto tag it derives). Persist the selected tag with
+    the other R5j persisted filters; Reset clears it.
+D-e Receipt files live in files/receipts/ (app-internal). Served via a
+    FileProvider for the in-app viewer only. Deleting a transaction deletes its
+    receipt file. No receipt bytes in any backup, export, audit, or log.
+D-f Audit: tag_added / tag_removed (tagId + transactionId), receipt_added /
+    receipt_removed (transactionId only — never a path or bytes). Add to
+    AuditEventType + AuditMetadata + activityFeed labels.
+D-g NO new permission, NO new dependency, NO camera capture (deferred). If you
+    find any item needs one, STOP it and FLAG.
+
+TASKS (each: failing test first where unit-testable, confirm fail, then fix):
+T0 Migration 16 + src/domain/tags/ (types + rules: normalize, autoTagsFor) +
+   tag.repository (create/find-by-key/attach/detach, upsert by name_key) +
+   receipt path handling in the transactions store (set/clear + delete-with-txn)
+   + backup coverage + old-backup restore test + migrations.test bump.
+T1 Detail tag chips (D-c): auto (non-removable) + custom (add/remove), Undo,
+   normalize/dedupe, audit.
+T2 Tag filter (D-d) + persistence + predicate tests (custom + auto matching).
+T3 Receipt (D-c/D-e): Kotlin ReceiptModule (system photo picker, no permission,
+   no dep) + copy picked bytes to files/receipts/<id>.jpg + FileProvider entry +
+   detail thumbnail + full view + remove (+Undo) + delete-with-transaction +
+   graceful missing-file handling + audit. assembleDebug must pass.
+T4 Audit types + Activity copy (D-f).
+T5 Device script scripts/device/r11.sh (lib.sh style; counts only; read lib.sh +
+   a recent script + README first): install -r keeps data; add a custom QA tag on
+   a QA transaction -> chip shows; filter by that tag -> expected count; attach a
+   receipt opens the system picker (cancel it — do not add owner images); auto
+   tag chip present by payment method; cleanup QA tag. Note receipt attach is a
+   manual step. Update README.md. bash -n. Do NOT run it.
+
+PRIVACY (absolute): receipt bytes/paths never leave the sandbox (no backup/
+export/audit/log); tag names are user content (keep them out of audit metadata —
+reference tags by id). No SMS content involved. Fixtures SYNTHETIC only (QA tag
+names, QA amounts). Reference app is "chitta-ref-app". No permission/dependency/
+network; no camera capture.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx 0
+errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK; cd android && ./gradlew
+assembleDebug OK (JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/
+Contents/Home; PATH=$JAVA_HOME/bin:$PATH; ANDROID_HOME=/opt/homebrew/share/
+android-commandlinetools). Do NOT run assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R11-tags-receipts.md (migration 16 + tables/column;
+auto-vs-custom tags; the no-permission photo-picker receipt design + where files
+live + missing-file-after-restore note; filter + persistence; confirm NO
+permission / NO dependency / camera deferred; tests added; decisions; known
+limits; how to run r11.sh). Leak-scan report/diff/new files (shell) for phone
+numbers, real UPI ids, non-XX account numbers, personal names. Do not commit.
+
+REPLY ONLY with: gates yes/no with test counts; T0-T5 done / not done; migration
+number; auto-tag derivation; the receipt picker approach + confirm NO permission
++ NO dependency + camera deferred; where receipt files live + backup/export
+handling; tests added; decisions; anything surprising. Do not paste file contents.

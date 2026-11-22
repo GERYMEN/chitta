@@ -309,8 +309,7 @@ describeSql('backup repository (real SQLite)', () => {
   });
 
   it('N-1 → N specifically (R10): a v14 backup has no people / iou_shares; both restore empty, other tables intact', async () => {
-    const version = CURRENT_SCHEMA_VERSION - 1;
-    expect(version).toBe(14);
+    const version = 14;
     const tables = rowsAt(version);
     expect(tables.people).toBeUndefined();
     expect(tables.iou_shares).toBeUndefined();
@@ -324,6 +323,41 @@ describeSql('backup repository (real SQLite)', () => {
     expect(target.rows('people')).toEqual([]);
     expect(target.rows('iou_shares')).toEqual([]);
     expect(target.rows('budgets')).toEqual(FULL_BACKUP_ROWS.budgets);
+  });
+
+  it('N-1 → N specifically (R11): a v15 backup has no tags / transaction_tags / receipt_path; they restore empty, other tables intact', async () => {
+    const version = CURRENT_SCHEMA_VERSION - 1;
+    expect(version).toBe(15);
+    const tables = rowsAt(version);
+    expect(tables.tags).toBeUndefined();
+    expect(tables.transaction_tags).toBeUndefined();
+    expect(Object.keys(tables.transactions[0])).not.toContain('receipt_path');
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: version, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('transactions')).toHaveLength(FULL_BACKUP_ROWS.transactions.length);
+    expect((target.rows('transactions') as Array<Record<string, unknown>>).every(r => r.receipt_path === null)).toBe(true);
+    expect(target.rows('tags')).toEqual([]);
+    expect(target.rows('transaction_tags')).toEqual([]);
+    expect(target.rows('people')).toEqual(FULL_BACKUP_ROWS.people);
+  });
+
+  it('R11: a current backup carries tags + transaction_tags + receipt_path exactly', async () => {
+    const tables = rowsAt(CURRENT_SCHEMA_VERSION);
+    expect(tables.tags.length).toBeGreaterThan(0);
+    const payload = parseBackupJson(
+      JSON.stringify({ format: 1, app: APP, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: NOW.toISOString(), tables }),
+      CURRENT_SCHEMA_VERSION,
+    );
+    const target = freshDb();
+    await restoreInto(target, payload);
+    expect(target.rows('tags')).toEqual(FULL_BACKUP_ROWS.tags);
+    expect(target.rows('transaction_tags')).toEqual(FULL_BACKUP_ROWS.transaction_tags);
+    const withReceipt = (target.rows('transactions') as Array<Record<string, unknown>>).filter(r => r.receipt_path);
+    expect(withReceipt.map(r => r.receipt_path)).toEqual(['qa-t2.jpg']);
   });
 
   it('R10: a current backup carries people + iou_shares rows exactly', async () => {

@@ -46,10 +46,11 @@ import {
 } from '../../insights/insightLabels';
 import { redactLast4, redactText, useRedacted } from '../../../shared/privacy/redaction';
 import { TourTarget } from '../../tour/components/TourTarget';
+import { ALL_AUTO_TAGS } from '../../../domain/tags/tag.rules';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type Picker = 'account' | 'category' | null;
+type Picker = 'account' | 'category' | 'tag' | null;
 
 export function TransactionsScreen() {
   const navigation = useNavigation<Nav>();
@@ -64,6 +65,8 @@ export function TransactionsScreen() {
   const filters = useTransactionsStore(state => state.transactionFilters);
   const setFilters = useTransactionsStore(state => state.setTransactionFilters);
   const resetFilters = useTransactionsStore(state => state.resetTransactionFilters);
+  const customTags = useTransactionsStore(state => state.tags);
+  const tagLinks = useTransactionsStore(state => state.tagLinks);
   const [picker, setPicker] = useState<Picker>(null);
   // R4: one injected now (device clock, refreshed on focus) feeds the period
   // range AND the TODAY/YESTERDAY headers (fixes B1); the period is shared
@@ -74,11 +77,24 @@ export function TransactionsScreen() {
   // One pure predicate (transactionFilters.ts) drives the list, the chip
   // counts and the totals, so all three always agree. R4: it includes the
   // selected period.
+  // R11: a custom-tag filter needs each row's custom tag keys; attach them only
+  // while a tag filter is on (auto tags derive from the payment method).
+  const source = useMemo(() => {
+    if (filters.tagKey === null) return approved;
+    const keyById = new Map(customTags.map(tag => [tag.id, tag.nameKey]));
+    return approved.map(t => ({
+      ...t,
+      customTagKeys: (tagLinks[t.id] ?? []).flatMap(id => {
+        const key = keyById.get(id);
+        return key ? [key] : [];
+      }),
+    }));
+  }, [approved, filters.tagKey, customTags, tagLinks]);
   const filtered = useMemo(
-    () => filterTransactions(approved, filters, range),
-    [approved, filters, range],
+    () => filterTransactions(source, filters, range),
+    [source, filters, range],
   );
-  const counts = useMemo(() => typeCounts(approved, filters, range), [approved, filters, range]);
+  const counts = useMemo(() => typeCounts(source, filters, range), [source, filters, range]);
   const inPeriodCount = useMemo(
     () => filterTransactions(approved, DEFAULT_TRANSACTION_FILTERS, range).length,
     [approved, range],
@@ -225,6 +241,13 @@ export function TransactionsScreen() {
                 active={filters.categoryId !== null}
                 onPress={() => setPicker('category')}
               />
+              <FilterChip
+                testID="filter-tag"
+                label={filters.tagLabel ? redactText(filters.tagLabel) : 'Tag'}
+                icon="tag-outline"
+                active={filters.tagKey !== null}
+                onPress={() => setPicker('tag')}
+              />
               {canReset ? (
                 <FilterChip
                   testID="filter-reset"
@@ -347,6 +370,41 @@ export function TransactionsScreen() {
             selected={filters.categoryId === category.id}
             onPress={() => {
               setFilters({ categoryId: category.id });
+              setPicker(null);
+            }}
+          />
+        ))}
+      </BottomSheet>
+
+      <BottomSheet visible={picker === 'tag'} onClose={() => setPicker(null)}>
+        <Text style={styles.sheetTitle}>Filter by tag</Text>
+        <PickerOption
+          label="All tags"
+          selected={filters.tagKey === null}
+          onPress={() => {
+            setFilters({ tagKey: null, tagLabel: null });
+            setPicker(null);
+          }}
+        />
+        {ALL_AUTO_TAGS.map(tag => (
+          <PickerOption
+            key={tag}
+            label={tag}
+            selected={filters.tagKey === tag}
+            onPress={() => {
+              setFilters({ tagKey: tag, tagLabel: tag });
+              setPicker(null);
+            }}
+          />
+        ))}
+        {customTags.length > 0 ? <Text style={styles.sheetHeading}>Your tags</Text> : null}
+        {customTags.map(tag => (
+          <PickerOption
+            key={tag.id}
+            label={`#${redactText(tag.name)}`}
+            selected={filters.tagKey === tag.nameKey}
+            onPress={() => {
+              setFilters({ tagKey: tag.nameKey, tagLabel: `#${tag.name}` });
               setPicker(null);
             }}
           />

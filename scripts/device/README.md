@@ -436,6 +436,37 @@ the QA expense) is also yours. It never prints a name or an amount.
 | R9 | **You** delete the QA data | no IOU tile left |
 | R10 | Crash check since the start | 0 FATAL/ANR |
 
+## R11 — Tags & receipts
+
+```
+scripts/device/r11.sh [--skip-install]
+```
+
+Owner-assisted, counts of fixed labels only. The script never types or saves
+anything; **you** create SYNTHETIC QA data (a small UPI QA expense, a made-up
+tag). It checks: no CAMERA permission is declared, the detail Tags row, the
+derived auto tag chip (`#UPI`/`#Card`/`#Cash`/`#Bank`), the custom tag chip,
+the Transactions tag filter (subtitle `Showing N of M`), its persistence across
+a restart and Reset. **Receipt attach is a manual step**: the script only has
+you open the system photo picker and **cancel** it (never pick a real photo);
+full attach / thumbnail / Remove + Undo is a manual check with a throwaway
+image. No permission dialog may appear.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Permission check | CAMERA not declared |
+| R3 | **You** add a QA UPI expense, open it | "Add tag" shown |
+| R4 | Auto tag | `#UPI` chip present |
+| R5 | **You** add a QA tag | custom chip "Tag ... Remove" |
+| R6 | **You** filter by that tag | `Showing 1 of N settled` |
+| R7 | **You** restart the app | filter still applied (SKIP if reset) |
+| R8 | **You** tap Reset | unfiltered subtitle back |
+| R9 | **You** open the photo picker and cancel | Attach receipt still shown |
+| R10 | **You** clean up the QA tag + expense | steps shown |
+| R11 | Crash check since the start | 0 FATAL/ANR |
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

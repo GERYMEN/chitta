@@ -34,6 +34,7 @@ export function rowToTransaction(row: SqlRow): Transaction {
     linkKind: asNullableString(row.link_kind) as Transaction['linkKind'],
     smsContentHash: asNullableString(row.sms_content_hash),
     refDigest: asNullableString(row.ref_digest),
+    receiptPath: asNullableString(row.receipt_path),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -65,6 +66,7 @@ export function transactionToRow(transaction: Transaction): SqlWriteRow {
     link_kind: transaction.linkKind ?? null,
     sms_content_hash: transaction.smsContentHash ?? null,
     ref_digest: transaction.refDigest ?? null,
+    receipt_path: transaction.receiptPath ?? null,
     created_at: transaction.createdAt,
     updated_at: transaction.updatedAt,
   };

@@ -40,6 +40,7 @@ const tx = (id: string, patch: BackupRow): BackupRow => ({
   link_kind: null,
   sms_content_hash: null,
   ref_digest: null,
+  receipt_path: null,
   ...patch,
 });
 
@@ -65,6 +66,7 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       // R5d: synthetic salted hashes (not derived from any SMS).
       sms_content_hash: '0123456789abcdef0123456789abcdef',
       ref_digest: 'fedcba9876543210fedcba9876543210',
+      receipt_path: 'qa-t2.jpg',
     }),
     tx('qa-t3', { type: 'transfer', category_id: 'cat-transfer', transfer_account_id: 'acc-qa-2', bulk_batch_id: 'qa-batch' }),
     tx('qa-t4', { type: 'income', status: 'rejected', linked_transaction_id: 'qa-t3', link_kind: 'transfer_twin', source_type: 'sms', source_reference_hash: 'qa-hash-2', confidence_score: 92 }),
@@ -198,6 +200,9 @@ export const FULL_BACKUP_ROWS: BackupTables = {
       repayment_transaction_id: null,
     },
   ],
+  // R11: a synthetic custom tag + one link.
+  tags: [{ id: 'qa-tag-1', name: 'QA Tag', name_key: 'qa tag', created_at: T1 }],
+  transaction_tags: [{ transaction_id: 'qa-t1', tag_id: 'qa-tag-1' }],
 };
 
 /** The fixture as a database at `version` could hold it (tables + columns). */

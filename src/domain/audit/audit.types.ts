@@ -98,7 +98,16 @@ export type AuditEventType =
   | 'iou_share_added'
   | 'iou_repayment_recorded'
   | 'iou_repayment_undone'
-  | 'iou_share_deleted';
+  | 'iou_share_deleted'
+  /**
+   * R11 (D-f): a custom tag added to / removed from a transaction (tag +
+   * transaction ids only — a tag NAME is user content), a receipt attached /
+   * removed (transaction id only — never a path or bytes).
+   */
+  | 'tag_added'
+  | 'tag_removed'
+  | 'receipt_added'
+  | 'receipt_removed';
 
 export type AuditActor = 'system' | 'user';
 
@@ -315,7 +324,9 @@ export type AuditMetadata =
       personId: string;
       direction: 'lent' | 'borrowed';
       amountMinor: number;
-    };
+    }
+  | { kind: 'tag_added' | 'tag_removed'; tagId: string; transactionId: string }
+  | { kind: 'receipt_added' | 'receipt_removed'; transactionId: string };
 
 /** R5: counts of one reader run. */
 export interface SmsRunCounts {

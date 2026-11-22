@@ -236,6 +236,16 @@ export function sanitizeAuditMetadata(
         direction: metadata.direction === 'borrowed' ? 'borrowed' : 'lent',
         amountMinor: Number(metadata.amountMinor) || 0,
       };
+    case 'tag_added':
+    case 'tag_removed':
+      return {
+        kind: metadata.kind,
+        tagId: String(metadata.tagId),
+        transactionId: String(metadata.transactionId),
+      };
+    case 'receipt_added':
+    case 'receipt_removed':
+      return { kind: metadata.kind, transactionId: String(metadata.transactionId) };
     default:
       return null;
   }

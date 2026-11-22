@@ -59,6 +59,12 @@ export interface Transaction {
   smsContentHash?: string | null;
   /** R5d: salted SHA-256 digest of the UPI/IMPS/NEFT reference (32 hex), never the ref. */
   refDigest?: string | null;
+  /**
+   * R11: sandbox file name of the attached receipt (files/receipts/<name>) —
+   * never a content:// uri, never in a backup/export/audit. May point at a
+   * missing file (restore on a new phone): the UI handles that.
+   */
+  receiptPath?: string | null;
   createdAt: string;
   updatedAt: string;
 }

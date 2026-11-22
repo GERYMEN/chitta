@@ -80,8 +80,8 @@ describe('runMigrations versioning', () => {
     // categories.archived_at / color from migration 5 + 3 transactions
     // columns from migration 6 + 4 identity columns from migration 9 (R5d) +
     // accounts.credit_limit_minor from migration 11 (R5b) + 3 accounts snapshot
-    // columns from migration 14 (R6).
-    expect(alterCounts.size).toBe(18);
+    // columns from migration 14 (R6) + transactions.receipt_path from migration 16 (R11).
+    expect(alterCounts.size).toBe(19);
     for (const count of alterCounts.values()) {
       expect(count).toBe(1);
     }
@@ -390,7 +390,35 @@ describe('runMigrations versioning', () => {
     expect(joined).toMatch(/ix_iou_shares_settled/);
     expect(joined).not.toMatch(/\bUPDATE\b|\bALTER\b|\bDELETE\b|\bDROP\b/);
     expect(joined).not.toMatch(/\bbody\b|\baddress\b|\bsender\b|\bpreview\b|\bphone\b|\bcontact/i);
-    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(15);
+    expect(NUMBERED_MIGRATIONS.some((m: { version: number }) => m.version === 15)).toBe(true);
+  });
+
+  it('R11: migration 16 adds tags + transaction_tags + receipt_path (additive) and is the last migration', () => {
+    const { NUMBERED_MIGRATIONS } = require('../migrations');
+    const m16 = NUMBERED_MIGRATIONS.find((m: { version: number }) => m.version === 16);
+    expect(m16).toBeDefined();
+    const joined = m16.statements
+      .map((st: string | { sql: string }) => (typeof st === 'string' ? st : st.sql))
+      .join('\n');
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS tags/);
+    expect(joined).toMatch(/name_key TEXT NOT NULL UNIQUE/);
+    expect(joined).toMatch(/CREATE TABLE IF NOT EXISTS transaction_tags/);
+    expect(joined).toMatch(/PRIMARY KEY \(transaction_id, tag_id\)/);
+    expect(joined).toMatch(/ix_transaction_tags_tag/);
+    expect(joined).toMatch(/ALTER TABLE transactions ADD COLUMN receipt_path TEXT/);
+    expect(joined).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b/);
+    expect(NUMBERED_MIGRATIONS[NUMBERED_MIGRATIONS.length - 1].version).toBe(16);
+  });
+
+  it('R11: runs migration 16 exactly once and records it', async () => {
+    const { db, appliedVersions, executed } = makeFakeDb();
+    const { open } = require('@op-engineering/op-sqlite');
+    open.mockReturnValue(db as unknown as DB);
+    const { runMigrations } = require('../connection');
+    await runMigrations();
+    await runMigrations();
+    expect(executed.filter(sql => /CREATE TABLE IF NOT EXISTS tags/.test(sql))).toHaveLength(1);
+    expect(appliedVersions.has(16)).toBe(true);
   });
 
   it('R10: runs migration 15 exactly once and records it', async () => {

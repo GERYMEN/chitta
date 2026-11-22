@@ -95,6 +95,8 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       // R5d: salted identity hashes (no SMS content) — restored rows keep deduping.
       sms_content_hash: 9,
       ref_digest: 9,
+      // R11: sandbox receipt file NAME only (the image is never backed up).
+      receipt_path: 16,
     },
   },
   {
@@ -283,6 +285,18 @@ export const BACKUP_TABLES: ReadonlyArray<BackupTableSpec> = [
       settled_at: 15,
       repayment_transaction_id: 15,
     },
+  },
+  {
+    // R11: custom tags (user text; auto tags are derived, never stored).
+    name: 'tags',
+    sinceVersion: 16,
+    columns: { id: 16, name: 16, name_key: 16, created_at: 16 },
+  },
+  {
+    // R11: tag <-> transaction links. Restores after both parents.
+    name: 'transaction_tags',
+    sinceVersion: 16,
+    columns: { transaction_id: 16, tag_id: 16 },
   },
 ];
 

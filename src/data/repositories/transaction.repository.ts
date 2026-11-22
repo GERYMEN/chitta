@@ -39,6 +39,7 @@ const COLUMNS = [
   'link_kind',
   'sms_content_hash',
   'ref_digest',
+  'receipt_path',
   'created_at',
   'updated_at',
 ] as const;
@@ -88,6 +89,7 @@ export function buildTransaction(input: CreateTransactionInput): Transaction {
     linkKind: input.linkKind ?? null,
     smsContentHash: input.smsContentHash ?? null,
     refDigest: input.refDigest ?? null,
+    receiptPath: input.receiptPath ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -178,6 +180,8 @@ async function remove(
     await tx.execute('DELETE FROM transactions WHERE id = ?', [id]);
     // R5e T4: its money meaning suggestion goes with it.
     await tx.execute('DELETE FROM money_meaning_suggestions WHERE transaction_id = ?', [id]);
+    // R11: its tag links go with it (the tags themselves stay reusable).
+    await tx.execute('DELETE FROM transaction_tags WHERE transaction_id = ?', [id]);
     // R5-fix C4: a deleted SMS item leaves its reference hash (no content) so
     // a re-scan / the 1-day overlap never recreates it.
     if (smsTombstone) {
@@ -255,7 +259,30 @@ async function setContentHashes(
   });
 }
 
+/**
+ * R11: set / clear the receipt file name (sandbox name only, never a path or
+ * uri) + 'receipt_added' / 'receipt_removed' audit (transaction id only), in
+ * ONE transaction. No updated_at change: a receipt is not a money edit.
+ */
+async function setReceiptPath(
+  id: string,
+  accountId: string | null,
+  receiptPath: string | null,
+): Promise<void> {
+  await getDatabase().transaction(async tx => {
+    await tx.execute('UPDATE transactions SET receipt_path = ? WHERE id = ?', [receiptPath, id]);
+    await auditRepository.insert(tx, {
+      eventType: receiptPath ? 'receipt_added' : 'receipt_removed',
+      actor: 'user',
+      metadata: { kind: receiptPath ? 'receipt_added' : 'receipt_removed', transactionId: id },
+      transactionId: id,
+      accountId,
+    });
+  });
+}
+
 export const transactionRepository = {
+  setReceiptPath,
   listAll,
   getById,
   create,

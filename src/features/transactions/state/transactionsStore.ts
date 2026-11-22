@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { tagRepository } from '../../../data/repositories/tag.repository';
+import { Tag } from '../../../domain/tags/tag.types';
+import { deleteReceiptFile } from '../../../native/android/receipts/receiptNative';
 import { Transaction, TransactionStatus } from '../../../domain/transactions/transaction.types';
 import { Account } from '../../../domain/accounts/account.types';
 import { Category, MerchantRule } from '../../../domain/categories/category.types';
@@ -236,6 +239,14 @@ interface TransactionsState {
   approve: (id: string, auto?: AutoApproval) => Promise<void>;
   reject: (id: string) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  /** R11: custom tags (user content) + transactionId -> tag ids. Auto tags are derived, not here. */
+  tags: Tag[];
+  tagLinks: Record<string, string[]>;
+  /** R11: attach a custom tag by name (normalized, deduped). Returns the tag, or null for an invalid name. */
+  addTagToTransaction: (transactionId: string, name: string) => Promise<Tag | null>;
+  removeTagFromTransaction: (transactionId: string, tagId: string) => Promise<boolean>;
+  /** R11: set (file name) / clear (null) the receipt; audited. Does not touch the file. */
+  setReceiptPath: (transactionId: string, receiptPath: string | null) => Promise<boolean>;
   refresh: () => Promise<void>;
   addTransaction: (input: CreateTransactionInput) => Promise<Transaction>;
   /** R3b.1: false (no write) when the edit breaks a link (see linkedEditError). */
@@ -396,6 +407,8 @@ async function loadAll() {
     duplicateDismissals,
     meaningRules,
     meaningSuggestions,
+    tags,
+    tagLinks,
   ] = await Promise.all([
     transactionRepository.listAll(),
     accountRepository.listAllAccounts(),
@@ -405,6 +418,9 @@ async function loadAll() {
     linkRepository.listDuplicateDismissals(),
     meaningRepository.listRules(),
     meaningRepository.listSuggestions(),
+    // R11: tags must never block the app from opening.
+    tagRepository.listTags().catch((): Tag[] => []),
+    tagRepository.listLinks().catch((): Record<string, string[]> => ({})),
   ]);
   return {
     transactions,
@@ -415,6 +431,8 @@ async function loadAll() {
     duplicateDismissals,
     meaningRules,
     meaningSuggestions,
+    tags,
+    tagLinks,
   };
 }
 
@@ -528,6 +546,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
   duplicateDismissals: [],
   meaningRules: [],
   meaningSuggestions: [],
+  tags: [],
+  tagLinks: {},
   isHydrated: false,
   hasOnboarded: false,
   userName: '',
@@ -597,6 +617,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
     const restored = parsePersistedFilters(filtersValue, {
       accountIds: data.accounts.map(a => a.id),
       categoryIds: data.categories.map(c => c.id),
+      tagKeys: data.tags.map(t => t.nameKey),
     });
     noteLoadedFilters(filtersValue);
     set({
@@ -840,6 +861,47 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
       .catch(() => get().refresh());
   },
 
+  addTagToTransaction: async (transactionId, name) => {
+    const txn = get().transactions.find(t => t.id === transactionId);
+    if (!txn) return null;
+    const result = await tagRepository.attach(transactionId, txn.accountId, name);
+    if (!result) return null;
+    if (result.added) {
+      set(state => ({
+        tags: state.tags.some(t => t.id === result.tag.id) ? state.tags : [...state.tags, result.tag],
+        tagLinks: {
+          ...state.tagLinks,
+          [transactionId]: [...(state.tagLinks[transactionId] ?? []), result.tag.id],
+        },
+      }));
+    }
+    return result.tag;
+  },
+
+  removeTagFromTransaction: async (transactionId, tagId) => {
+    const txn = get().transactions.find(t => t.id === transactionId);
+    const removed = await tagRepository.detach(transactionId, txn?.accountId ?? null, tagId);
+    if (removed) {
+      set(state => ({
+        tagLinks: {
+          ...state.tagLinks,
+          [transactionId]: (state.tagLinks[transactionId] ?? []).filter(id => id !== tagId),
+        },
+      }));
+    }
+    return removed;
+  },
+
+  setReceiptPath: async (transactionId, receiptPath) => {
+    const txn = get().transactions.find(t => t.id === transactionId);
+    if (!txn) return false;
+    await transactionRepository.setReceiptPath(transactionId, txn.accountId, receiptPath);
+    set(state => ({
+      transactions: state.transactions.map(t => (t.id === transactionId ? { ...t, receiptPath } : t)),
+    }));
+    return true;
+  },
+
   deleteTransaction: async id => {
     const current =
       get().transactions.find(t => t.id === id) ?? (await transactionRepository.getById(id));
@@ -864,6 +926,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
       smsTombstoneFor(current),
     );
     // R5b (D-e): deleting a transaction linked to a bill reopens that bill.
+    // R11 (D-e): its receipt file goes with it (the tag links went in the repository).
+    if (current.receiptPath) await deleteReceiptFile(current.receiptPath);
     await billRepository
       .reopenByPaidTransaction(id, current.amountMinor)
       .catch(() => undefined);

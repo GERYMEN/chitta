@@ -378,6 +378,28 @@ export const NUMBERED_MIGRATIONS: NumberedMigration[] = [
       'CREATE INDEX IF NOT EXISTS ix_iou_shares_settled ON iou_shares(settled_at)',
     ],
   },
+  {
+    // R11: custom tags + a receipt file name on a transaction. Additive. Auto
+    // tags (#UPI/#Card/#Cash/#Bank) are derived from payment_method, never
+    // stored. receipt_path is the sandbox file name only (files/receipts/),
+    // never a content:// uri; the image bytes are NOT in any backup.
+    version: 16,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_key TEXT NOT NULL UNIQUE,
+    created_at TEXT
+  )`,
+      `CREATE TABLE IF NOT EXISTS transaction_tags (
+    transaction_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    PRIMARY KEY (transaction_id, tag_id)
+  )`,
+      'CREATE INDEX IF NOT EXISTS ix_transaction_tags_tag ON transaction_tags(tag_id)',
+      'ALTER TABLE transactions ADD COLUMN receipt_path TEXT',
+    ],
+  },
 ];
 
 async function isApplied(database: DB, version: number): Promise<boolean> {
