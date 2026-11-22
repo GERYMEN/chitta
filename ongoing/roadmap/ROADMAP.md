@@ -16,14 +16,58 @@ first, then categories, then insights built on correct data, then extras.
   (only com.tracker, abort on failed foreground check, filtered dumps,
   synthetic "QA-…" data only, never change owner settings/accounts, no db
   access, no screenshots, no Sync-SMS output beyond counts).
-- New DB changes = new numbered migration (current last = 3). Never edit
+- New DB changes = new numbered migration (current last = 16). Never edit
   old migrations. Money stays integer paise. Raw SMS never stored.
 - New native dependency or new Android permission = ask user first.
 - After each phase passes: user reviews, then commit + push (gerymen).
 - From R3a on: one branch per phase (`phase/<id>-<name>`), each created
   from the previous phase's branch, not from main (user, 2026-10-30).
 
-## Overview
+## Status (as-built — reconciled 2026-11-23)
+
+All of R1–R12 are code-complete. The branch-per-phase stack lives on origin
+(main is still at 0cb5898, pending a merge). Highest migration = 16. For the
+as-built detail of each phase see the reports (`R*-*.md`) and the live log
+`STATE.md`; the per-phase sections lower in THIS file are the ORIGINAL plan and
+are kept for history, not as current truth.
+
+Numbering note: the plan's R5 (Budgets) and R6 (Balance) were renumbered during
+the gap-proposal review (see `propsal new version with gap.md`). As-built:
+
+| Phase | Name | Status |
+|---|---|---|
+| R1 | Trust foundation | done · device-verified |
+| R2 / R2b | Smart categories · new-accounts & pending | done |
+| R3a / R3b | Transfers · refund + duplicate | done |
+| R4 / R4b / R4c / R4d / R4e | Insights · SMS-sync-start · feedback+tour · release APK · backup+donut | done |
+| R5 / R5d / R5g | SMS reading v2 · identity+aliases · rules engine | done · device-verified |
+| R5e | Money meaning | done · device pass pending (no script yet) |
+| R5h | Every sync → Pending | done |
+| R5b | Bills & dues | done · device crash found+fixed (AddBill) |
+| R5i | Chain review + message types | done |
+| R5c | Budgets (migration 13) | done · QA-1 smoke pass |
+| R6 | Balance reconciliation (migration 14) | done · QA-1 smoke pass |
+| R8a | Recurring + Upcoming (no notifications) | done |
+| R5j | Polish (G7 + G9; absorbs R7 leftovers) | done |
+| R9a | Security no-dep: Hide-amounts/Private mode, FLAG_SECURE, CSV export | done · QA-1 smoke pass |
+| R9b | App lock (androidx.biometric) + Private-mode relabel | done · QA-1 smoke pass |
+| R8b | Notifications (POST_NOTIFICATIONS + AlarmManager, inexact) | done · QA-1 smoke pass |
+| R10 | Personal IOUs (migration 15) | done · QA-1 smoke pass |
+| R11 | Tags & receipts (migration 16) | done · crash-on-launch found+fixed |
+| R12 | Dark theme (System/Light/Dark) | done · contrast needs a device eyeball |
+| R7 | SMS coverage | DROPPED — leftovers merged into R5j |
+| R13 | Loan accounts | OPTIONAL — not built |
+| — | Savings Goals | OPTIONAL — not built |
+
+QA-1 device sweep (2026-11-23): app launches on real data, migrations 13→16
+clean; all feature screens open without crashing; two real bugs found + fixed
+(R11 ReceiptFileProvider crash-on-launch; R5c budget-audit metadata). Still
+owed: end-to-end write-flow + dark-contrast manual pass, R5e device script,
+and the 13-branch merge to main.
+
+---
+
+## Overview (original plan — historical)
 
 | Phase | Name | Features | Effort | Depends on |
 |---|---|---|---|---|
@@ -252,10 +296,18 @@ Device: check each reachable screen in both modes.
 
 ---
 
-## Open decisions for the user
+## Open decisions for the user — RESOLVED
 
-1. Pending screen Delete: A (add Delete) or B (remove dead code).
-2. R3: one phase or split into R3a/R3b.
-3. Charts (R4): plain Views (no dependency) or add react-native-svg.
-4. R8/R9/R11 dependencies and new permissions — approve when we reach them.
-5. Order after R5 (default: R6, R7, R9, R8, R10, R11, R12).
+1. Pending screen Delete → B (dead code removed; folded into R1). DONE.
+2. R3 → split into R3a (transfers) + R3b (refund + duplicate). DONE.
+3. Charts (R4) → plain Views; react-native-svg later approved for the R4e donut
+   (Home only; Insights keeps bars). DONE.
+4. Dependencies / permissions approved as reached: react-native-svg (R4e),
+   androidx.biometric (R9b), POST_NOTIFICATIONS + RECEIVE_BOOT_COMPLETED (R8b).
+   Receipts (R11) use the system photo picker — no dependency, no permission;
+   in-app camera capture deferred. No OTA rules download (stays offline).
+5. Order after R5 was reworked by the gap proposal: R5i → R5b → R6 → R5c → R8a
+   → R5j → R9a → R9b → R8b → R10 → R11 → R12. DONE. R7 dropped.
+
+Still open: merge the branch stack to main; R5e device script + pass;
+end-to-end write-flow + dark-contrast manual device pass; R13/Goals (optional).
