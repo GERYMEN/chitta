@@ -230,6 +230,11 @@ export async function ignoreSuggestionGroup(runId: string, key: string): Promise
   return true;
 }
 
+/** R5j "Un-ignore": the key's SMS are handled again from the next sync. */
+export async function unignoreAccount(key: AccountKey): Promise<void> {
+  await useTransactionsStore.getState().unignoreSuggestion(key);
+}
+
 /**
  * Snackbar after Add/Link: "N transactions added to Pending — VIEW". R5: a
  * link passes `onUndo`, which takes the action slot instead ("UNDO").

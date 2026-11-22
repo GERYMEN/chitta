@@ -51,6 +51,8 @@ export interface ProfileSettingsSheetProps {
   onRescan?: () => void;
   /** R5: "Messages not understood". */
   onOpenNotUnderstood?: () => void;
+  /** R5j: "Hidden accounts" (ignored new accounts, with Un-ignore). */
+  onOpenIgnoredAccounts?: () => void;
 }
 
 /**
@@ -71,6 +73,7 @@ export function ProfileSettingsSheet({
   onOpenRestore,
   onRescan,
   onOpenNotUnderstood,
+  onOpenIgnoredAccounts,
 }: ProfileSettingsSheetProps) {
   // R5: auto-read toggle + not-understood count (counts only).
   const autoReadSetting = useSmsReaderStore(state => state.autoReadSetting);
@@ -363,6 +366,23 @@ export function ProfileSettingsSheet({
             <Text style={styles.activityCaption}>
               {notUnderstoodCount === 0 ? 'None right now' : `${notUnderstoodCount} to review`}
             </Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.outline} />
+        </Pressable>
+      ) : null}
+      {onOpenIgnoredAccounts ? (
+        <Pressable
+          onPress={onOpenIgnoredAccounts}
+          accessibilityRole="button"
+          accessibilityLabel="Hidden accounts"
+          testID="settings-hidden-accounts-row"
+          style={({ pressed }) => [styles.activityRow, pressed && styles.pressed]}>
+          <View style={styles.activityIcon}>
+            <Icon name="eye-off-outline" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>Hidden accounts</Text>
+            <Text style={styles.activityCaption}>Accounts you chose to ignore · Un-ignore</Text>
           </View>
           <Icon name="chevron-right" size={22} color={colors.outline} />
         </Pressable>

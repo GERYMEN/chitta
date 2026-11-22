@@ -148,7 +148,7 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
         return { rows: [], rowsAffected: 1 };
       }
 
-      m = /^SELECT \* FROM (\w+) WHERE (\w+) = \?$/i.exec(sql);
+      m = /^SELECT (?:\*|value) FROM (\w+) WHERE (\w+) = \?$/i.exec(sql);
       if (m) {
         const col = m[2];
         const rows = Array.from(table(m[1]).values()).filter(

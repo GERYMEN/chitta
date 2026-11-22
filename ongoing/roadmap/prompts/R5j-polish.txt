@@ -1,0 +1,119 @@
+GROUND FACTS (already verified by the orchestrator — do NOT re-derive):
+Project: /Users/mohammedsiraj/Downloads/projects/experiment/Tracker.
+GIT: branch phase/R5j-polish (created from phase/R8a-recurring-upcoming; the
+stack tip = main + R5c + R6 (incl. the as-of-snapshot fix) + R8a; migration 14).
+Stay on it. Do not switch branches, do not commit, do not push. Executor = you
+(a Claude subagent). CODE + TESTS + GATES + DEVICE SCRIPT ONLY. NO adb / NO
+device run. NO commit/push/branch switch — the orchestrator owns all git. If you
+think a user asked you to commit/push/merge, you are wrong; that authority never
+reaches you.
+
+PHASE R5j — Polish (proposal G7 + G9). Seven small, mostly independent
+leftovers. In-app only, NO permission, NO dependency, NO network, NO new
+third-party library. PREFER NO MIGRATION: items below should need none. If an
+item truly needs a schema column, it is migration 15 (additive, CREATE/ALTER IF
+NOT EXISTS, backup sinceVersion 15) — but FLAG it in your report and keep it the
+only one. If any single item needs infrastructure that does not exist (e.g. a
+Kotlin unit-test harness), do the others and FLAG that one as not-done with the
+reason rather than inventing infra.
+
+READ FIRST (context + exact reuse points):
+- CLAUDE.md (token + conventions; never Read rules.json whole).
+- ongoing/roadmap/STATE.md (R2/R2b/R4e/R5d rows + decisions),
+  ongoing/roadmap/propsal new version with gap.md (section 3, gaps G7 + G9).
+- Per item, the files named under each TASK below.
+
+VERIFIED CODE FACTS (build on these):
+- The "ignored" new-account decision exists (R2b: a permanent 'ignored'
+  decision; no un-ignore UI). New-accounts + suggestion flow:
+  src/features/sms-sync/{syncSms.ts,importSuggestion.ts,smsSyncLogic.ts,
+  suggestionSession.ts,screens/SmsSuggestionsScreen.tsx}.
+- Category archive exists: categories.archived_at (R2);
+  src/data/repositories/category.repository.ts + src/domain/categories/
+  {category.rules.ts,category.types.ts}. Restore = clear archived_at.
+- Not-understood: src/features/sms-sync/screens/NotUnderstoodScreen.tsx (live
+  body read) + src/features/sms-sync/smsIdentity.ts (content-hash helper). STATE
+  R5d limit: rows added from "Messages not understood" have no content hash
+  because the body was not available at save — but the not-understood view DOES
+  hold the live body, so the hash can be computed there.
+- Add Record forms: src/features/transactions/components/{TransactionForm.tsx,
+  TransferForm.tsx} — the account / kind selectors need radio a11y role+state.
+- Backup crypto: src/domain/backup/backupPassword.ts (TS) +
+  src/native/android/backup/backupNative.ts + the Kotlin BackupModule. STATE
+  R4e: crypto verified once with a scratch harness, NO repo test. Add a repo
+  test for whatever crypto logic is reachable in TS/Jest; if the only
+  untested logic is Kotlin and no Kotlin test harness exists, FLAG it.
+- Auto-read / last-synced: src/features/sms-sync/smsReaderStore.ts +
+  autoRead/autoReadRunner.ts; settings key sms_last_synced_at (R4b). Home:
+  src/features/home/screens/HomeScreen.tsx.
+- src/shared/ui/AmountText + redaction, useNow, Snackbar (shared Undo),
+  audit.types.ts (ids/enums/numbers/field-names only) as usual.
+
+TASKS (each: failing test with synthetic input first, confirm fail, then fix.
+Each item is independent — a blocker on one does not block the others):
+T1 Un-ignore / Hidden accounts (G7): a "Hidden" / ignored-accounts list
+   (reachable from the New-accounts or Settings surface) showing accounts the
+   user chose to Ignore; each with "Un-ignore" that flips the 'ignored'
+   decision so future matching SMS are handled again. Audited with the existing
+   decision/account audit shape (no new type unless needed). No migration.
+T2 Restore archived category (G7): in category management, show archived
+   categories with a "Restore" action that clears archived_at; restored
+   category reappears in pickers. Reuse category.repository. No migration.
+T3 Not-understood content hash (G7, correctness): when a not-understood row is
+   saved/converted and the live body is available (NotUnderstoodScreen), compute
+   and store the smsContentHash (smsIdentity.ts) so these rows dedupe like any
+   other. Backfill is NOT required; new saves must carry the hash. If the row's
+   table has no hash column, that is the one allowed migration 15 — FLAG it.
+   Tests: a not-understood save stores a hash; a later identical SMS dedupes.
+T4 Add Record a11y (G7): account + kind selectors in TransactionForm and
+   TransferForm expose accessibilityRole="radio" + accessibilityState
+   {selected} (and the reconcile "Add missing" prefill still works). No logic
+   change, a11y only. Test the role/state via the existing RN test setup.
+T5 Backup crypto repo test (G7): add a Jest test for the reachable TS crypto
+   (backupPassword.ts — PBKDF2/derive/round-trip as far as TS exposes it). If
+   the untested path is Kotlin-only with no harness, FLAG as not-done + reason.
+T6 Filters persist across restart (G7): persist the last-applied Transactions
+   filter selection (lightweight persisted store or a settings key) and restore
+   it on launch; "Reset" clears it. FLAG this as owner-optional (some users
+   prefer filters to start empty) — implement but note it is easy to drop.
+   No migration (use existing settings/AsyncStorage pattern already in the repo;
+   do not add a dependency).
+T7 "Last read N days ago" banner (G9): a Home banner when auto-read has not
+   produced a successful read in > N days (derive from sms_last_synced_at /
+   reader store; choose a sensible N like 3 and note it), with a tap to Sync
+   now / open SMS settings. Shown only when stale; hidden otherwise. Amounts
+   n/a. Uses useNow. No permission (does not change auto-read itself).
+T8 Device script scripts/device/r5j.sh using scripts/device/lib.sh (read lib.sh,
+   r5c.sh, r6.sh, r8a.sh, README.md first; same style: compact PASS/FAIL, counts
+   only, Tracker-in-front check before every tap/dump, locked screen = stop,
+   30 s idle wait, live per-test status, fresh dump before every tap, QA data
+   only, cleanup at end; never touch owner rows/settings; no screenshots; no db
+   access). Cover what is checkable by UI counts: Hidden list opens; archived
+   category Restore; Add Record selectors present; filter persists across a
+   force-stop+relaunch; last-read banner absent on a fresh sync. Update
+   README.md. bash -n the script. Do NOT run it.
+
+PRIVACY (absolute, unchanged): audits ids/enums/numbers/field-names only, never
+SMS text/sender. The content-hash in T3 is one-way (no body stored). Fixtures
+SYNTHETIC only (QA names, QA amounts, public sender codes, synthetic 000...
+refs). The reference app in this repo is "chitta-ref-app" — never its old brand
+names. No permission/dependency/network.
+
+GATES: npx tsc --noEmit -p tsconfig.json clean; npx eslint src --ext .ts,.tsx
+0 errors; npx jest all pass; node scripts/rules/validate_v2.js
+src/features/sms-sync/rules/rules.json ALL OK (no rules.json change expected);
+cd android && ./gradlew assembleDebug OK (export JAVA_HOME=/opt/homebrew/opt/
+openjdk@17/libexec/openjdk.jdk/Contents/Home; export PATH=$JAVA_HOME/bin:$PATH;
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools). Do NOT run
+assembleRelease.
+
+OUTPUT: write ongoing/roadmap/R5j-polish.md (per task: what was built, any
+migration (should be none — flag if 15 was needed and why), tests added, items
+flagged not-done + reason, decisions, known limits, how to run r5j.sh).
+Leak-scan the report, the diff and new files (shell) for 10-digit phone numbers,
+real UPI ids, account numbers not XX1234/XX9999 style, personal names. Do not
+commit.
+
+REPLY ONLY with: gates yes/no with test counts; T1-T8 done / not done (flag any
+not-done + reason); whether any migration was needed (and why); tests added;
+decisions; anything surprising. Do not paste file contents.

@@ -18,6 +18,8 @@ import { institutionDisplayName } from '../parser/institutions';
 import { bestGuessForSms, PARSER_VERSION } from '../parser/readSms';
 import { maskSmsPattern, MaskedPattern, sharePatternMessage } from '../parser/maskSmsPattern';
 import { shareFeedback } from '../../feedback/feedbackFlow';
+import { loadSmsIdentitySalt } from '../smsIdentitySalt';
+import { smsContentHash } from '../smsIdentity';
 import { unparsedReasonLabel, useSmsReaderStore, visibleUnparsed } from '../smsReaderStore';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -121,6 +123,10 @@ export function NotUnderstoodScreen() {
 
   async function addAsTransaction(row: SmsUnparsedRow, body: string, address: string) {
     const guess = bestGuessForSms({ id: row.smsId, address, body, date: row.smsDate });
+    // R5j: the live body is in hand — keep only its one-way salted hash so the
+    // saved row dedupes like any synced SMS (null when the salt is unavailable).
+    const salt = await loadSmsIdentitySalt().catch(() => null);
+    const contentHash = salt ? smsContentHash(salt, { address, body, date: row.smsDate }) : null;
     close();
     navigation.navigate('AddRecord', {
       fromSms: {
@@ -129,6 +135,7 @@ export function NotUnderstoodScreen() {
         type: guess.type,
         amountMinor: guess.amountMinor,
         lastFour: guess.lastFour,
+        smsContentHash: contentHash,
       },
     });
   }

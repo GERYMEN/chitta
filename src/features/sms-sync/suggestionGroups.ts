@@ -258,6 +258,39 @@ export interface LinkedNumber {
   label: string;
 }
 
+export interface IgnoredAccount {
+  key: string;
+  bankCanonical: string;
+  accountKind: AccountType;
+  /** '' when the ignored key has no number. */
+  lastFour: string;
+  /** "HDFC · Bank · ••5678" (last-4 masked in the feedback screenshot). */
+  label: string;
+}
+
+/**
+ * R5j: the keys the user chose to Ignore (the 'ignored' decisions) — public
+ * bank id, kind and last-4 only; no SMS content. Newest label order is stable.
+ */
+export function ignoredAccountsFrom(rows: ReadonlyArray<SuggestionDecisionRow>): IgnoredAccount[] {
+  return rows
+    .filter(row => row.decision === 'ignored' && row.bankCanonical && row.accountKind)
+    .map(row => {
+      const lastFour = row.lastFour ?? '';
+      const kind = row.accountKind as AccountType;
+      return {
+        key: row.key,
+        bankCanonical: row.bankCanonical as string,
+        accountKind: kind,
+        lastFour,
+        label: `${institutionDisplayName(row.bankCanonical as string)} · ${KIND_LABEL[kind] ?? 'Other'} · ${
+          lastFour ? `••${redactLast4(lastFour)}` : 'no number'
+        }`,
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 /**
  * R5d T3c: the card / account numbers linked to `accountId` (its 'linked'
  * decisions) — public bank id, kind and last-4 only; no SMS content.

@@ -24,6 +24,7 @@ export const Routes = {
   Backup: 'Backup',
   Restore: 'Restore',
   NotUnderstood: 'NotUnderstood',
+  IgnoredAccounts: 'IgnoredAccounts',
   Bills: 'Bills',
   AddBill: 'AddBill',
   EditBill: 'EditBill',
@@ -42,6 +43,11 @@ export interface FromSmsPrefill {
   type: 'expense' | 'income' | null;
   amountMinor: number | null;
   lastFour: string | null;
+  /**
+   * R5j: salted one-way content hash of the live SMS (32 hex), computed where
+   * the body was read. Lets the saved row dedupe like any synced SMS. Never text.
+   */
+  smsContentHash?: string | null;
 }
 
 /**
@@ -95,6 +101,8 @@ export type RootStackParamList = {
   Restore: { fromOnboarding?: boolean } | undefined;
   /** R5: Pending header link / Settings row. */
   NotUnderstood: undefined;
+  /** R5j: Settings → "Hidden accounts" (ignored new accounts, with Un-ignore). */
+  IgnoredAccounts: undefined;
   /** R5b: Bills & dues (Home banner + Accounts / Settings entry). */
   Bills: undefined;
   /** R5b: add a manual bill. */

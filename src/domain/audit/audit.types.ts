@@ -35,6 +35,8 @@ export type AuditEventType =
   | 'category_created'
   | 'category_updated'
   | 'category_archived'
+  /** R5j: an archived category brought back. */
+  | 'category_restored'
   /** R3a: an SMS debit + credit confirmed as one transfer / that undone. */
   | 'transfer_paired'
   | 'transfer_unpaired'
@@ -153,6 +155,7 @@ export type AuditMetadata =
   | { kind: 'category_created'; categoryId: string }
   | { kind: 'category_updated'; categoryId: string; fields: string[] }
   | { kind: 'category_archived'; categoryId: string }
+  | { kind: 'category_restored'; categoryId: string }
   /**
    * R3a: ids + the previous enum/id/timestamp fields of both rows (so Undo
    * restores them exactly). Never merchant text, SMS text or amounts.

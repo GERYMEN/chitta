@@ -15,6 +15,7 @@ import {
   effectiveAutoRead,
   parseAutoReadSetting,
 } from './autoRead/autoReadRules';
+import { LAST_READ_KEY } from './lastRead';
 import { PARSER_VERSION } from './parser/readSms';
 import type { Transaction } from '../../domain/transactions/transaction.types';
 
@@ -36,7 +37,11 @@ interface SmsReaderState {
   receiveGranted: boolean;
   /** PARSER_VERSION the user last re-read with (null = never). */
   readerVersionSeen: number | null;
+  /** R5j: ISO time of the last completed read (null = none stamped yet). */
+  lastReadAt: string | null;
   unparsed: SmsUnparsedRow[];
+  /** R5j: stamp a completed read (state + setting). */
+  markRead: (iso: string) => Promise<void>;
   load: () => Promise<void>;
   refreshUnparsed: () => Promise<void>;
   /** Toggle "Read new SMS automatically" (asks for RECEIVE_SMS when turning on). */
@@ -55,12 +60,19 @@ export const useSmsReaderStore = create<SmsReaderState>((set, get) => ({
   autoReadSetting: null,
   receiveGranted: false,
   readerVersionSeen: null,
+  lastReadAt: null,
   unparsed: [],
 
+  markRead: async iso => {
+    set({ lastReadAt: iso });
+    await settingsRepository.setValue(LAST_READ_KEY, iso).catch(() => undefined);
+  },
+
   load: async () => {
-    const [settingRaw, seenRaw, granted] = await Promise.all([
+    const [settingRaw, seenRaw, lastReadRaw, granted] = await Promise.all([
       settingsRepository.getValue(AUTO_READ_SETTING_KEY).catch(() => null),
       settingsRepository.getValue(READER_VERSION_SEEN_KEY).catch(() => null),
+      settingsRepository.getValue(LAST_READ_KEY).catch(() => null),
       checkReceiveSmsPermission().catch(() => false),
     ]);
     const autoReadSetting = parseAutoReadSetting(settingRaw);
@@ -70,6 +82,7 @@ export const useSmsReaderStore = create<SmsReaderState>((set, get) => ({
       autoReadSetting,
       receiveGranted: granted,
       readerVersionSeen: Number.isInteger(seen) ? seen : null,
+      lastReadAt: lastReadRaw,
     });
     await syncNativeFlag(autoReadSetting, granted);
     await get().refreshUnparsed();

@@ -17,6 +17,7 @@ import { ReviewScreen } from '../../features/review/screens/ReviewScreen';
 import { InsightsScreen } from '../../features/insights/screens/InsightsScreen';
 import { BackupScreen } from '../../features/backup/screens/BackupScreen';
 import { RestoreScreen } from '../../features/backup/screens/RestoreScreen';
+import { IgnoredAccountsScreen } from '../../features/sms-sync/screens/IgnoredAccountsScreen';
 import { NotUnderstoodScreen } from '../../features/sms-sync/screens/NotUnderstoodScreen';
 import { BillsScreen } from '../../features/bills/screens/BillsScreen';
 import { AddBillScreen } from '../../features/bills/screens/AddBillScreen';
@@ -94,6 +95,11 @@ export function RootNavigator({ initialRouteName }: RootNavigatorProps) {
       <Stack.Screen
         name="NotUnderstood"
         component={NotUnderstoodScreen}
+        options={{ presentation: 'card' }}
+      />
+      <Stack.Screen
+        name="IgnoredAccounts"
+        component={IgnoredAccountsScreen}
         options={{ presentation: 'card' }}
       />
       <Stack.Screen name="Bills" component={BillsScreen} options={{ presentation: 'card' }} />

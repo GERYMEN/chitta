@@ -146,7 +146,11 @@ export function CategoriesScreen() {
         {archived.length > 0 ? (
           <Section title="Archived">
             {archived.map(category => (
-              <CategoryRow key={category.id} category={category} />
+              <CategoryRow
+                key={category.id}
+                category={category}
+                onRestore={() => useTransactionsStore.getState().restoreCategory(category.id)}
+              />
             ))}
           </Section>
         ) : null}
@@ -201,7 +205,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function CategoryRow({ category, onPress }: { category: Category; onPress?: () => void }) {
+function CategoryRow({
+  category,
+  onPress,
+  onRestore,
+}: {
+  category: Category;
+  onPress?: () => void;
+  /** R5j: archived rows only — "Restore" brings the category back to pickers. */
+  onRestore?: () => void;
+}) {
   const visual = getCategoryVisual(category.id, category);
   const editable = canModifyCategory(category) && category.archivedAt === null && onPress;
   return (
@@ -225,6 +238,15 @@ function CategoryRow({ category, onPress }: { category: Category; onPress?: () =
         <Icon name="pencil-outline" size={20} color={colors.outline} />
       ) : category.isSystem ? (
         <Icon name="lock-outline" size={18} color={colors.outline} />
+      ) : null}
+      {onRestore ? (
+        <Button
+          label="Restore"
+          variant="ghost"
+          onPress={onRestore}
+          accessibilityLabel={`Restore ${category.name}`}
+          testID="category-restore"
+        />
       ) : null}
     </Pressable>
   );

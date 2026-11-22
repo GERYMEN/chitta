@@ -74,6 +74,7 @@ export function sanitizeAuditMetadata(
     case 'rule_deleted':
     case 'category_created':
     case 'category_archived':
+    case 'category_restored':
       return { kind: metadata.kind, categoryId: String(metadata.categoryId) };
     case 'category_updated':
       return {

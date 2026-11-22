@@ -290,6 +290,46 @@ crashes. Counts of fixed labels only; no amounts, names or screenshots.
 Known limit: a phone with no regular payments (or under 3 occurrences each)
 correctly shows no card, so R4 SKIPs.
 
+## R5j — Polish
+
+```
+scripts/device/r5j.sh [--skip-install]
+```
+
+Owner-assisted, QA data only. The script never taps **Un-ignore** (that would
+change which of your accounts Tracker reads) and never saves an Add Record
+form. The one category it acts on is `QA R5j Cat`: **you** create and archive
+it, the script taps only its **Restore** button. Counts of fixed labels only;
+no amounts, names or screenshots; no database access. Filters are transient
+view state: if a filter is already applied when the run starts, R7/R8 SKIP
+instead of disturbing it.
+
+| Check | What happens | Pass when |
+|---|---|---|
+| R0 | Install the update (data kept) | install `Success` |
+| R1 | Wait 30 s idle, open Tracker | Tracker in front |
+| R2 | Home opens | Home labels shown |
+| R3 | **You** open Settings; the script opens **Hidden accounts** | the list (or "Nothing hidden") shows; nothing tapped in it |
+| R4 | **You** create `QA R5j Cat` and archive it | the `(archived)` row is shown |
+| R5 | Script taps `Restore QA R5j Cat` | no longer archived; editable again |
+| R6 | Script opens Add Record | Expense / Income / Transfer choices shown; not saved |
+| R7 | Script applies the Expenses filter, force-stops + relaunches Tracker | the Reset chip is still there (filter restored) |
+| R8 | Script taps Reset, force-stops + relaunches | filter stays cleared |
+| R9 | Script taps Sync SMS and waits | no "Last read N days ago" banner afterwards |
+| R10 | **You** archive `QA R5j Cat` again | archived (a category cannot be deleted) |
+| R11 | Crash check since the start | 0 FATAL/ANR |
+
+### Known limits
+
+- Radio role / selected state (T4) is not visible in the text-only dump; R6
+  checks the choices are present, the role/state is covered by Jest.
+- R9 depends on Sync SMS finishing without a dialog (a large-scan or
+  new-accounts prompt needs **you**); the banner only appears when no read
+  finished for more than 3 days, so on a phone that synced today it is
+  expected to be absent both before and after.
+- The saved filters hold the type, account, category and period only — the
+  search text and the merchant chip are never saved.
+
 ## Writing a script for a new phase
 
 Copy `r5h.sh`, keep `source "$(dirname "$0")/lib.sh"` and use only the

@@ -49,6 +49,8 @@ import { registerTourScroller, useTourTarget } from '../../tour/tourTargets';
 import { replayTour } from '../../tour/tourStore';
 import { readerHintVisible, rescanWindow, useSmsReaderStore } from '../../sms-sync/smsReaderStore';
 import { ReaderUpgradeHint } from '../components/ReaderUpgradeHint';
+import { LastReadBanner } from '../components/LastReadBanner';
+import { lastReadBannerVisible, staleReadDays } from '../../sms-sync/lastRead';
 import { NewAccountsEntry } from '../components/NewAccountsEntry';
 import { newAccountsWindow, useNewAccountsStore } from '../../sms-sync/newAccountsStore';
 import { useSuggestionSession } from '../../sms-sync/suggestionSession';
@@ -117,6 +119,20 @@ export function HomeScreen() {
   // R4: the selected period (shared with Transactions) + this screen's
   // injected now (device clock, refreshed on focus).
   const { period, setPeriod, now, range } = useSelectedPeriod();
+  // R5j (G9): "Last read N days ago" — only when no read completed for > 3 days.
+  const lastReadAt = useSmsReaderStore(state => state.lastReadAt);
+  const smsLastSyncedAt = useTransactionsStore(state => state.smsLastSyncedAt);
+  const staleDays = useMemo(
+    () => staleReadDays({ lastReadAt, lastSyncedAt: smsLastSyncedAt, nowMs: now.getTime() }),
+    [lastReadAt, smsLastSyncedAt, now],
+  );
+  const showLastRead = lastReadBannerVisible({
+    loaded: readerLoaded,
+    hasOnboarded,
+    hasActiveAccounts: accounts.length > 0,
+    syncing: syncRunning,
+    staleDays,
+  });
   const { earliestApprovedAt, pendingCount } = usePeriodNotices(range);
 
   // Total balance stays all-time (balances are never period-limited).
@@ -311,6 +327,14 @@ export function HomeScreen() {
         />
       ) : null}
 
+      {showLastRead && staleDays !== null ? (
+        <LastReadBanner
+          days={staleDays}
+          onSync={() => handleSyncSms()}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+      ) : null}
+
       <NewAccountsEntry count={newAccountRows.length} onPress={() => openNewAccounts()} />
 
       <UncategorisedCard onPress={() => navigation.navigate('Uncategorised')} />
@@ -434,6 +458,10 @@ export function HomeScreen() {
         onOpenNotUnderstood={() => {
           setSettingsOpen(false);
           navigation.navigate('NotUnderstood');
+        }}
+        onOpenIgnoredAccounts={() => {
+          setSettingsOpen(false);
+          navigation.navigate('IgnoredAccounts');
         }}
         onReplayTour={() => {
           setSettingsOpen(false);

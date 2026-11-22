@@ -100,6 +100,7 @@ const ICON: Record<AuditFeedEvent['eventType'], string> = {
   category_created: 'tag-plus-outline',
   category_updated: 'tag-outline',
   category_archived: 'archive-outline',
+  category_restored: 'archive-arrow-up-outline',
   transfer_paired: 'swap-horizontal',
   transfer_unpaired: 'undo-variant',
   refund_linked: 'cash-refund',
@@ -659,6 +660,10 @@ export function describeActivity(
         text: 'Hidden from pickers · items keep their label',
         tone: 'neutral',
       };
+      break;
+    case 'category_restored':
+      sentence = `You restored category ${context.category?.name ?? 'a category'}`;
+      impact = { text: 'Back in pickers', tone: 'neutral' };
       break;
     case 'backup_restored': {
       const counts =

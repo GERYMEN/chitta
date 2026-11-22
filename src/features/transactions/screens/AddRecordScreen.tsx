@@ -74,12 +74,26 @@ export function manualRecordStatus(
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /**
+ * R5j: the dedupe keys of a record added from "Messages not understood": the
+ * unchanged `sms-<id>-<date>` key plus the salted content hash computed where
+ * the body was read live (null when it could not be).
+ */
+export function smsSourceFields(
+  fromSms: Pick<FromSmsPrefill, 'smsId' | 'smsDate' | 'smsContentHash'>,
+): { sourceReferenceHash: string; smsContentHash: string | null } {
+  return {
+    sourceReferenceHash: `sms-${fromSms.smsId}-${fromSms.smsDate}`,
+    smsContentHash: fromSms.smsContentHash ?? null,
+  };
+}
+
+/**
  * R5-fix U9: a transfer added from "Messages not understood" keeps the SMS
  * reference, exactly like an expense / income added from there.
  */
 export function transferInputFor(
   values: TransferFormValues,
-  fromSms: Pick<FromSmsPrefill, 'smsId' | 'smsDate'> | null,
+  fromSms: Pick<FromSmsPrefill, 'smsId' | 'smsDate' | 'smsContentHash'> | null,
 ): TransferInput {
   return {
     fromAccountId: values.fromAccountId,
@@ -88,7 +102,11 @@ export function transferInputFor(
     occurredAt: values.occurredAt,
     note: values.note && values.note.trim() !== '' ? values.note.trim() : null,
     smsReference: fromSms
-      ? { hash: `sms-${fromSms.smsId}-${fromSms.smsDate}`, parserVersion: SMS_USER_ADDED_PARSER_VERSION }
+      ? {
+          hash: smsSourceFields(fromSms).sourceReferenceHash,
+          parserVersion: SMS_USER_ADDED_PARSER_VERSION,
+          ...(fromSms.smsContentHash ? { contentHash: fromSms.smsContentHash } : {}),
+        }
       : null,
   };
 }
@@ -159,7 +177,7 @@ export function AddRecordScreen() {
       ...(fromSms
         ? {
             sourceType: 'sms' as const,
-            sourceReferenceHash: `sms-${fromSms.smsId}-${fromSms.smsDate}`,
+            ...smsSourceFields(fromSms),
             sanitizedPreview: `${values.type === 'expense' ? 'Debited' : 'Credited'} ${formatRupeesPlain(
               amountInputToMinor(values.amount),
             )} — ${values.merchantName}`,

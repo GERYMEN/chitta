@@ -75,7 +75,7 @@ export async function runSmsSync(options: RunOptions = {}): Promise<SmsSyncResul
   try {
     const kind = options.kind;
     const askBeforeLarge = kind === 'rescan' || (!options.window && kind !== 'auto');
-    return await syncSms({
+    const result = await syncSms({
       window: options.window,
       kind,
       requestPermission: kind !== 'auto',
@@ -83,6 +83,11 @@ export async function runSmsSync(options: RunOptions = {}): Promise<SmsSyncResul
       onProgress: ({ scanned, total }) => useSyncRunStore.setState({ scanned, total }),
       confirmLargeScan: askBeforeLarge ? confirmLargeScan : undefined,
     });
+    // R5j: a read that ran to the end stamps its time for the Home "last read" banner.
+    if (!result.cancelled && !result.declined) {
+      await useSmsReaderStore.getState().markRead(new Date().toISOString());
+    }
+    return result;
   } finally {
     // R5: the run may have added / resolved "not understood" rows.
     useSmsReaderStore.getState().refreshUnparsed().catch(() => undefined);

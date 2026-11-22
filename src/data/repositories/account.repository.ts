@@ -313,6 +313,21 @@ async function ignoreSuggestion(key: AccountKey): Promise<void> {
 }
 
 /**
+ * R5j "Un-ignore": drop the 'ignored' decision for this key so its SMS are
+ * suggested / matched again from the next sync. Only an 'ignored' row goes —
+ * an added / linked / deleted decision for the same key is never touched.
+ * No money changes, so no audit row (same as Ignore).
+ */
+async function unignoreSuggestion(key: AccountKey): Promise<void> {
+  await getDatabase().transaction(async tx => {
+    await tx.execute(
+      "DELETE FROM account_suggestion_decisions WHERE bank_canonical = ? AND account_kind = ? AND last_four = ? AND decision = 'ignored'",
+      [key.bankCanonical, key.accountKind, key.lastFour],
+    );
+  });
+}
+
+/**
  * R6 (D-b): store the balance a matched bank SMS reported. LATEST WINS — only
  * an SMS strictly newer than the stored snapshot writes (an older or equal one
  * never overwrites). A number + a timestamp only; no audit (high-frequency
@@ -369,4 +384,5 @@ export const accountRepository = {
   listDeletedDecisionKeys,
   listSuggestionDecisions,
   ignoreSuggestion,
+  unignoreSuggestion,
 };

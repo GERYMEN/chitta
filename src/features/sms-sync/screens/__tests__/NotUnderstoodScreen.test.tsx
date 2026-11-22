@@ -5,6 +5,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Linking } from 'react-native';
 import { NotUnderstoodScreen, notUnderstoodRowLabel } from '../NotUnderstoodScreen';
+import { smsContentHash } from '../../smsIdentity';
 import { useTransactionsStore } from '../../../transactions/state/transactionsStore';
 
 const T0 = 1793000000000;
@@ -42,6 +43,7 @@ jest.mock('../../../../native/android/feedback/feedbackNative', () => ({
 }));
 jest.mock('../../../feedback/feedbackFlow', () => ({ shareFeedback: jest.fn(async () => undefined) }));
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+jest.mock('../../smsIdentitySalt', () => ({ loadSmsIdentitySalt: jest.fn(async () => 'a'.repeat(64)) }));
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
@@ -132,5 +134,16 @@ describe('NotUnderstoodScreen', () => {
     await press(button(r, 'Not a transaction'));
     expect(mockDismiss).toHaveBeenCalledWith('42', T0 + 86_400_000);
     open.mockRestore();
+  });
+
+  it('R5j: "Add as transaction" passes the one-way content hash of the live body (never the text)', async () => {
+    const message = { id: '42', address: 'AD-QABANK-S', body: 'QA LIVE MESSAGE Rs.5.00', date: T0 + 86_400_000 };
+    mockReadById.mockResolvedValue(message);
+    const r = await render();
+    await press(rows(r)[0]);
+    await press(button(r, 'Add as transaction'));
+    const params = mockNavigate.mock.calls[0][1] as { fromSms: Record<string, unknown> };
+    expect(params.fromSms.smsContentHash).toBe(smsContentHash('a'.repeat(64), message));
+    expect(JSON.stringify(params)).not.toContain('QA LIVE MESSAGE');
   });
 });

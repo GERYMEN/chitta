@@ -265,4 +265,30 @@ describe('category management', () => {
     expect(db.tables.get('categories')!.get('cat-food')).toMatchObject({ name: 'Food & Dining', archived_at: null });
     expect(db.auditInserts()).toHaveLength(0);
   });
+
+  it('R5j: restore clears archived_at, brings it back to pickers, audits category_restored (id only)', async () => {
+    seed(
+      [txRow('txn-1', 'QA-Merchant-08', 'cat-qa', 'approved')],
+      [categoryRow('cat-qa', 'QA Category', { is_system: 0, archived_at: '2026-10-30T00:00:00.000Z' })],
+    );
+    expect(pickableCategories(useTransactionsStore.getState().categories, 'expense').map(c => c.id)).not.toContain('cat-qa');
+    await useTransactionsStore.getState().restoreCategory('cat-qa');
+
+    expect(db.tables.get('categories')!.get('cat-qa')!.archived_at).toBeNull();
+    const state = useTransactionsStore.getState();
+    expect(categoryLabel(state.categories.find(c => c.id === 'cat-qa'))).toBe('QA Category');
+    expect(pickableCategories(state.categories, 'expense').map(c => c.id)).toContain('cat-qa');
+    expect(categoryOf('txn-1')).toBe('cat-qa');
+    const [audit] = db.auditInserts();
+    expect(audit.row.event_type).toBe('category_restored');
+    expect(JSON.parse(String(audit.row.metadata_json))).toEqual({ kind: 'category_restored', categoryId: 'cat-qa' });
+    expect(audit.call.inTransaction).toBe(true);
+  });
+
+  it('R5j: restoring a live or system category is a no-op (no write, no audit)', async () => {
+    seed([], [categoryRow('cat-qa', 'QA Category', { is_system: 0 })]);
+    await useTransactionsStore.getState().restoreCategory('cat-qa');
+    await useTransactionsStore.getState().restoreCategory('cat-food');
+    expect(db.auditInserts()).toHaveLength(0);
+  });
 });

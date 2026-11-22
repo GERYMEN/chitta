@@ -64,6 +64,12 @@ import {
 import type { AccountKey } from '../../sms-sync/normalizeAccountKey';
 import { isRuleDisagreementRow, SMS_USER_ADDED_PARSER_VERSION } from '../../sms-sync/smsSyncLogic';
 import { chainDuplicatePairs, useChainSuggestions } from '../../sms-sync/rules/chaining';
+import {
+  noteLoadedFilters,
+  parsePersistedFilters,
+  persistFilters,
+  readPersistedFilters,
+} from '../filters/filterPersistence';
 import { settingsRepository } from '../../../data/repositories/settings.repository';
 import {
   ApprovalMode,
@@ -128,7 +134,7 @@ export interface TransferInput {
    * R5-fix U9: added from "Messages not understood" — the transfer keeps the
    * SMS reference (dedupe on later syncs + "View original SMS").
    */
-  smsReference?: { hash: string; parserVersion: string } | null;
+  smsReference?: { hash: string; parserVersion: string; contentHash?: string | null } | null;
 }
 
 export interface ProfilePatch {
@@ -252,6 +258,8 @@ interface TransactionsState {
   importSuggestion: (input: ImportSuggestionInput) => Promise<ImportSuggestionResult>;
   /** R2b: Ignore a suggested account key (never suggested/imported again). */
   ignoreSuggestion: (key: AccountKey) => Promise<void>;
+  /** R5j: drop an 'ignored' decision so the key's SMS are handled again. */
+  unignoreSuggestion: (key: AccountKey) => Promise<void>;
   /** R5: Undo of "Link to existing" (see suggestionRepository.undoLink). */
   undoLinkSuggestion: (input: UndoLinkInput) => Promise<number>;
   /**
@@ -275,6 +283,8 @@ interface TransactionsState {
   addCategory: (input: CreateCategoryInput) => Promise<Category>;
   updateCategory: (id: string, patch: CategoryPatch) => Promise<void>;
   archiveCategory: (id: string) => Promise<void>;
+  /** R5j: bring an archived custom category back into pickers. */
+  restoreCategory: (id: string) => Promise<void>;
   /** R3a: "Not a transfer" decisions (pairs never suggested again). */
   transferDismissals: TransferDismissal[];
   /** R3a: Add Record → Transfer. Created approved (see addTransfer), audited 'created'. */
@@ -529,13 +539,21 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
   transactionFilters: DEFAULT_TRANSACTION_FILTERS,
   selectedPeriod: DEFAULT_PERIOD,
 
-  setTransactionFilters: patch =>
-    set(state => ({ transactionFilters: { ...state.transactionFilters, ...patch } })),
+  setTransactionFilters: patch => {
+    set(state => ({ transactionFilters: { ...state.transactionFilters, ...patch } }));
+    const next = get();
+    persistFilters(next.transactionFilters, next.selectedPeriod);
+  },
 
-  resetTransactionFilters: () =>
-    set({ transactionFilters: DEFAULT_TRANSACTION_FILTERS, selectedPeriod: DEFAULT_PERIOD }),
+  resetTransactionFilters: () => {
+    set({ transactionFilters: DEFAULT_TRANSACTION_FILTERS, selectedPeriod: DEFAULT_PERIOD });
+    persistFilters(DEFAULT_TRANSACTION_FILTERS, DEFAULT_PERIOD);
+  },
 
-  setSelectedPeriod: period => set({ selectedPeriod: period }),
+  setSelectedPeriod: period => {
+    set({ selectedPeriod: period });
+    persistFilters(get().transactionFilters, period);
+  },
 
   // R5-fix C10: single-flight — a headless auto-read and the app launch
   // share ONE in-flight hydrate instead of two overlapping full reloads.
@@ -563,6 +581,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
       startModeValue,
       startAtValue,
       lastSyncedValue,
+      filtersValue,
     ] = await Promise.all([
       loadAll(),
       settingsRepository.getValue('has_onboarded'),
@@ -572,7 +591,14 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
       settingsRepository.getValue(SMS_SYNC_KEYS.startMode),
       settingsRepository.getValue(SMS_SYNC_KEYS.startAt),
       settingsRepository.getValue(SMS_SYNC_KEYS.lastSyncedAt),
+      readPersistedFilters().catch(() => null),
     ]);
+    // R5j: restore the last-applied filters (ids that no longer exist are dropped).
+    const restored = parsePersistedFilters(filtersValue, {
+      accountIds: data.accounts.map(a => a.id),
+      categoryIds: data.categories.map(c => c.id),
+    });
+    noteLoadedFilters(filtersValue);
     set({
       ...data,
       hasOnboarded: hasOnboardedValue === 'true',
@@ -582,8 +608,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
       smsSyncStartMode: parseStartMode(startModeValue),
       smsSyncStartAt: parseIsoOrNull(startAtValue),
       smsLastSyncedAt: parseIsoOrNull(lastSyncedValue),
-      transactionFilters: DEFAULT_TRANSACTION_FILTERS,
-      selectedPeriod: DEFAULT_PERIOD,
+      transactionFilters: restored?.filters ?? DEFAULT_TRANSACTION_FILTERS,
+      selectedPeriod: restored?.period ?? DEFAULT_PERIOD,
     });
     // R4b: existing installs get a start without seeing the setup step again.
     // A failure here must never block the app from opening.
@@ -990,6 +1016,10 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
     await accountRepository.ignoreSuggestion(key);
   },
 
+  unignoreSuggestion: async key => {
+    await accountRepository.unignoreSuggestion(key);
+  },
+
   backfillSmsContentHashes: async rows => {
     if (rows.length === 0) return;
     await transactionRepository.setContentHashes(rows);
@@ -1122,6 +1152,19 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
     set(state => ({ categories: state.categories.map(c => (c.id === id ? archived : c)) }));
   },
 
+  restoreCategory: async id => {
+    const existing = get().categories.find(c => c.id === id);
+    if (!existing || existing.isSystem || existing.archivedAt === null) return;
+    const restored = await categoryRepository.restore(id, [
+      {
+        eventType: 'category_restored',
+        actor: 'user',
+        metadata: { kind: 'category_restored', categoryId: id },
+      },
+    ]);
+    set(state => ({ categories: state.categories.map(c => (c.id === id ? restored : c)) }));
+  },
+
   addTransfer: async input => {
     // A transfer is the user moving their own money — not a detection to
     // review — so it is recorded approved (it never counts as income or
@@ -1144,6 +1187,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => {
         note: input.note,
         sourceType: input.smsReference ? 'sms' : 'manual',
         sourceReferenceHash: input.smsReference?.hash ?? null,
+        smsContentHash: input.smsReference?.contentHash ?? null,
         sanitizedPreview: null,
         confidenceScore: null,
         parserVersion: input.smsReference?.parserVersion ?? null,

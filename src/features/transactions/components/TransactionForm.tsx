@@ -162,12 +162,22 @@ export function TransactionForm({
         render={({ field }) => (
           <View style={styles.chipRow}>
             {TYPE_OPTIONS.map(option => (
-              <Pressable key={option.value} onPress={() => field.onChange(option.value)}>
+              <Pressable
+                key={option.value}
+                onPress={() => field.onChange(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: field.value === option.value, checked: field.value === option.value }}
+                accessibilityLabel={option.label}>
                 <Chip label={option.label} tone={field.value === option.value ? 'active' : 'neutral'} />
               </Pressable>
             ))}
             {onChooseTransfer ? (
-              <Pressable onPress={onChooseTransfer} accessibilityRole="button" testID="type-transfer">
+              <Pressable
+                onPress={onChooseTransfer}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: false, checked: false }}
+                accessibilityLabel="Transfer"
+                testID="type-transfer">
                 <Chip label="Transfer" tone="neutral" />
               </Pressable>
             ) : null}
@@ -220,7 +230,12 @@ export function TransactionForm({
         render={({ field }) => (
           <View style={styles.wrapRow}>
             {filteredCategories.map(category => (
-              <Pressable key={category.id} onPress={() => field.onChange(category.id)}>
+              <Pressable
+                key={category.id}
+                onPress={() => field.onChange(category.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: field.value === category.id, checked: field.value === category.id }}
+                accessibilityLabel={categoryLabel(category)}>
                 <Chip
                   label={categoryLabel(category)}
                   tone={field.value === category.id ? 'active' : 'neutral'}
@@ -243,7 +258,11 @@ export function TransactionForm({
                 onPress={() => field.onChange(deletedCurrentAccount.id)}
                 style={[styles.accountOption, styles.deletedAccountOption]}
                 accessibilityRole="radio"
-                accessibilityState={{ checked: field.value === deletedCurrentAccount.id }}>
+                accessibilityState={{
+                  selected: field.value === deletedCurrentAccount.id,
+                  checked: field.value === deletedCurrentAccount.id,
+                }}
+                accessibilityLabel={accountDisplayLabel(deletedCurrentAccount)}>
                 <Icon
                   name={field.value === deletedCurrentAccount.id ? 'radiobox-marked' : 'radiobox-blank'}
                   size={20}
@@ -277,7 +296,12 @@ export function TransactionForm({
         render={({ field }) => (
           <View style={styles.wrapRow}>
             {PAYMENT_METHOD_OPTIONS.map(option => (
-              <Pressable key={option.value} onPress={() => field.onChange(option.value)}>
+              <Pressable
+                key={option.value}
+                onPress={() => field.onChange(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: field.value === option.value, checked: field.value === option.value }}
+                accessibilityLabel={option.label}>
                 <Chip label={option.label} tone={field.value === option.value ? 'active' : 'neutral'} />
               </Pressable>
             ))}
@@ -356,7 +380,12 @@ function AccountOption({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.accountOption}>
+    <Pressable
+      onPress={onPress}
+      style={styles.accountOption}
+      accessibilityRole="radio"
+      accessibilityState={{ selected, checked: selected }}
+      accessibilityLabel={account.name}>
       <Icon
         name={selected ? 'radiobox-marked' : 'radiobox-blank'}
         size={20}

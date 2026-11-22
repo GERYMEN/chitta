@@ -94,13 +94,27 @@ export function TransferForm({
         <>
           <Text style={styles.fieldLabel}>Type</Text>
           <View style={styles.chipRow}>
-            <Pressable onPress={() => onChooseType('expense')} accessibilityRole="button">
+            <Pressable
+              onPress={() => onChooseType('expense')}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: false, checked: false }}
+              accessibilityLabel="Expense">
               <Chip label="Expense" tone="neutral" />
             </Pressable>
-            <Pressable onPress={() => onChooseType('income')} accessibilityRole="button">
+            <Pressable
+              onPress={() => onChooseType('income')}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: false, checked: false }}
+              accessibilityLabel="Income">
               <Chip label="Income" tone="neutral" />
             </Pressable>
-            <Chip label="Transfer" tone="active" />
+            <View
+              accessible
+              accessibilityRole="radio"
+              accessibilityState={{ selected: true, checked: true }}
+              accessibilityLabel="Transfer">
+              <Chip label="Transfer" tone="active" />
+            </View>
           </View>
           <Text style={styles.hint}>
             Money moved between your own accounts. Changes both balances; never counted as
@@ -240,7 +254,7 @@ function AccountChoice({
       onPress={onPress}
       style={[styles.accountOption, deleted && styles.deletedAccountOption]}
       accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ selected, checked: selected }}
       accessibilityLabel={`${side} ${account.name}`}>
       <Icon
         name={selected ? 'radiobox-marked' : 'radiobox-blank'}

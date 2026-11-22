@@ -96,8 +96,22 @@ async function archive(id: string, audit: ReadonlyArray<AuditEventDraft>): Promi
   return { ...existing, archivedAt };
 }
 
+/** R5j: undo an archive — clears `archived_at`; items and rules untouched. */
+async function restore(id: string, audit: ReadonlyArray<AuditEventDraft>): Promise<Category> {
+  const existing = await getById(id);
+  if (!existing) throw new Error(`Category not found: ${id}`);
+  await getDatabase().transaction(async tx => {
+    await tx.execute('UPDATE categories SET archived_at = NULL WHERE id = ?', [id]);
+    for (const draft of audit) {
+      await auditRepository.insert(tx, draft);
+    }
+  });
+  return { ...existing, archivedAt: null };
+}
+
 export const categoryRepository = {
   listAll,
+  restore,
   getById,
   create,
   update,
