@@ -440,9 +440,12 @@ viewer) = Figma **overlays** with `backdrop`/`scrim` dim, "Move in from bottom"
 ---
 
 ## 7. Gaps and assumptions
-- **Screenshots:** only 6 states captured live (S00/S01/S02/S03/S04 light +
-  S09 Budgets light), all Private-mode masked. Dark-mode + all other screens are
-  **code-derived**; verify against device before pixel-final.
+- **Screenshots:** 20 of 31 screens captured live (light, Private-mode masked —
+  see 8.1). 11 not captured (flaky adb nav / no data to show the entry /
+  first-launch gating). Dark-mode descoped per owner. Remaining screens are
+  **code-derived**; verify against device before pixel-final. Screenshots are
+  kept LOCAL only (gitignored) — the account pickers reveal real bank names that
+  Private mode does not mask, so they must not be pushed to the remote.
 - **States not reproduced:** loading, network/validation/server errors, and most
   empty states couldn't be forced on the live build — rebuild from code/UX logic
   and mark as assumptions in Figma.
@@ -456,15 +459,37 @@ viewer) = Figma **overlays** with `backdrop`/`scrim` dim, "Move in from bottom"
 
 ## 8. Appendix
 
-### 8.1 Screenshot index
-| File | Screen | State | Theme |
-|---|---|---|---|
-| S00_settings-sheet_default_light.png | Settings sheet | default | light |
-| S01_home_default_light.png | Home | default (Private mode) | light |
-| S02_transactions_default_light.png | Transactions | default | light |
-| S03_pending_default_light.png | Pending | default | light |
-| S04_accounts_default_light.png | Accounts | default | light |
-| S09_budgets_default_light.png | Budgets | default | light |
+### 8.1 Screenshot index (20 captured, all light, Private-mode masked, local-only)
+| File | Screen | State |
+|---|---|---|
+| S00_settings-sheet_default_light.png | Settings sheet | default |
+| S01_home_default_light.png | Home | default |
+| S02_transactions_default_light.png | Transactions | default |
+| S03_pending_default_light.png | Pending | default |
+| S04_accounts_default_light.png | Accounts | default |
+| S05_transaction-detail_default_light.png | TransactionDetail | default |
+| S06_addrecord_untouched_light.png | AddRecord | untouched form |
+| S07_activity_default_light.png | Activity | default |
+| S08_edit-transaction_default_light.png | EditTransaction | default |
+| S09_budgets_default_light.png | Budgets | default |
+| S10_setbudget_untouched_light.png | SetBudget | untouched form |
+| S11_insights_default_light.png | Insights | default |
+| S12_people_default_light.png | People (IOUs) | default |
+| S15_bills_default_light.png | Bills | default |
+| S16_addbill_untouched_light.png | AddBill | untouched form |
+| S18_categories_default_light.png | Categories | default |
+| S20_hidden-accounts_empty_light.png | Hidden accounts | empty |
+| S22_not-understood_empty_light.png | NotUnderstood | empty |
+| S25_backup_default_light.png | Backup | default |
+| S26_restore_default_light.png | Restore | default |
+
+**Not captured (11)** — reasons: S14 Review, S23 SmsSuggestions, S24 AddAccount
+(reachable but adb nav flaky — retry manually); S19 Uncategorised, S21 Upcoming,
+S13 PersonIous, S17 EditBill (entry/card only appears with data not present —
+need an uncategorised item / a recurring series / a person / a bill); S27
+Onboarding, S28 ProfileSetup, S29 Permissions, S30 SyncStart (first-launch gated;
+need a fresh install / cleared app, which would also trip the biometric App lock).
+Dark-mode captures were descoped per owner request.
 
 ### 8.2 Asset list
 - **Fonts:** Plus Jakarta Sans (ExtraBold/Bold/SemiBold/Medium/Regular) —
